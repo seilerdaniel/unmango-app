@@ -23,18 +23,43 @@ import {
 import { usePrivacy } from "@/context/PrivacyContext";
 import RecurringManager from "@/components/RecurringManager";
 
+// Cantidad de movimientos que se traen por página. El balance y los totales
+// NO dependen de este número: se calculan del lado del servidor con la
+// función get_transaction_totals (ver supabase/functions.sql), así que
+// paginar la lista visual no afecta la exactitud de esas cifras.
+const PAGE_SIZE = 50;
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<
     Transaction[]
   >([]);
+  const [totals, setTotals] = useState({ totalIncome: 0, totalExpense: 0 });
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   // Consumimos el contexto de privacidad
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
 
+  // Totales de TODA la historia del usuario, calculados en Postgres para no
+  // tener que traer todas las filas al cliente solo para sumarlas.
+  async function fetchTotals() {
+    const { data, error } = await supabase.rpc("get_transaction_totals");
+    if (!error && data && data[0]) {
+      setTotals({
+        totalIncome: Number(data[0].total_income) || 0,
+        totalExpense: Number(data[0].total_expense) || 0,
+      });
+    } else if (error) {
+      console.error("Error calculando totales:", error);
+    }
+  }
+
+  // Primera página del historial (la más reciente). Se llama al iniciar y
+  // después de cualquier alta/baja de movimiento.
   async function fetchTransactions() {
     // Se pide el usuario actual en cada llamada (en vez de usar el estado
     // `user` del closure) para evitar traer datos antes de que la sesión
@@ -49,12 +74,44 @@ export default function Home() {
       .from("transactions")
       .select("*, categories(*)")
       .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range(0, PAGE_SIZE - 1);
 
     if (!error && data) {
       setAllTransactions(data);
       setFilteredTransactions(data);
+      setHasMore(data.length === PAGE_SIZE);
     }
+
+    await fetchTotals();
+  }
+
+  // Trae la siguiente página y la agrega al final de lo ya cargado.
+  async function loadMoreTransactions() {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+    if (!currentUser) return;
+
+    setLoadingMore(true);
+    const from = allTransactions.length;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*, categories(*)")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (!error && data) {
+      setAllTransactions((prev) => [...prev, ...data]);
+      setHasMore(data.length === PAGE_SIZE);
+    } else if (error) {
+      alert("Error al cargar más movimientos: " + error.message);
+      console.error("Error paginando transacciones:", error);
+    }
+    setLoadingMore(false);
   }
 
   async function handleDelete(id: string) {
@@ -94,14 +151,7 @@ export default function Home() {
     router.push("/login");
   }
 
-  const totalIncome = allTransactions
-    .filter((t) => t.type === "income")
-    .reduce((acc, t) => acc + Number(t.amount_ars), 0);
-
-  const totalExpense = allTransactions
-    .filter((t) => t.type === "expense")
-    .reduce((acc, t) => acc + Number(t.amount_ars), 0);
-
+  const { totalIncome, totalExpense } = totals;
   const balance = totalIncome - totalExpense;
 
   if (loading) {
@@ -200,7 +250,7 @@ export default function Home() {
           <div className="lg:col-span-2 space-y-6">
             <TransactionForm onTransactionAdded={fetchTransactions} />
             <RecurringManager onTransactionAdded={fetchTransactions} />
-            <BudgetManager transactions={allTransactions} />
+            <BudgetManager />
           </div>
 
           <div className="lg:col-span-1 space-y-6">
@@ -309,6 +359,18 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="pt-2 flex justify-center">
+              <button
+                onClick={loadMoreTransactions}
+                disabled={loadingMore}
+                className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
+              >
+                {loadingMore ? "Cargando..." : "Cargar más movimientos"}
+              </button>
             </div>
           )}
         </div>

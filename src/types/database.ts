@@ -14,6 +14,11 @@
 // sirve para que TypeScript detecte en compilación errores como el que
 // arreglamos en RecurringManager (insertar campos que no existen o que
 // faltan campos requeridos).
+//
+// Las entradas en Functions de más abajo tienen que coincidir con las
+// funciones creadas por supabase/functions.sql (get_transaction_totals,
+// get_monthly_category_spend). Si corrés `gen types`, ese comando ya las
+// va a incluir automáticamente si corriste functions.sql antes.
 
 export interface Database {
   public: {
@@ -170,6 +175,15 @@ export interface Database {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      get_transaction_totals: {
+        Args: Record<string, never>
+        Returns: { total_income: number; total_expense: number }[]
+      }
+      get_monthly_category_spend: {
+        Args: { p_year: number; p_month: number }
+        Returns: { category_id: string; spent: number }[]
+      }
+    }
   }
 }

@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Transaction, Budget } from '@/types'
+import { Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { Target, Plus, Trash2, AlertCircle } from 'lucide-react'
 
-interface BudgetManagerProps {
-  transactions: Transaction[]
-}
-
-export default function BudgetManager({ transactions }: BudgetManagerProps) {
+export default function BudgetManager() {
   const { categories } = useCategories()
   const [budgets, setBudgets] = useState<Budget[]>([])
+  // Gasto acumulado del mes actual por categoría, calculado en Postgres
+  // (get_monthly_category_spend) en vez de sumarlo en el frontend a partir
+  // de todas las transacciones cargadas.
+  const [spendByCategory, setSpendByCategory] = useState<Record<string, number>>({})
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [limitAmount, setLimitAmount] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
@@ -21,6 +21,23 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+
+  async function loadMonthlySpend() {
+    const now = new Date()
+    const { data, error } = await supabase.rpc('get_monthly_category_spend', {
+      p_year: now.getFullYear(),
+      p_month: now.getMonth() + 1,
+    })
+    if (error) {
+      console.error('Error calculando gasto mensual por categoría:', error)
+      return
+    }
+    const map: Record<string, number> = {}
+    for (const row of data ?? []) {
+      map[row.category_id] = Number(row.spent) || 0
+    }
+    setSpendByCategory(map)
+  }
 
   // Carga inicial de datos con flag de montado para evitar cascading renders
   useEffect(() => {
@@ -31,11 +48,14 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const { data: budgetsData } = await supabase
-          .from('budgets')
-          .select('*, categories(*)')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
+        const [{ data: budgetsData }] = await Promise.all([
+          supabase
+            .from('budgets')
+            .select('*, categories(*)')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          loadMonthlySpend(),
+        ])
 
         if (isMounted && budgetsData) setBudgets(budgetsData)
       } catch (err) {
@@ -61,11 +81,14 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: budgetsData } = await supabase
-        .from('budgets')
-        .select('*, categories(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      const [{ data: budgetsData }] = await Promise.all([
+        supabase
+          .from('budgets')
+          .select('*, categories(*)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        loadMonthlySpend(),
+      ])
 
       if (budgetsData) setBudgets(budgetsData)
       setLoadError(null)
@@ -119,23 +142,7 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
     }
   }
 
-  // Filtrar gastos del MES ACTUAL
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
-  const currentMonthExpenses = transactions.filter((t) => {
-    if (t.type !== 'expense') return false
-    const date = new Date(t.created_at || '')
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear
-  })
-
-  // Obtener gasto acumulado por categoría
-  const getSpentForCategory = (categoryId: string) => {
-    return currentMonthExpenses
-      .filter((t) => t.category_id === categoryId)
-      .reduce((acc, t) => acc + Number(t.amount_ars), 0)
-  }
+  const getSpentForCategory = (categoryId: string) => spendByCategory[categoryId] || 0
 
   if (loading) {
     return (
