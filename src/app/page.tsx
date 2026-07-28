@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
 import RecurringManager from "@/components/RecurringManager";
+import WalletManager from "@/components/WalletManager";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
 // NO dependen de este número: se calculan del lado del servidor con la
@@ -255,6 +256,7 @@ export default function Home() {
 
           <div className="lg:col-span-1 space-y-6">
             <FinanceChart income={totalIncome} expense={totalExpense} />
+            <WalletManager />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
           </div>
         </div>

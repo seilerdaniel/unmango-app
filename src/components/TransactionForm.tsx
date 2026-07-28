@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
+import { Wallet } from '@/types'
 import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag } from 'lucide-react'
 
 interface TransactionFormProps {
@@ -18,10 +19,31 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [categoryId, setCategoryId] = useState<string>('')
   const { categories } = useCategories()
 
+  // Billetera asociada al movimiento (Fase 5 — saldo por billetera). Es
+  // opcional: si no se elige ninguna, el movimiento no impacta el saldo
+  // de ninguna cuenta, igual que las transacciones cargadas antes de
+  // esta feature.
+  const [wallets, setWallets] = useState<Wallet[]>([])
+  const [walletId, setWalletId] = useState<string>('')
+
   const [isUsd, setIsUsd] = useState(false)
   const [amountUsd, setAmountUsd] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1200')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    async function loadWallets() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+      if (data) setWallets(data)
+    }
+    loadWallets()
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,6 +67,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         description,
         type,
         category_id: categoryId || null,
+        wallet_id: walletId || null,
         payment_method: paymentMethod,
         wallet_provider: paymentMethod === 'Billetera Virtual' ? walletProvider : null,
         is_usd: isUsd,
@@ -181,6 +204,27 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
                 $ {(Number(amountUsd || 0) * Number(exchangeRate || 0)).toLocaleString('es-AR')}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Billetera (opcional) */}
+        {wallets.length > 0 && (
+          <div>
+            <label className="block text-xs font-bold text-gray-800 mb-1">
+              Billetera (opcional)
+            </label>
+            <select
+              value={walletId}
+              onChange={(e) => setWalletId(e.target.value)}
+              className={inputStyle}
+            >
+              <option value="">Sin asignar</option>
+              {wallets.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 

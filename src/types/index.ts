@@ -24,3 +24,9 @@ export type RecurringExpense = Database['public']['Tables']['recurring_expenses'
     color: string | null
   } | null
 }
+
+export type Wallet = Database['public']['Tables']['wallets']['Row']
+
+export type WalletWithBalance = Wallet & {
+  balance: number
+}

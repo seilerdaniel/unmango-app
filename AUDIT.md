@@ -162,9 +162,37 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (misma línea base de siempre: 4 errores/4 warnings pre-existentes, nada
 nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
 
-## 🔵 Fase 5 — Nuevas funcionalidades (ideas)
+## 🔵 Fase 5 — Nuevas funcionalidades
 
-- [ ] Saldo por billetera/cuenta (no solo transacciones sueltas).
+- [x] **Saldo por billetera/cuenta** — implementado en este commit:
+  - `supabase/wallets.sql`: tabla `wallets` (nombre, tipo, color, saldo
+    inicial), columna `wallet_id` nullable en `transactions`, políticas
+    RLS, y la función `get_wallet_balances()` (saldo = inicial + ingresos
+    - gastos de sus movimientos, calculado en Postgres).
+  - `WalletManager.tsx`: alta/baja de billeteras + saldo actual de cada
+    una, ya agregado al dashboard (columna lateral).
+  - `TransactionForm.tsx`: selector de billetera opcional al cargar un
+    movimiento (si no elegís ninguna, el movimiento no impacta ningún
+    saldo — no rompe nada de lo que ya existía).
+  - Tests nuevos: `WalletManager.test.tsx` (2 tests: saldo vía RPC, alta
+    de billetera con los campos correctos).
+
+  **⚠️ Acción tuya**: correr `supabase/wallets.sql` en el SQL Editor de
+  Supabase (después de `rls_policies.sql` y `functions.sql`).
+
+  Decisión de alcance: las billeteras se llevan en ARS por ahora (usan
+  `amount_ars`, igual que el resto del dashboard). Si más adelante querés
+  una billetera 100% en USD (por ejemplo, ahorros en dólar billete), se
+  puede sumar sin romper esto — no lo armé ahora para no sobrediseñar
+  algo que no se pidió.
+
+  Nota de lint: `WalletManager` tiene el mismo warning pre-existente de
+  `react-hooks/set-state-in-effect` que ya tenían los otros componentes
+  con "cargar datos al montar" (ver Fase 3) — no es un bug funcional.
+
+  Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx vitest
+  run` (5 archivos, 8 tests, todos pasando).
+
 - [ ] Metas de ahorro con proyección (FV de anualidad).
 - [ ] Recordatorio antes del vencimiento de una suscripción.
 - [ ] Gráfico de tendencia de gasto por categoría en el tiempo.

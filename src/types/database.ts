@@ -17,8 +17,9 @@
 //
 // Las entradas en Functions de más abajo tienen que coincidir con las
 // funciones creadas por supabase/functions.sql (get_transaction_totals,
-// get_monthly_category_spend). Si corrés `gen types`, ese comando ya las
-// va a incluir automáticamente si corriste functions.sql antes.
+// get_monthly_category_spend) y supabase/wallets.sql (get_wallet_balances).
+// Si corrés `gen types`, ese comando ya las va a incluir automáticamente
+// si corriste esos archivos antes.
 
 export interface Database {
   public: {
@@ -49,6 +50,7 @@ export interface Database {
           id: string
           user_id: string
           category_id: string | null
+          wallet_id: string | null
           description: string
           type: 'income' | 'expense'
           payment_method: string
@@ -64,6 +66,7 @@ export interface Database {
           id?: string
           user_id: string
           category_id?: string | null
+          wallet_id?: string | null
           description: string
           type: 'income' | 'expense'
           payment_method: string
@@ -79,6 +82,7 @@ export interface Database {
           id?: string
           user_id?: string
           category_id?: string | null
+          wallet_id?: string | null
           description?: string
           type?: 'income' | 'expense'
           payment_method?: string
@@ -95,6 +99,12 @@ export interface Database {
             foreignKeyName: "transactions_category_id_fkey"
             columns: ["category_id"]
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            referencedRelation: "wallets"
             referencedColumns: ["id"]
           }
         ]
@@ -173,6 +183,36 @@ export interface Database {
           }
         ]
       }
+      wallets: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          type: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          color: string | null
+          initial_balance: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          type?: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          color?: string | null
+          initial_balance?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          type?: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          color?: string | null
+          initial_balance?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -183,6 +223,10 @@ export interface Database {
       get_monthly_category_spend: {
         Args: { p_year: number; p_month: number }
         Returns: { category_id: string; spent: number }[]
+      }
+      get_wallet_balances: {
+        Args: Record<string, never>
+        Returns: { wallet_id: string; balance: number }[]
       }
     }
   }
