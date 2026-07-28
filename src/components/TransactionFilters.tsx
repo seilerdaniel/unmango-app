@@ -85,6 +85,7 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
         <div className="relative flex-1 sm:w-48">
           <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
           <input
+            id="transaction-search-input"
             type="text"
             placeholder="Buscar..."
             value={searchTerm}

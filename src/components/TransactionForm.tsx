@@ -127,6 +127,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
           <div>
             <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Concepto / Descripción</label>
             <input
+              id="transaction-description-input"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

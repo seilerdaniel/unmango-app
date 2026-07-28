@@ -323,5 +323,58 @@ código Deno, no Next.js), `npx eslint .` (misma línea base, nada nuevo),
 `npx vitest run` (**9 archivos, 32 tests**, todos pasando — sumó
 `date-utils.test.ts` con 8 tests sobre la lógica de vencimientos).
 
+## ✅ Ideas nuevas — "quick wins" (tanda posterior)
+
+Se evaluaron 20 ideas nuevas propuestas por el usuario (documento
+aparte); 3 ya estaban construidas (recordatorio de vencimientos, metas
+de ahorro, multi-cuenta/billeteras — ver Fase 5). De las 17 restantes,
+se eligieron 4 "quick wins" para esta tanda:
+
+- [x] **Atajos de teclado** (`src/hooks/useKeyboardShortcuts.ts`): `N`
+  enfoca el campo de descripción para cargar rápido, `P` alterna el modo
+  privado, `/` enfoca el buscador del historial. La lógica de "ignorar si
+  el foco ya está en un campo de formulario" es una función pura
+  (`shouldIgnoreShortcut`) testeada aparte (6 tests) — incluyó un ajuste
+  porque jsdom no implementa bien `isContentEditable`, así que también se
+  chequea el atributo `contenteditable` directamente (más robusto en
+  navegadores reales, no solo un parche para el test). Hint visual en el
+  header (oculto en mobile).
+
+- [x] **Racha "Cero Gastos"** (`src/lib/zeroSpendStats.ts` +
+  `ZeroSpendStreak.tsx`): cuenta los días del mes sin ningún gasto
+  registrado y la racha actual de días consecutivos. La consulta a
+  Supabase solo trae las *fechas* de los gastos del mes (no las
+  transacciones completas), y todo el cálculo de racha es una función
+  pura testeada aparte (5 tests).
+
+- [x] **Calculadora ARS / USD Blue** (`ArsUsdCalculator.tsx`): botón
+  flotante con conversión en vivo en ambos sentidos. Trae la cotización
+  de [dolarapi.com](https://dolarapi.com) (pública, sin API key) al
+  abrir el popover; si falla, el usuario puede cargar la cotización a
+  mano — no rompe la calculadora. Las conversiones (`arsToUsd`/
+  `usdToArs`) son funciones puras testeadas aparte (6 tests).
+
+- [x] **Backup / Restore en JSON** (`BackupRestore.tsx`): descarga todas
+  tus tablas (categorías, billeteras, presupuestos, suscripciones, metas,
+  transacciones) en un único archivo JSON. La restauración inserta todo
+  de nuevo con IDs frescos y **remapea** `category_id`/`wallet_id` a los
+  nuevos IDs generados (la función `remapForeignKey` es pura y está
+  testeada, 4 tests). Es aditiva, no reemplaza nada existente — restaurar
+  el mismo archivo dos veces duplica los datos, a propósito (evita
+  sorpresas de "che, dónde quedó tal cosa" por un reemplazo silencioso).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+tipar explícitamente los inserts de `BackupRestore` porque TypeScript no
+podía inferir los campos requeridos a través de un spread de
+`Record<string, unknown>`), `npx eslint .` (misma línea base + 1 caso
+nuevo del mismo warning pre-existente de "cargar al montar" en
+`ArsUsdCalculator` — nada nuevo grave), `npx vitest run` (**13 archivos,
+53 tests**, todos pasando).
+
+Quedan 13 ideas sin trabajar del documento original (proyección a fin de
+mes, gastos hormiga, gastos en cuotas, bot de Telegram, escaneo de
+comprobantes/QR, etc.) — evaluadas con esfuerzo/infraestructura
+necesaria en la conversación, para retomar cuando se decida.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

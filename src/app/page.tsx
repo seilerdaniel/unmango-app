@@ -29,6 +29,10 @@ import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
 import ImportTransactions from "@/components/ImportTransactions";
+import ZeroSpendStreak from "@/components/ZeroSpendStreak";
+import ArsUsdCalculator from "@/components/ArsUsdCalculator";
+import BackupRestore from "@/components/BackupRestore";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
 // NO dependen de este número: se calculan del lado del servidor con la
@@ -51,6 +55,17 @@ export default function Home() {
   // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
   const { theme, toggleTheme } = useTheme();
+
+  // Atajos de teclado: N nueva transacción, P modo privado, / buscar.
+  useKeyboardShortcuts({
+    onNewTransaction: () => {
+      document.getElementById("transaction-description-input")?.focus();
+    },
+    onTogglePrivacy: togglePrivacy,
+    onFocusSearch: () => {
+      document.getElementById("transaction-search-input")?.focus();
+    },
+  });
 
   // Totales de TODA la historia del usuario, calculados en Postgres para no
   // tener que traer todas las filas al cliente solo para sumarlas.
@@ -188,6 +203,16 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Ayuda de atajos de teclado (solo desktop, no compite por espacio en mobile) */}
+            <div
+              className="hidden lg:flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 font-medium mr-1"
+              title="Atajos de teclado: N para nueva transacción, P para modo privado, / para buscar"
+            >
+              <span><kbd className="px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 font-mono">N</kbd> nuevo</span>
+              <span><kbd className="px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 font-mono">P</kbd> privado</span>
+              <span><kbd className="px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 font-mono">/</kbd> buscar</span>
+            </div>
+
             {/* Botón Modo Oscuro */}
             <button
               onClick={toggleTheme}
@@ -262,6 +287,8 @@ export default function Home() {
           </div>
         </div>
 
+        <ZeroSpendStreak />
+
         {/* Formulario y Lateral (Gráfico + Categorías) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
@@ -277,6 +304,7 @@ export default function Home() {
             <TrendChart />
             <WalletManager />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
+            <BackupRestore />
           </div>
         </div>
 
@@ -396,6 +424,8 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      <ArsUsdCalculator />
     </main>
   );
 }
