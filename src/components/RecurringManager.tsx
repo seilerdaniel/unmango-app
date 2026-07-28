@@ -327,7 +327,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                     {item.categories && (
                       <span
                         className="text-[10px] px-2 py-0.5 rounded-md font-medium text-white"
-                        style={{ backgroundColor: item.categories.color }}
+                        style={{ backgroundColor: item.categories.color || '#94a3b8' }}
                       >
                         {item.categories.name}
                       </span>

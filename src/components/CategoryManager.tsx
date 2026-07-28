@@ -133,9 +133,9 @@ useEffect(() => {
             <div
               key={cat.id}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-100 shadow-xs"
-              style={{ backgroundColor: `${cat.color}15`, color: cat.color }}
+              style={{ backgroundColor: `${cat.color || '#94a3b8'}15`, color: cat.color || '#94a3b8' }}
             >
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color || '#94a3b8' }} />
               {cat.name}
               <button
                 onClick={() => handleDeleteCategory(cat.id)}

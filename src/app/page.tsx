@@ -256,8 +256,8 @@ export default function Home() {
                           <span
                             className="text-[10px] font-bold px-2 py-0.5 rounded-md"
                             style={{
-                              backgroundColor: `${item.categories.color}18`,
-                              color: item.categories.color,
+                              backgroundColor: `${item.categories.color || '#94a3b8'}18`,
+                              color: item.categories.color || '#94a3b8',
                             }}
                           >
                             {item.categories.name}

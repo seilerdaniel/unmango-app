@@ -48,9 +48,19 @@ Cambios:
 
 ## 🟡 Fase 3 — Deuda técnica
 
-- [ ] Generar tipos de Supabase (`supabase gen types typescript`) y tipar el
-  cliente (`createClient<Database>`) para que TypeScript detecte a futuro
-  errores como el de la Fase 0 en tiempo de compilación.
+- [x] **Tipos de Supabase**: se agregó `src/types/database.ts` con el tipo
+  `Database` (escrito a mano en base al schema conocido — el archivo tiene
+  una nota de cómo reemplazarlo por el generado real con
+  `supabase gen types typescript` cuando tengas la CLI a mano). Se tipó el
+  cliente (`createClient<Database>`) y `types/index.ts` ya no duplica las
+  interfaces: `Category`, `Transaction`, `Budget` y `RecurringExpense`
+  ahora derivan de `Database`. Verificado con `npx tsc --noEmit`: 0
+  errores. Un bug como el de la Fase 0 ahora lo marca el compilador.
+  - Nota: al correr `eslint` aparecen 4 errores de la regla
+    `react-hooks/set-state-in-effect` que ya existían antes de esta
+    auditoría (`TransactionForm`, `TransactionFilters`, `PrivacyContext`).
+    No los toqué para no meter cambios de comportamiento fuera de
+    alcance; quedan para una futura tanda de refactor de efectos.
 - [ ] Extraer un hook/contexto `useCategories()` compartido — hoy se
   fetchean categorías por separado en 5 componentes distintos con código
   casi idéntico.

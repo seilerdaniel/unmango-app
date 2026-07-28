@@ -1,50 +1,26 @@
-export interface Category {
-  id: string
-  user_id: string
-  name: string
-  color?: string
+import { Database } from './database'
+
+// Estos tipos derivan de src/types/database.ts (el schema real de Supabase)
+// en vez de duplicarse a mano, para que un cambio de columna en la base se
+// note acá con un error de compilación en vez de un bug silencioso en
+// runtime (ver AUDIT.md, Fase 3).
+
+export type Category = Database['public']['Tables']['categories']['Row']
+
+export type Transaction = Database['public']['Tables']['transactions']['Row'] & {
+  categories?: Category | null
 }
 
-export interface Transaction {
-  id?: string
-  user_id?: string
-  title: string
-  amount_ars: number
-  currency?: 'ARS' | 'USD'
-  type: 'income' | 'expense'
-  category_id?: string
-  notes?: string
-  created_at?: string
+export type Budget = Database['public']['Tables']['budgets']['Row'] & {
   categories?: {
     name: string
-    color: string
-  }
+    color: string | null
+  } | null
 }
 
-export interface Budget {
-  id?: string
-  user_id?: string
-  category_id: string
-  monthly_limit: number
-  created_at?: string
+export type RecurringExpense = Database['public']['Tables']['recurring_expenses']['Row'] & {
   categories?: {
     name: string
-    color: string
-  }
-}
-
-export interface RecurringExpense {
-  id?: string
-  user_id?: string
-  category_id?: string
-  title: string
-  amount: number
-  currency: 'ARS' | 'USD'
-  billing_day: number
-  is_active: boolean
-  created_at?: string
-  categories?: {
-    name: string
-    color: string
-  }
+    color: string | null
+  } | null
 }
