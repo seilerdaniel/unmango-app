@@ -212,21 +212,46 @@ nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
   como posible ampliación si te sirve más que la vista general. Tests:
   `TrendChart.test.tsx` (2 tests).
 
-- [x] **Aviso de vencimiento próximo** — versión con alcance acotado,
-  ver nota abajo. `RecurringManager.tsx` ahora calcula cuántos días faltan
-  para el próximo vencimiento de cada suscripción activa y muestra un
-  banner ("Vencen pronto: Netflix (en 2d)...") más un badge individual
-  cuando faltan 7 días o menos. Tests: 2 nuevos en
-  `RecurringManager.test.tsx`.
+- [x] **Aviso de vencimiento próximo** — dos capas:
+  1. **Dentro de la app** (ya estaba): `RecurringManager.tsx` calcula
+     cuántos días faltan para el próximo vencimiento de cada suscripción
+     activa y muestra un banner ("Vencen pronto: Netflix (en 2d)...") más
+     un badge individual cuando faltan 7 días o menos. Tests: 2 en
+     `RecurringManager.test.tsx`.
+  2. **✅ Recordatorio real por email (nuevo)** —
+     `supabase/functions/send-renewal-reminders/`: una Edge Function de
+     Supabase que corre por cron una vez al día, revisa las suscripciones
+     activas de TODOS los usuarios, y le manda un email (vía
+     [Resend](https://resend.com)) a quien tenga una suscripción venciendo
+     dentro de 3 días (configurable con `REMINDER_DAYS_BEFORE` en
+     `index.ts`). `supabase/reminders_cron.sql` programa el cron
+     (`pg_cron` + `pg_net`) que la invoca todos los días.
 
-  **⚠️ Esto NO es un recordatorio real (push/email) que te llegue sin
-  abrir la app.** Es un aviso dentro del dashboard, que ves la próxima vez
-  que entrás. Un recordatorio de verdad necesita infraestructura que no
-  puedo armar en esta sesión: una Supabase Edge Function + un cron
-  (`pg_cron`) que corra diariamente, más un proveedor de email (Resend,
-  SendGrid, etc.) o push, todo lo cual requiere que crees esas cuentas y
-  me pases las credenciales. Si te interesa, es la siguiente iteración
-  natural de esto.
+     La lógica de "cuántos días faltan" vive separada en `date-utils.ts`
+     (sin nada de Deno) para poder testearla con Vitest igual que el
+     resto del proyecto: `date-utils.test.ts`, 8 tests (incluye el caso
+     de clamp de fin de mes, ej. día 31 en febrero).
+
+     **⚠️ Esto es código listo para desplegar, no algo que yo pueda dejar
+     funcionando solo**: necesita que vos crees una cuenta en Resend
+     (tiene plan gratis), configures 2-3 secrets con la CLI de Supabase, y
+     corras `supabase functions deploy`. Los pasos exactos, uno por uno,
+     están en `supabase/functions/send-renewal-reminders/README.md`. Sin
+     hacer esos pasos, el banner dentro de la app (punto 1) sigue
+
+     **Corrección post-despliegue (probado en el proyecto real del
+     usuario)**: al probar con `curl` dio
+     `{"code":"UNAUTHORIZED_NO_AUTH_HEADER"}`. No es un bug de nuestro
+     código — el gateway de Supabase exige un header `Authorization:
+     Bearer <anon_key>` en toda Edge Function por defecto, antes de que
+     la request llegue a `index.ts` (nuestro chequeo de `x-cron-secret`
+     es una capa aparte, encima de esa). Se corrigió agregando ese header
+     tanto en `reminders_cron.sql` como en el `curl` de prueba del
+     README. Si ya habías corrido la versión vieja del SQL, no hace falta
+     borrar el job: `cron.schedule()` con el mismo nombre actualiza el
+     job existente en vez de duplicarlo — alcanza con volver a correr el
+     archivo corregido.
+     funcionando igual que antes — esto es un agregado, no un reemplazo.
 
 - [x] **Modo oscuro** — `ThemeContext.tsx` (toggle persistido en
   localStorage, con un script inline en `layout.tsx` para evitar el flash
@@ -267,6 +292,27 @@ que ya tenían los demás componentes — no son bugs), `npx vitest run`
 `functions.sql` y `wallets.sql`, en este orden):
 `savings_goals.sql` → `trend.sql`. (`wallets.sql` ya lo tenías de la
 tanda anterior.)
+
+## ✅ Infraestructura de recordatorios reales (tanda posterior)
+
+Se agregó la Edge Function + cron para que el aviso de vencimiento
+llegue por email de verdad (no solo dentro de la app). Ver el detalle
+completo más arriba, en el punto 2 del ítem "Aviso de vencimiento
+próximo" de la Fase 5.
+
+**⚠️ Acciones tuyas** (paso a paso completo en
+`supabase/functions/send-renewal-reminders/README.md`):
+1. Crear cuenta en Resend y conseguir un API key.
+2. `supabase secrets set RESEND_API_KEY=... CRON_SECRET=...`
+3. `supabase functions deploy send-renewal-reminders`
+4. Correr `supabase/reminders_cron.sql` (reemplazando `<PROJECT_REF>` y
+   `<CRON_SECRET>`) en el SQL Editor de Supabase.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — se excluyó
+`supabase/functions/**/index.ts` del tsconfig del proyecto porque es
+código Deno, no Next.js), `npx eslint .` (misma línea base, nada nuevo),
+`npx vitest run` (**9 archivos, 32 tests**, todos pasando — sumó
+`date-utils.test.ts` con 8 tests sobre la lógica de vencimientos).
 
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._
