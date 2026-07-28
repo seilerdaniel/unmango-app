@@ -1,0 +1,339 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import { Category, RecurringExpense } from '@/types'
+import { usePrivacy } from '@/context/PrivacyContext'
+import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power } from 'lucide-react'
+
+interface RecurringManagerProps {
+  onTransactionAdded?: () => void
+}
+
+export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
+  const [categories, setCategories] = useState<Category[]>([])
+  const [recurring, setRecurring] = useState<RecurringExpense[]>([])
+  const [title, setTitle] = useState('')
+  const [amount, setAmount] = useState('')
+  const [billingDay, setBillingDay] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
+
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [impactingId, setImpactingId] = useState<string | null>(null)
+
+  const { isPrivate, formatAmount } = usePrivacy()
+
+  // Carga inicial segura para React 19
+  useEffect(() => {
+    let isMounted = true
+
+    const loadData = async () => {
+      try {
+        const [{ data: catsData }, { data: recData }] = await Promise.all([
+          supabase.from('categories').select('*').order('name', { ascending: true }),
+          supabase.from('recurring_expenses').select('*, categories(*)').order('billing_day', { ascending: true })
+        ])
+
+        if (isMounted) {
+          if (catsData) setCategories(catsData)
+          if (recData) setRecurring(recData)
+        }
+      } catch (err) {
+        console.error('Error al cargar gastos recurrentes:', err)
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const reloadData = async () => {
+    try {
+      const [{ data: catsData }, { data: recData }] = await Promise.all([
+        supabase.from('categories').select('*').order('name', { ascending: true }),
+        supabase.from('recurring_expenses').select('*, categories(*)').order('billing_day', { ascending: true })
+      ])
+      if (catsData) setCategories(catsData)
+      if (recData) setRecurring(recData)
+    } catch (err) {
+      console.error('Error recargando suscripciones:', err)
+    }
+  }
+
+  const handleAddRecurring = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title || !amount || !billingDay || Number(amount) <= 0) return
+
+    setSubmitting(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
+
+    const { error } = await supabase.from('recurring_expenses').insert([
+      {
+        user_id: user.id,
+        title,
+        amount: Number(amount),
+        currency,
+        billing_day: Number(billingDay),
+        category_id: categoryId || null,
+        is_active: true
+      }
+    ])
+
+    if (!error) {
+      setTitle('')
+      setAmount('')
+      setBillingDay('')
+      setCategoryId('')
+      setCurrency('ARS')
+      await reloadData()
+    } else {
+      console.error('Error agregando suscripción:', error)
+    }
+
+    setSubmitting(false)
+  }
+
+  const handleToggleActive = async (item: RecurringExpense) => {
+    if (!item.id) return
+    const newStatus = !item.is_active
+
+    // Optimistic UI Update
+    setRecurring((prev) =>
+      prev.map((r) => (r.id === item.id ? { ...r, is_active: newStatus } : r))
+    )
+
+    const { error } = await supabase
+      .from('recurring_expenses')
+      .update({ is_active: newStatus })
+      .eq('id', item.id)
+
+    if (error) {
+      console.error('Error actualizando estado:', error)
+      await reloadData()
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
+    if (!error) {
+      setRecurring((prev) => prev.filter((r) => r.id !== id))
+    }
+  }
+
+  // Registrar la suscripción como un gasto real en las transacciones
+  const handleImpactTransaction = async (item: RecurringExpense) => {
+    if (!item.id) return
+    setImpactingId(item.id)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setImpactingId(null)
+      return
+    }
+
+    const { error } = await supabase.from('transactions').insert([
+      {
+        user_id: user.id,
+        type: 'expense',
+        title: `[Suscripción] ${item.title}`,
+        amount_ars: item.currency === 'ARS' ? item.amount : item.amount * 1000, // Multiplicador base si es USD
+        category_id: item.category_id || null,
+        notes: `Generado automáticamente desde Suscripción Recurrente (Vence día ${item.billing_day})`
+      }
+    ])
+
+    if (!error) {
+      if (onTransactionAdded) onTransactionAdded()
+    } else {
+      console.error('Error al registrar transacción:', error)
+    }
+
+    setImpactingId(null)
+  }
+
+  const totalFixedARS = recurring
+    .filter((r) => r.is_active && r.currency === 'ARS')
+    .reduce((acc, r) => acc + Number(r.amount), 0)
+
+  if (loading) {
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando suscripciones...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Repeat className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-lg font-bold text-gray-900">Suscripciones y Gastos Fijos</h2>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Fijo Comprometido</span>
+          <span className="text-xs font-black text-indigo-700">
+            {isPrivate ? '••••••' : formatAmount(totalFixedARS)}
+          </span>
+        </div>
+      </div>
+
+      {/* Formulario de Alta */}
+      <form onSubmit={handleAddRecurring} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+        <input
+          type="text"
+          placeholder="Servicio (ej. Netflix)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
+        <div className="flex gap-1">
+          <input
+            type="number"
+            placeholder="Monto"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+            min="1"
+            step="any"
+            className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as 'ARS' | 'USD')}
+            className="text-xs bg-gray-100 border border-gray-200 rounded-xl px-2 font-bold text-gray-700 focus:outline-none"
+          >
+            <option value="ARS">ARS</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
+
+        <input
+          type="number"
+          placeholder="Día del mes (1-31)"
+          value={billingDay}
+          onChange={(e) => setBillingDay(e.target.value)}
+          required
+          min="1"
+          max="31"
+          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">Categoría (Opcional)...</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full sm:col-span-2 lg:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+        >
+          <Plus size={16} /> {submitting ? 'Guardando...' : 'Agregar'}
+        </button>
+      </form>
+
+      {/* Lista de Suscripciones */}
+      {recurring.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-4">
+          No tenés suscripciones o gastos fijos registrados.
+        </p>
+      ) : (
+        <div className="space-y-2.5 pt-2">
+          {recurring.map((item) => (
+            <div
+              key={item.id}
+              className={`p-3 rounded-xl border transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${
+                item.is_active ? 'bg-gray-50/60 border-gray-100' : 'bg-gray-100/40 border-gray-200 opacity-60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleToggleActive(item)}
+                  className={`p-1.5 rounded-lg transition cursor-pointer ${
+                    item.is_active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-500'
+                  }`}
+                  title={item.is_active ? 'Pausar suscripción' : 'Activar suscripción'}
+                >
+                  <Power size={14} />
+                </button>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-900">{item.title}</span>
+                    {item.categories && (
+                      <span
+                        className="text-[10px] px-2 py-0.5 rounded-md font-medium text-white"
+                        style={{ backgroundColor: item.categories.color }}
+                      >
+                        {item.categories.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
+                    <Calendar size={12} />
+                    <span>Vence el día {item.billing_day} de cada mes</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <span className="text-xs font-extrabold text-gray-900">
+                  {isPrivate
+                    ? '••••••'
+                    : item.currency === 'USD'
+                    ? `USD $${item.amount}`
+                    : formatAmount(item.amount)}
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleImpactTransaction(item)}
+                    disabled={!item.is_active || impactingId === item.id}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 text-[11px] font-bold py-1 px-2.5 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Pagar / Registrar en gastos de este mes"
+                  >
+                    <CheckCircle2 size={13} />
+                    {impactingId === item.id ? 'Impactando...' : 'Pagar'}
+                  </button>
+
+                  <button
+                    onClick={() => item.id && handleDelete(item.id)}
+                    className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

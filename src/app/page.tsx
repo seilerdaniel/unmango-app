@@ -1,96 +1,111 @@
-'use client'
+"use client";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
-import { User } from '@supabase/supabase-js'
-import { Transaction } from '@/types'
-import TransactionForm from '@/components/TransactionForm'
-import CategoryManager from '@/components/CategoryManager'
-import BudgetManager from '@/components/BudgetManager'
-import FinanceChart from '@/components/FinanceChart'
-import TransactionFilters from '@/components/TransactionFilters'
-import { LogOut, ArrowUpRight, ArrowDownRight, Trash2, Eye, EyeOff } from 'lucide-react'
-import { usePrivacy } from '@/context/PrivacyContext'
-
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import { User } from "@supabase/supabase-js";
+import { Transaction } from "@/types";
+import TransactionForm from "@/components/TransactionForm";
+import CategoryManager from "@/components/CategoryManager";
+import BudgetManager from "@/components/BudgetManager";
+import FinanceChart from "@/components/FinanceChart";
+import TransactionFilters from "@/components/TransactionFilters";
+import {
+  LogOut,
+  ArrowUpRight,
+  ArrowDownRight,
+  Trash2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+import { usePrivacy } from "@/context/PrivacyContext";
+import RecurringManager from "@/components/RecurringManager";
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null)
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
-  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [filteredTransactions, setFilteredTransactions] = useState<
+    Transaction[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   // Consumimos el contexto de privacidad
-  const { isPrivate, togglePrivacy, formatAmount } = usePrivacy()
+  const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
 
   async function fetchTransactions() {
     const { data, error } = await supabase
-      .from('transactions')
-      .select('*, categories(*)')
-      .order('created_at', { ascending: false })
+      .from("transactions")
+      .select("*, categories(*)")
+      .order("created_at", { ascending: false });
 
     if (!error && data) {
-      setAllTransactions(data)
-      setFilteredTransactions(data)
+      setAllTransactions(data);
+      setFilteredTransactions(data);
     }
   }
 
   async function handleDelete(id: string) {
-    if (confirm('¿Quieres eliminar este movimiento?')) {
-      const { error } = await supabase.from('transactions').delete().eq('id', id)
+    if (confirm("¿Quieres eliminar este movimiento?")) {
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", id);
       if (!error) {
-        fetchTransactions()
+        fetchTransactions();
       }
     }
   }
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
-        router.push('/login')
+        router.push("/login");
       } else {
-        setUser(user)
-        await fetchTransactions()
+        setUser(user);
+        await fetchTransactions();
       }
-      setLoading(false)
+      setLoading(false);
     }
 
-    init()
-  }, [router])
+    init();
+  }, [router]);
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await supabase.auth.signOut();
+    router.push("/login");
   }
 
   const totalIncome = allTransactions
-    .filter((t) => t.type === 'income')
-    .reduce((acc, t) => acc + Number(t.amount_ars), 0)
+    .filter((t) => t.type === "income")
+    .reduce((acc, t) => acc + Number(t.amount_ars), 0);
 
   const totalExpense = allTransactions
-    .filter((t) => t.type === 'expense')
-    .reduce((acc, t) => acc + Number(t.amount_ars), 0)
+    .filter((t) => t.type === "expense")
+    .reduce((acc, t) => acc + Number(t.amount_ars), 0);
 
-  const balance = totalIncome - totalExpense
+  const balance = totalIncome - totalExpense;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-amber-50/30 flex items-center justify-center">
-        <p className="text-sm font-semibold text-amber-700 animate-pulse">Cargando UnMango 🥭...</p>
+        <p className="text-sm font-semibold text-amber-700 animate-pulse">
+          Cargando UnMango 🥭...
+        </p>
       </div>
-    )
+    );
   }
 
-  if (!user) return null
+  if (!user) return null;
 
   return (
     <main className="min-h-screen bg-gray-50/60 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
-        
         {/* Header con botón de privacidad */}
         <header className="flex justify-between items-center bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center gap-3">
@@ -105,7 +120,7 @@ export default function Home() {
             {/* Botón Modo Privacidad */}
             <button
               onClick={togglePrivacy}
-              title={isPrivate ? 'Mostrar valores' : 'Ocultar valores'}
+              title={isPrivate ? "Mostrar valores" : "Ocultar valores"}
               className="p-2 sm:px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition shadow-sm flex items-center gap-2 text-xs font-semibold cursor-pointer"
             >
               {isPrivate ? (
@@ -134,8 +149,12 @@ export default function Home() {
         {/* Tarjetas de Métricas principales formateadas con formatAmount */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Balance Disponible</p>
-            <h3 className={`text-2xl font-extrabold ${balance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              Balance Disponible
+            </p>
+            <h3
+              className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900" : "text-rose-600"}`}
+            >
               {formatAmount(balance)}
             </h3>
           </div>
@@ -145,7 +164,9 @@ export default function Home() {
               <ArrowUpRight size={14} /> Total Ingresos
             </p>
             <h3 className="text-2xl font-extrabold text-emerald-600">
-              {isPrivate ? formatAmount(totalIncome) : `+ ${formatAmount(totalIncome)}`}
+              {isPrivate
+                ? formatAmount(totalIncome)
+                : `+ ${formatAmount(totalIncome)}`}
             </h3>
           </div>
 
@@ -154,15 +175,19 @@ export default function Home() {
               <ArrowDownRight size={14} /> Total Gastos
             </p>
             <h3 className="text-2xl font-extrabold text-rose-600">
-              {isPrivate ? formatAmount(totalExpense) : `- ${formatAmount(totalExpense)}`}
+              {isPrivate
+                ? formatAmount(totalExpense)
+                : `- ${formatAmount(totalExpense)}`}
             </h3>
           </div>
         </div>
 
         {/* Formulario y Lateral (Gráfico + Categorías) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             <TransactionForm onTransactionAdded={fetchTransactions} />
+            <RecurringManager onTransactionAdded={fetchTransactions} />
+            <BudgetManager transactions={allTransactions} />
           </div>
 
           <div className="lg:col-span-1 space-y-6">
@@ -174,7 +199,9 @@ export default function Home() {
         {/* Historial de Movimientos y Filtros */}
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-gray-900">Historial de Movimientos</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              Historial de Movimientos
+            </h2>
           </div>
 
           <TransactionFilters
@@ -194,14 +221,24 @@ export default function Home() {
                   className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 hover:bg-gray-50/50 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl ${
-                      item.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
-                    }`}>
-                      {item.type === 'income' ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
+                    <div
+                      className={`p-2.5 rounded-xl ${
+                        item.type === "income"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-rose-50 text-rose-600"
+                      }`}
+                    >
+                      {item.type === "income" ? (
+                        <ArrowUpRight size={18} />
+                      ) : (
+                        <ArrowDownRight size={18} />
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-gray-900">{item.description}</p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {item.description}
+                        </p>
                         {item.categories && (
                           <span
                             className="text-[10px] font-bold px-2 py-0.5 rounded-md"
@@ -215,10 +252,15 @@ export default function Home() {
                         )}
                       </div>
                       <p className="text-xs text-gray-500 font-medium flex items-center gap-2 mt-0.5">
-                        <span>{item.payment_method}{item.wallet_provider ? ` (${item.wallet_provider})` : ''}</span>
+                        <span>
+                          {item.payment_method}
+                          {item.wallet_provider
+                            ? ` (${item.wallet_provider})`
+                            : ""}
+                        </span>
                         {item.is_usd && (
                           <span className="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold">
-                            USD {isPrivate ? '••••••' : item.amount_usd}
+                            USD {isPrivate ? "••••••" : item.amount_usd}
                           </span>
                         )}
                       </p>
@@ -228,15 +270,19 @@ export default function Home() {
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       {/* Monto de cada transacción con privacidad */}
-                      <p className={`text-sm font-extrabold ${
-                        item.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
+                      <p
+                        className={`text-sm font-extrabold ${
+                          item.type === "income"
+                            ? "text-emerald-600"
+                            : "text-rose-600"
+                        }`}
+                      >
                         {isPrivate
                           ? formatAmount(Number(item.amount_ars))
-                          : `${item.type === 'income' ? '+' : '-'} ${formatAmount(Number(item.amount_ars))}`}
+                          : `${item.type === "income" ? "+" : "-"} ${formatAmount(Number(item.amount_ars))}`}
                       </p>
                       <p className="text-[10px] text-gray-400 font-medium">
-                        {new Date(item.created_at!).toLocaleDateString('es-AR')}
+                        {new Date(item.created_at!).toLocaleDateString("es-AR")}
                       </p>
                     </div>
 
@@ -253,8 +299,7 @@ export default function Home() {
             </div>
           )}
         </div>
-
       </div>
     </main>
-  )
+  );
 }

@@ -33,3 +33,19 @@ export interface Budget {
     color: string
   }
 }
+
+export interface RecurringExpense {
+  id?: string
+  user_id?: string
+  category_id?: string
+  title: string
+  amount: number
+  currency: 'ARS' | 'USD'
+  billing_day: number
+  is_active: boolean
+  created_at?: string
+  categories?: {
+    name: string
+    color: string
+  }
+}
