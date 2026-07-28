@@ -9,10 +9,12 @@ import { User } from '@supabase/supabase-js'
 import { Transaction } from '@/types'
 import TransactionForm from '@/components/TransactionForm'
 import CategoryManager from '@/components/CategoryManager'
+import BudgetManager from '@/components/BudgetManager'
 import FinanceChart from '@/components/FinanceChart'
 import TransactionFilters from '@/components/TransactionFilters'
 import { LogOut, ArrowUpRight, ArrowDownRight, Trash2, Eye, EyeOff } from 'lucide-react'
 import { usePrivacy } from '@/context/PrivacyContext'
+
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null)
