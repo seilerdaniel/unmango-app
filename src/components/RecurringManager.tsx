@@ -107,6 +107,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       setCurrency('ARS')
       await reloadData()
     } else {
+      alert('Error al agregar la suscripción: ' + error.message)
       console.error('Error agregando suscripción:', error)
     }
 
@@ -128,6 +129,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       .eq('id', item.id)
 
     if (error) {
+      alert('Error al actualizar la suscripción: ' + error.message)
       console.error('Error actualizando estado:', error)
       await reloadData()
     }
@@ -137,6 +139,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
     if (!error) {
       setRecurring((prev) => prev.filter((r) => r.id !== id))
+    } else {
+      alert('Error al eliminar la suscripción: ' + error.message)
+      console.error('Error eliminando suscripción:', error)
     }
   }
 

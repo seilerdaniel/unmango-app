@@ -65,6 +65,9 @@ export default function Home() {
         .eq("id", id);
       if (!error) {
         fetchTransactions();
+      } else {
+        alert("Error al eliminar el movimiento: " + error.message);
+        console.error("Error eliminando transacción:", error);
       }
     }
   }

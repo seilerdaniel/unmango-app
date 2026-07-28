@@ -17,6 +17,7 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
   const [limitAmount, setLimitAmount] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
   const [submitting, setSubmitting] = useState<boolean>(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
 
@@ -40,6 +41,7 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
         }
       } catch (err) {
         console.error('Error al cargar presupuestos:', err)
+        if (isMounted) setLoadError('No se pudieron cargar los presupuestos. Reintentá más tarde.')
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -66,8 +68,10 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
       ])
       if (catsData) setCategories(catsData)
       if (budgetsData) setBudgets(budgetsData)
+      setLoadError(null)
     } catch (err) {
       console.error('Error recargando presupuestos:', err)
+      setLoadError('No se pudieron actualizar los presupuestos.')
     }
   }
 
@@ -98,6 +102,7 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
       setLimitAmount('')
       await reloadData()
     } else {
+      alert('Error al guardar el presupuesto: ' + error.message)
       console.error('Error guardando presupuesto:', error)
     }
 
@@ -108,6 +113,9 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
     const { error } = await supabase.from('budgets').delete().eq('id', id)
     if (!error) {
       setBudgets((prev) => prev.filter((b) => b.id !== id))
+    } else {
+      alert('Error al eliminar el presupuesto: ' + error.message)
+      console.error('Error eliminando presupuesto:', error)
     }
   }
 
@@ -148,6 +156,12 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
           Mes Actual
         </span>
       </div>
+
+      {loadError && (
+        <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
+          <AlertCircle size={14} className="shrink-0" /> {loadError}
+        </div>
+      )}
 
       {/* Formulario para asignar/modificar tope */}
       <form onSubmit={handleSaveBudget} className="grid grid-cols-1 sm:grid-cols-3 gap-3">

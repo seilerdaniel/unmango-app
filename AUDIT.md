@@ -38,9 +38,13 @@ Cambios:
 - [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada
   (`visibleTransactions`) en vez de siempre todas las transacciones.
 - [ ] Reemplazar `alert()`/`confirm()` nativos por un componente de
-  toast/modal propio, consistente con el resto del diseño.
-- [ ] Revisar otros `console.error` sin feedback visible al usuario
-  (`BudgetManager`, `CategoryManager`).
+  toast/modal propio, consistente con el resto del diseño. (Pendiente:
+  hoy ya avisan todos los errores, pero con `alert()` nativo del navegador,
+  que corta la estética de la app.)
+- [x] Revisar otros `console.error` sin feedback visible al usuario
+  (`BudgetManager`, `CategoryManager`, `RecurringManager`, borrado de
+  transacciones en `page.tsx`). Ahora todos muestran un `alert` o, en el
+  caso de la carga inicial de presupuestos, un banner de error visible.
 
 ## 🟡 Fase 3 — Deuda técnica
 

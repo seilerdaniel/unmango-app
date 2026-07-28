@@ -85,6 +85,9 @@ useEffect(() => {
       if (!error) {
         fetchCategories()
         if (onCategoriesUpdated) onCategoriesUpdated()
+      } else {
+        alert('Error al eliminar la categoría: ' + error.message)
+        console.error('Error eliminando categoría:', error)
       }
     }
   }
