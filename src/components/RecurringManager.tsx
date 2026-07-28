@@ -137,6 +137,26 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   // Registrar la suscripción como un gasto real en las transacciones
   const handleImpactTransaction = async (item: RecurringExpense) => {
     if (!item.id) return
+
+    // Si es en USD necesitamos una cotización real para calcular el ARS,
+    // en vez del multiplicador fijo *1000 que quedaba desactualizado.
+    let exchangeRate: number | null = null
+    let amountArs = Number(item.amount)
+
+    if (item.currency === 'USD') {
+      const rateInput = window.prompt(
+        `Cotización actual del dólar para registrar "${item.title}":`,
+        '1200'
+      )
+      if (rateInput === null) return // el usuario canceló
+      exchangeRate = Number(rateInput)
+      if (!exchangeRate || exchangeRate <= 0) {
+        alert('Cotización inválida. No se registró el pago.')
+        return
+      }
+      amountArs = Number(item.amount) * exchangeRate
+    }
+
     setImpactingId(item.id)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -145,25 +165,33 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       return
     }
 
+    // Campos alineados con el tipo Transaction / schema real de la tabla
+    // (antes se mandaban "title" y "notes", que no existen, y faltaban
+    // "description", "payment_method" e "is_usd", que son requeridos).
     const { error } = await supabase.from('transactions').insert([
       {
         user_id: user.id,
         type: 'expense',
-        title: `[Suscripción] ${item.title}`,
-        amount_ars: item.currency === 'ARS' ? item.amount : item.amount * 1000, // Multiplicador base si es USD
+        description: `[Suscripción] ${item.title}`,
+        payment_method: 'Transferencia',
+        is_usd: item.currency === 'USD',
+        amount_usd: item.currency === 'USD' ? Number(item.amount) : null,
+        exchange_rate: exchangeRate,
+        amount_ars: amountArs,
         category_id: item.category_id || null,
-        notes: `Generado automáticamente desde Suscripción Recurrente (Vence día ${item.billing_day})`
       }
     ])
 
     if (!error) {
       if (onTransactionAdded) onTransactionAdded()
     } else {
+      alert('Error al registrar el pago: ' + error.message)
       console.error('Error al registrar transacción:', error)
     }
 
     setImpactingId(null)
   }
+
 
   const totalFixedARS = recurring
     .filter((r) => r.is_active && r.currency === 'ARS')

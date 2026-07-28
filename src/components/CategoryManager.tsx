@@ -15,18 +15,23 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
   const [color, setColor] = useState('#f59e0b')
   const [loading, setLoading] = useState(false)
 
-  async function fetchCategories() {
+  const fetchCategories = async () => {
   try {
-    setLoading(true) // O si prefieres, asegúrate de que el estado inicial de loading sea true para no llamar setState sincrónicamente en la carga inicial
     const { data, error } = await supabase
       .from('categories')
       .select('*')
       .order('name', { ascending: true })
 
-    if (error) throw error
-    if (data) setCategories(data)
+    if (error) {
+      console.error('Error cargando categorías (Supabase):', error.message || error)
+      return
+    }
+
+    if (data) {
+      setCategories(data)
+    }
   } catch (error) {
-    console.error('Error cargando categorías:', error)
+    console.error('Error en la petición de categorías:', error)
   } finally {
     setLoading(false)
   }
