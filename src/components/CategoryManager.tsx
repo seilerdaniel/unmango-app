@@ -16,19 +16,37 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
   const [loading, setLoading] = useState(false)
 
   async function fetchCategories() {
+  try {
+    setLoading(true) // O si prefieres, asegúrate de que el estado inicial de loading sea true para no llamar setState sincrónicamente en la carga inicial
     const { data, error } = await supabase
       .from('categories')
       .select('*')
       .order('name', { ascending: true })
 
-    if (!error && data) {
-      setCategories(data)
-    }
+    if (error) throw error
+    if (data) setCategories(data)
+  } catch (error) {
+    console.error('Error cargando categorías:', error)
+  } finally {
+    setLoading(false)
+  }
+}
+
+useEffect(() => {
+  let isMounted = true
+
+  const loadCategories = async () => {
+    // Si fetchCategories es una función asíncrona definida fuera o dentro del componente,
+    // asegúrate de ejecutarla de forma asíncrona aquí:
+    await fetchCategories()
   }
 
-  useEffect(() => {
-    fetchCategories()
-  }, [])
+  loadCategories()
+
+  return () => {
+    isMounted = false
+  }
+}, [])
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault()
