@@ -5,10 +5,43 @@ import { supabase } from '@/lib/supabaseClient'
 import { RecurringExpense } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
-import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power } from 'lucide-react'
+import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle } from 'lucide-react'
 
 interface RecurringManagerProps {
   onTransactionAdded?: () => void
+}
+
+// Ventana dentro de la cual avisamos que una suscripción está por vencer.
+// Nota de alcance: esto es un aviso DENTRO de la app (no un email/push).
+// Un recordatorio real que llegue aunque no abras UnMango necesitaría un
+// cron en Supabase (Edge Function + pg_cron) más un servicio de email —
+// eso requiere credenciales que no tenemos en esta sesión. Ver AUDIT.md.
+const DUE_SOON_DAYS = 7
+
+/**
+ * Calcula cuántos días faltan para el próximo vencimiento de una
+ * suscripción, dado el día de facturación (1-31). Si el mes actual no
+ * tiene ese día (ej. 31 en febrero), usa el último día del mes.
+ */
+function daysUntilNextBilling(billingDay: number): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const clampToLastDayOfMonth = (year: number, month: number, day: number) => {
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    return Math.min(day, lastDay)
+  }
+
+  const year = today.getFullYear()
+  const month = today.getMonth()
+
+  let nextBilling = new Date(year, month, clampToLastDayOfMonth(year, month, billingDay))
+  if (nextBilling < today) {
+    nextBilling = new Date(year, month + 1, clampToLastDayOfMonth(year, month + 1, billingDay))
+  }
+
+  const diffMs = nextBilling.getTime() - today.getTime()
+  return Math.round(diffMs / (1000 * 60 * 60 * 24))
 }
 
 export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
@@ -208,6 +241,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     .filter((r) => r.is_active && r.currency === 'ARS')
     .reduce((acc, r) => acc + Number(r.amount), 0)
 
+  const dueSoon = recurring
+    .filter((r) => r.is_active)
+    .map((r) => ({ ...r, daysLeft: daysUntilNextBilling(r.billing_day) }))
+    .filter((r) => r.daysLeft <= DUE_SOON_DAYS)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+
   if (loading) {
     return (
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
@@ -230,6 +269,18 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           </span>
         </div>
       </div>
+
+      {dueSoon.length > 0 && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <span>
+            Vencen pronto:{' '}
+            {dueSoon
+              .map((r) => `${r.title} (${r.daysLeft <= 0 ? 'hoy' : `en ${r.daysLeft}d`})`)
+              .join(', ')}
+          </span>
+        </div>
+      )}
 
       {/* Formulario de Alta */}
       <form onSubmit={handleAddRecurring} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
@@ -336,6 +387,13 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                   <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
                     <Calendar size={12} />
                     <span>Vence el día {item.billing_day} de cada mes</span>
+                    {item.is_active && daysUntilNextBilling(item.billing_day) <= DUE_SOON_DAYS && (
+                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        {daysUntilNextBilling(item.billing_day) <= 0
+                          ? 'Vence hoy'
+                          : `Vence en ${daysUntilNextBilling(item.billing_day)}d`}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

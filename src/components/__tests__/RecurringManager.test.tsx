@@ -125,3 +125,57 @@ describe('RecurringManager — botón Pagar (regresión Fase 0)', () => {
     promptSpy.mockRestore()
   })
 })
+
+describe('RecurringManager — aviso de vencimiento próximo (Fase 5)', () => {
+  it('muestra el banner "Vencen pronto" para una suscripción que factura en los próximos días', async () => {
+    // Calculamos un billing_day que caiga dentro de los próximos 3 días
+    // desde "hoy" (según la fecha real de ejecución del test), para no
+    // depender de una fecha fija hardcodeada.
+    const today = new Date()
+    const soonDate = new Date(today)
+    soonDate.setDate(today.getDate() + 3)
+    const billingDaySoon = soonDate.getDate()
+
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: {
+            data: [{ ...RECURRING_ITEM_ARS, title: 'Netflix', billing_day: billingDaySoon }],
+            error: null,
+          },
+        },
+      })
+    )
+
+    renderWithProviders(<RecurringManager />)
+
+    expect(await screen.findByText(/Vencen pronto/i)).toBeInTheDocument()
+  })
+
+  it('NO muestra el banner para una suscripción que factura en más de 7 días', async () => {
+    const today = new Date()
+    const farDate = new Date(today)
+    farDate.setDate(today.getDate() + 20)
+    const billingDayFar = farDate.getDate()
+
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: {
+            data: [{ ...RECURRING_ITEM_ARS, title: 'Netflix', billing_day: billingDayFar }],
+            error: null,
+          },
+        },
+      })
+    )
+
+    renderWithProviders(<RecurringManager />)
+
+    await screen.findByText('Netflix')
+    expect(screen.queryByText(/Vencen pronto/i)).not.toBeInTheDocument()
+  })
+})

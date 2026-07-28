@@ -213,6 +213,42 @@ export interface Database {
         }
         Relationships: []
       }
+      savings_goals: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          target_amount: number
+          current_amount: number
+          monthly_contribution: number
+          monthly_interest_rate: number
+          color: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          target_amount: number
+          current_amount?: number
+          monthly_contribution?: number
+          monthly_interest_rate?: number
+          color?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          target_amount?: number
+          current_amount?: number
+          monthly_contribution?: number
+          monthly_interest_rate?: number
+          color?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -227,6 +263,10 @@ export interface Database {
       get_wallet_balances: {
         Args: Record<string, never>
         Returns: { wallet_id: string; balance: number }[]
+      }
+      get_monthly_trend: {
+        Args: { p_months: number }
+        Returns: { month_start: string; total_income: number; total_expense: number }[]
       }
     }
   }

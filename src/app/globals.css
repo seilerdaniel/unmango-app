@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Modo oscuro activado por clase (.dark en <html>), no solo por
+   preferencia del sistema, para que el toggle manual funcione. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light;
 }

@@ -11,6 +11,7 @@ import TransactionForm from "@/components/TransactionForm";
 import CategoryManager from "@/components/CategoryManager";
 import BudgetManager from "@/components/BudgetManager";
 import FinanceChart from "@/components/FinanceChart";
+import TrendChart from "@/components/TrendChart";
 import TransactionFilters from "@/components/TransactionFilters";
 import {
   LogOut,
@@ -19,10 +20,15 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
+import { useTheme } from "@/context/ThemeContext";
 import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
+import SavingsGoals from "@/components/SavingsGoals";
+import ImportTransactions from "@/components/ImportTransactions";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
 // NO dependen de este número: se calculan del lado del servidor con la
@@ -42,8 +48,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Consumimos el contexto de privacidad
+  // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
+  const { theme, toggleTheme } = useTheme();
 
   // Totales de TODA la historia del usuario, calculados en Postgres para no
   // tener que traer todas las filas al cliente solo para sumarlas.
@@ -157,8 +164,8 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-amber-50/30 flex items-center justify-center">
-        <p className="text-sm font-semibold text-amber-700 animate-pulse">
+      <div className="min-h-screen bg-amber-50/30 dark:bg-gray-950 flex items-center justify-center">
+        <p className="text-sm font-semibold text-amber-700 dark:text-amber-500 animate-pulse">
           Cargando UnMango 🥭...
         </p>
       </div>
@@ -168,24 +175,33 @@ export default function Home() {
   if (!user) return null;
 
   return (
-    <main className="min-h-screen bg-gray-50/60 p-4 sm:p-8">
+    <main className="min-h-screen bg-gray-50/60 dark:bg-gray-950 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header con botón de privacidad */}
-        <header className="flex justify-between items-center bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+        {/* Header con botón de privacidad y tema */}
+        <header className="flex justify-between items-center bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-3xl">🥭</span>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">UnMango</h1>
-              <p className="text-xs text-gray-500 font-medium">{user.email}</p>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">UnMango</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{user.email}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Botón Modo Oscuro */}
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Modo claro" : "Modo oscuro"}
+              className="p-2 sm:px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition shadow-sm flex items-center gap-2 text-xs font-semibold cursor-pointer"
+            >
+              {theme === "dark" ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-gray-500" />}
+            </button>
+
             {/* Botón Modo Privacidad */}
             <button
               onClick={togglePrivacy}
               title={isPrivate ? "Mostrar valores" : "Ocultar valores"}
-              className="p-2 sm:px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition shadow-sm flex items-center gap-2 text-xs font-semibold cursor-pointer"
+              className="p-2 sm:px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition shadow-sm flex items-center gap-2 text-xs font-semibold cursor-pointer"
             >
               {isPrivate ? (
                 <>
@@ -194,7 +210,7 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <Eye size={16} className="text-gray-500" />
+                  <Eye size={16} className="text-gray-500 dark:text-gray-400" />
                   <span className="hidden sm:inline">Modo Visible</span>
                 </>
               )}
@@ -203,7 +219,7 @@ export default function Home() {
             {/* Botón Salir */}
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-rose-50 hover:text-rose-600 text-gray-700 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
+              className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 text-gray-700 dark:text-gray-200 text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
             >
               <LogOut size={16} /> Salir
             </button>
@@ -212,18 +228,18 @@ export default function Home() {
 
         {/* Tarjetas de Métricas principales formateadas con formatAmount */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               Balance Disponible
             </p>
             <h3
-              className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900" : "text-rose-600"}`}
+              className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900 dark:text-gray-100" : "text-rose-600"}`}
             >
               {formatAmount(balance)}
             </h3>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
             <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1">
               <ArrowUpRight size={14} /> Total Ingresos
             </p>
@@ -234,7 +250,7 @@ export default function Home() {
             </h3>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
             <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider mb-1 flex items-center gap-1">
               <ArrowDownRight size={14} /> Total Gastos
             </p>
@@ -250,21 +266,24 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <TransactionForm onTransactionAdded={fetchTransactions} />
+            <ImportTransactions onImported={fetchTransactions} />
             <RecurringManager onTransactionAdded={fetchTransactions} />
             <BudgetManager />
+            <SavingsGoals />
           </div>
 
           <div className="lg:col-span-1 space-y-6">
             <FinanceChart income={totalIncome} expense={totalExpense} />
+            <TrendChart />
             <WalletManager />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
           </div>
         </div>
 
         {/* Historial de Movimientos y Filtros */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
               Historial de Movimientos
             </h2>
           </div>
@@ -283,14 +302,14 @@ export default function Home() {
               {filteredTransactions.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 hover:bg-gray-50/50 transition"
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition"
                 >
                   <div className="flex items-center gap-3">
                     <div
                       className={`p-2.5 rounded-xl ${
                         item.type === "income"
-                          ? "bg-emerald-50 text-emerald-600"
-                          : "bg-rose-50 text-rose-600"
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600"
+                          : "bg-rose-50 dark:bg-rose-950/40 text-rose-600"
                       }`}
                     >
                       {item.type === "income" ? (
@@ -301,7 +320,7 @@ export default function Home() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
                           {item.description}
                         </p>
                         {item.categories && (
@@ -316,7 +335,7 @@ export default function Home() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 font-medium flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium flex items-center gap-2 mt-0.5">
                         <span>
                           {item.payment_method}
                           {item.wallet_provider
@@ -324,7 +343,7 @@ export default function Home() {
                             : ""}
                         </span>
                         {item.is_usd && (
-                          <span className="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                          <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-bold">
                             USD {isPrivate ? "••••••" : item.amount_usd}
                           </span>
                         )}
@@ -353,7 +372,7 @@ export default function Home() {
 
                     <button
                       onClick={() => item.id && handleDelete(item.id)}
-                      className="text-gray-400 hover:text-rose-600 transition p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                      className="text-gray-400 hover:text-rose-600 transition p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
                       title="Eliminar movimiento"
                     >
                       <Trash2 size={16} />
@@ -369,7 +388,7 @@ export default function Home() {
               <button
                 onClick={loadMoreTransactions}
                 disabled={loadingMore}
-                className="text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
+                className="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 px-4 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
               >
                 {loadingMore ? "Cargando..." : "Cargar más movimientos"}
               </button>

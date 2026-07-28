@@ -30,3 +30,5 @@ export type Wallet = Database['public']['Tables']['wallets']['Row']
 export type WalletWithBalance = Wallet & {
   balance: number
 }
+
+export type SavingsGoal = Database['public']['Tables']['savings_goals']['Row']

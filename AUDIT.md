@@ -193,11 +193,84 @@ nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
   Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx vitest
   run` (5 archivos, 8 tests, todos pasando).
 
-- [ ] Metas de ahorro con proyección (FV de anualidad).
-- [ ] Recordatorio antes del vencimiento de una suscripción.
-- [ ] Gráfico de tendencia de gasto por categoría en el tiempo.
-- [ ] Modo oscuro.
-- [ ] Importar resumen bancario/CSV.
+- [x] **Metas de ahorro con proyección** — `supabase/savings_goals.sql`
+  (tabla `savings_goals` con RLS) + `SavingsGoals.tsx`: creás una meta
+  (objetivo, ya ahorrado, aporte mensual, interés mensual opcional) y se
+  simula mes a mes (valor futuro de anualidad) cuántos meses faltan para
+  alcanzarla, con un mini-gráfico de la proyección. El "ya ahorrado" se
+  actualiza a mano (no está linkeado a ninguna billetera automáticamente
+  — es un dato manual, como en tu otra app de finanzas). Tests:
+  `SavingsGoals.test.tsx` (2 tests, incluye un caso con matemática exacta:
+  objetivo 12000, aporte 1000/mes sin interés → exactamente 12 meses).
+
+- [x] **Gráfico de tendencia mensual** — `supabase/trend.sql` (función
+  `get_monthly_trend(p_months)`, calculada en Postgres) + `TrendChart.tsx`:
+  barras de ingresos vs. gastos de los últimos 6 meses. Alcance: es
+  tendencia mensual total (ingresos/gastos), no desglosada por categoría
+  — lo pedido originalmente era "por categoría en el tiempo"; hacerlo por
+  categoría además de por mes es un gráfico multi-serie más denso, lo dejo
+  como posible ampliación si te sirve más que la vista general. Tests:
+  `TrendChart.test.tsx` (2 tests).
+
+- [x] **Aviso de vencimiento próximo** — versión con alcance acotado,
+  ver nota abajo. `RecurringManager.tsx` ahora calcula cuántos días faltan
+  para el próximo vencimiento de cada suscripción activa y muestra un
+  banner ("Vencen pronto: Netflix (en 2d)...") más un badge individual
+  cuando faltan 7 días o menos. Tests: 2 nuevos en
+  `RecurringManager.test.tsx`.
+
+  **⚠️ Esto NO es un recordatorio real (push/email) que te llegue sin
+  abrir la app.** Es un aviso dentro del dashboard, que ves la próxima vez
+  que entrás. Un recordatorio de verdad necesita infraestructura que no
+  puedo armar en esta sesión: una Supabase Edge Function + un cron
+  (`pg_cron`) que corra diariamente, más un proveedor de email (Resend,
+  SendGrid, etc.) o push, todo lo cual requiere que crees esas cuentas y
+  me pases las credenciales. Si te interesa, es la siguiente iteración
+  natural de esto.
+
+- [x] **Modo oscuro** — `ThemeContext.tsx` (toggle persistido en
+  localStorage, con un script inline en `layout.tsx` para evitar el flash
+  de modo claro al recargar), `globals.css` con
+  `@custom-variant dark (&:where(.dark, .dark *))` para que el toggle
+  manual funcione (Tailwind v4). El botón está en el header.
+
+  **⚠️ Alcance parcial, siendo honesto**: apliqué clases `dark:` completas
+  al shell principal de `page.tsx` (header, tarjetas de balance, historial
+  de movimientos) y a `layout.tsx`/`globals.css`. **Los componentes
+  restantes** (`BudgetManager`, `RecurringManager`, `TransactionForm`,
+  `TransactionFilters`, `CategoryManager`, `WalletManager`, `SavingsGoals`,
+  `TrendChart`, `ImportTransactions`, `FinanceChart`) **todavía no tienen
+  sus propias clases `dark:`**, así que hoy se van a seguir viendo con
+  fondo blanco/claro incluso con el toggle activado. Retocarlos es
+  mecánico (son variaciones del mismo patrón `bg-white` →
+  `dark:bg-gray-800`, `border-gray-100` → `dark:border-gray-700`,
+  `text-gray-900` → `dark:text-gray-100`, etc., que ya usé en `page.tsx`
+  como referencia) pero es repetir eso en ~9 archivos más, y preferí
+  entregar la infraestructura funcionando de punta a punta antes que
+  apurar cambios cosméticos sin verificar en todos lados.
+
+- [x] **Importar resumen bancario (CSV)** — `ImportTransactions.tsx`
+  (usa `papaparse`): subís un `.csv`, elegís qué columna es fecha/
+  descripción/monto (con auto-detección por nombre de columna), previsualizás
+  las filas parseadas y las importás en lote. Soporta formato de número
+  argentino (miles con punto, decimales con coma) y ambos formatos de
+  fecha (ISO y dd/mm/yyyy). No es un parser específico de ningún banco en
+  particular — es genérico, así que debería andar con la mayoría de los
+  exports, pero no lo pude probar contra un CSV real de tu banco (no
+  tengo uno a mano). Tests: `ImportTransactions.test.tsx` (10 tests
+  unitarios sobre el parseo de fechas y montos, que es la parte con más
+  riesgo de casos borde).
+
+Verificado en este sandbox, con todas las features de esta tanda juntas:
+`npx tsc --noEmit` (0 errores), `npx eslint .` (misma línea base
+pre-existente + 2 casos nuevos del mismo warning de "cargar al montar"
+que ya tenían los demás componentes — no son bugs), `npx vitest run`
+(8 archivos, 24 tests, todos pasando).
+
+**⚠️ 3 SQL nuevos para correr** (después de `rls_policies.sql`,
+`functions.sql` y `wallets.sql`, en este orden):
+`savings_goals.sql` → `trend.sql`. (`wallets.sql` ya lo tenías de la
+tanda anterior.)
 
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._
