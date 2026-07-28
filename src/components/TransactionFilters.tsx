@@ -15,10 +15,19 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [categories, setCategories] = useState<Category[]>([])
+  // Guardamos el resultado del filtrado para que "Exportar CSV" exporte
+  // lo que el usuario está viendo, no siempre la lista completa.
+  const [visibleTransactions, setVisibleTransactions] = useState<Transaction[]>(transactions)
 
   useEffect(() => {
     async function loadCategories() {
-      const { data } = await supabase.from('categories').select('*').order('name', { ascending: true })
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true })
       if (data) setCategories(data)
     }
     loadCategories()
@@ -50,16 +59,17 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
       )
     }
 
+    setVisibleTransactions(result)
     onFiltered(result)
   }, [searchTerm, typeFilter, categoryFilter, transactions])
 
   // Función para exportar los datos filtrados a CSV
   function exportToCSV() {
-    if (transactions.length === 0) return
+    if (visibleTransactions.length === 0) return
 
     const headers = ['Fecha', 'Tipo', 'Descripción', 'Categoría', 'Medio de Pago', 'Monto (ARS)', 'Es USD', 'Monto USD']
     
-    const rows = transactions.map((t) => [
+    const rows = visibleTransactions.map((t) => [
       new Date(t.created_at!).toLocaleDateString('es-AR'),
       t.type === 'income' ? 'Ingreso' : 'Gasto',
       `"${t.description.replace(/"/g, '""')}"`,

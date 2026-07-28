@@ -24,7 +24,13 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [loading, setLoading] = useState(false)
 
   async function loadCategories() {
-    const { data } = await supabase.from('categories').select('*').order('name', { ascending: true })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true })
     if (data) setCategories(data)
   }
 

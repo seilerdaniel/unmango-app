@@ -26,9 +26,12 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
 
     const loadInitialData = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
         const [{ data: catsData }, { data: budgetsData }] = await Promise.all([
-          supabase.from('categories').select('*').order('name', { ascending: true }),
-          supabase.from('budgets').select('*, categories(*)').order('created_at', { ascending: false })
+          supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
+          supabase.from('budgets').select('*, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false })
         ])
 
         if (isMounted) {
@@ -54,9 +57,12 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
   // Función aux para recargar presupuestos tras una mutación (guardar/eliminar)
   const reloadData = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
       const [{ data: catsData }, { data: budgetsData }] = await Promise.all([
-        supabase.from('categories').select('*').order('name', { ascending: true }),
-        supabase.from('budgets').select('*, categories(*)').order('created_at', { ascending: false })
+        supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
+        supabase.from('budgets').select('*, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false })
       ])
       if (catsData) setCategories(catsData)
       if (budgetsData) setBudgets(budgetsData)

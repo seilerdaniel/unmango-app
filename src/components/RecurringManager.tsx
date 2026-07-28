@@ -31,9 +31,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
     const loadData = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
         const [{ data: catsData }, { data: recData }] = await Promise.all([
-          supabase.from('categories').select('*').order('name', { ascending: true }),
-          supabase.from('recurring_expenses').select('*, categories(*)').order('billing_day', { ascending: true })
+          supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
+          supabase.from('recurring_expenses').select('*, categories(*)').eq('user_id', user.id).order('billing_day', { ascending: true })
         ])
 
         if (isMounted) {
@@ -58,9 +61,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
   const reloadData = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
       const [{ data: catsData }, { data: recData }] = await Promise.all([
-        supabase.from('categories').select('*').order('name', { ascending: true }),
-        supabase.from('recurring_expenses').select('*, categories(*)').order('billing_day', { ascending: true })
+        supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
+        supabase.from('recurring_expenses').select('*, categories(*)').eq('user_id', user.id).order('billing_day', { ascending: true })
       ])
       if (catsData) setCategories(catsData)
       if (recData) setRecurring(recData)

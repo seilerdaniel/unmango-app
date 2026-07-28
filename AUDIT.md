@@ -18,19 +18,25 @@ Cambios:
   en la consola y el usuario no se enteraba de que el pago no se había
   registrado).
 
-## 🔴 Fase 1 — Seguridad (antes de sumar usuarios reales)
+## ✅ Fase 1 — Seguridad (resuelto en este commit, con una acción pendiente tuya)
 
-- [ ] Verificar/crear políticas de **Row Level Security** en Supabase para
-  las 4 tablas (`categories`, `transactions`, `budgets`, `recurring_expenses`),
-  con `auth.uid() = user_id` en SELECT/INSERT/UPDATE/DELETE. Ninguna query del
-  frontend filtra por usuario — toda la seguridad depende de esto.
+- [x] **Defensa en profundidad en el frontend**: todas las consultas que
+  antes traían filas de todos los usuarios (`categories`, `transactions`,
+  `budgets`, `recurring_expenses`) ahora filtran explícitamente por
+  `.eq('user_id', user.id)`.
+- [ ] **⚠️ Acción tuya, no puedo hacerla yo**: correr
+  `supabase/rls_policies.sql` en el SQL Editor de tu proyecto Supabase.
+  Sin esas políticas de Row Level Security, el filtrado del frontend es
+  solo un parche visual — cualquiera con las credenciales anon podría
+  seguir pidiendo todo por API directa. El archivo incluye al final una
+  query para verificar que las 4 tablas quedaron con RLS habilitado.
 - [ ] Confirmar que `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` estén seteadas en
   Vercel (producción) y no cayendo en el fallback `placeholder.supabase.co`.
 
 ## 🟠 Fase 2 — Bugs menores y UX
 
-- [ ] `TransactionFilters.exportToCSV()` exporta siempre todas las
-  transacciones en vez de las filtradas (`filteredTransactions`).
+- [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada
+  (`visibleTransactions`) en vez de siempre todas las transacciones.
 - [ ] Reemplazar `alert()`/`confirm()` nativos por un componente de
   toast/modal propio, consistente con el resto del diseño.
 - [ ] Revisar otros `console.error` sin feedback visible al usuario
