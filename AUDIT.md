@@ -115,13 +115,52 @@ allowlist de red acá), no por el código.
   rutas del lado del servidor, o sacar la dependencia si se decide seguir
   100% client-side. (Único ítem que queda abierto de la Fase 3.)
 
-## 🟢 Fase 4 — Testing (hoy no hay ningún test)
+## ✅ Fase 4 — Testing (resuelto en este commit, con una acción pendiente tuya)
 
-- [ ] Setup de **Vitest + React Testing Library** para componentes.
-  Empezar por `RecurringManager` y `BudgetManager` (lógica más delicada).
-- [ ] Test que reproduzca el bug de la Fase 0, para que no vuelva a colarse.
-- [ ] **Playwright** E2E: login → cargar transacción → verifica balance →
-  exportar CSV.
+- [x] **Setup de Vitest + React Testing Library**: `vitest.config.ts` +
+  `vitest.setup.ts`, con jsdom y el alias `@/` resuelto igual que en la
+  app. Scripts nuevos en `package.json`: `npm test` (corre una vez),
+  `npm run test:watch`, `npm run test:coverage`.
+- [x] **`src/test-utils/supabaseMock.ts`**: helper para mockear el
+  cliente de Supabase en tests de componentes (query builder encadenable
+  + RPC), sin pegarle a un proyecto real.
+- [x] **4 archivos de test, 6 tests, los 6 pasando** (`npx vitest run`):
+  - `RecurringManager.test.tsx`: **regresión directa de la Fase 0** —
+    verifica que el insert al "Pagar" una suscripción tenga `description`/
+    `payment_method`/`is_usd` (no `title`/`notes`), y que las
+    suscripciones en USD pidan la cotización en vez de usar un
+    multiplicador fijo.
+  - `TransactionFilters.test.tsx`: **regresión de la Fase 2** — verifica
+    que "Exportar CSV" respete el filtro aplicado (no exporte todo).
+  - `BudgetManager.test.tsx`: verifica que "Excedido" aparezca/no
+    aparezca según el gasto que devuelve `get_monthly_category_spend`
+    (RPC de la Fase 3).
+  - `CategoriesContext.test.tsx`: **regresión de la Fase 1** — verifica
+    que la carga de categorías siga filtrando por `user_id`.
+- [x] **Playwright configurado** (`playwright.config.ts`, carpeta `e2e/`,
+  script `npm run test:e2e`):
+  - `e2e/login.spec.ts`: smoke test de la pantalla de login, no necesita
+    backend — debería correr tal cual.
+  - `e2e/critical-flow.spec.ts`: flujo completo (cargar un gasto → ver
+    balance actualizado) mockeando las llamadas de red a Supabase con
+    `page.route()`, para no depender de un proyecto real ni de datos de
+    prueba. **Está con `test.skip(...)`** porque no se pudo verificar en
+    este sandbox (ver nota abajo) — sacá el skip después de correrlo una
+    vez en tu máquina y confirmar que pasa.
+
+  **⚠️ No pude instalar el navegador de Playwright en este sandbox**:
+  `npx playwright install` necesita descargar Chromium desde
+  `cdn.playwright.dev`, un dominio fuera de la red permitida acá. Corré
+  `npx playwright install` en tu máquina antes de usar `npm run test:e2e`.
+  Los tests de `login.spec.ts` no tienen razón para fallar (no dependen
+  de mocks de red), pero `critical-flow.spec.ts` quedó con
+  `test.skip(...)` hasta que lo valides vos — si algún patrón de URL de
+  `page.route` no coincide con tu proyecto real, ajustalo ahí mismo (hay
+  comentarios explicando cada mock).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(misma línea base de siempre: 4 errores/4 warnings pre-existentes, nada
+nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
 
 ## 🔵 Fase 5 — Nuevas funcionalidades (ideas)
 
