@@ -43,6 +43,13 @@ export default function RootLayout({
     <html
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // El script de abajo agrega la clase "dark" a <html> ANTES de que
+      // React hidrate (para evitar el flash de modo claro). Eso hace que
+      // el className del navegador no coincida con el que renderizó el
+      // servidor, y React lo marca como "hydration mismatch" — pero es
+      // intencional, no un bug. suppressHydrationWarning le dice a React
+      // que ignore ese desajuste puntual en este atributo.
+      suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

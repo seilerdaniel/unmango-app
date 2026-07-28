@@ -270,6 +270,15 @@ nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
   en `vitest.setup.ts` (jsdom no lo implementa) para que los tests que
   usan `ThemeProvider` no rompan.
 
+  **Corrección post-prueba en local (`npm run dev`)**: el script inline
+  que evita el flash de modo claro modifica el `className` de `<html>`
+  ANTES de que React hidrate, lo cual React marca como "hydration
+  mismatch" (aparece en la consola del navegador, no rompe la app, pero
+  ensucia el log). Es un desajuste esperado, no un bug — se le agregó
+  `suppressHydrationWarning` al `<html>` en `layout.tsx` para que React
+  lo ignore puntualmente en ese atributo. Es el patrón recomendado por
+  Next.js para este caso exacto (toggle de tema con script anti-flash).
+
 - [x] **Importar resumen bancario (CSV)** — `ImportTransactions.tsx`
   (usa `papaparse`): subís un `.csv`, elegís qué columna es fecha/
   descripción/monto (con auto-detección por nombre de columna), previsualizás
