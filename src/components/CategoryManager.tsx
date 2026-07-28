@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Category } from '@/types'
+import { useCategories } from '@/context/CategoriesContext'
 import { Tag, Plus, Trash2 } from 'lucide-react'
 
 interface CategoryManagerProps {
@@ -10,53 +10,16 @@ interface CategoryManagerProps {
 }
 
 export default function CategoryManager({ onCategoriesUpdated }: CategoryManagerProps) {
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories, loading: categoriesLoading, error: categoriesError, refreshCategories } = useCategories()
   const [name, setName] = useState('')
   const [color, setColor] = useState('#f59e0b')
-  const [loading, setLoading] = useState(false)
-
-  async function fetchCategories() {
-  try {
-    setLoading(true) // O si prefieres, asegúrate de que el estado inicial de loading sea true para no llamar setState sincrónicamente en la carga inicial
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('name', { ascending: true })
-
-    if (error) throw error
-    if (data) setCategories(data)
-  } catch (error) {
-    console.error('Error cargando categorías:', error)
-  } finally {
-    setLoading(false)
-  }
-}
-
-useEffect(() => {
-  let isMounted = true
-
-  const loadCategories = async () => {
-    // Si fetchCategories es una función asíncrona definida fuera o dentro del componente,
-    // asegúrate de ejecutarla de forma asíncrona aquí:
-    await fetchCategories()
-  }
-
-  loadCategories()
-
-  return () => {
-    isMounted = false
-  }
-}, [])
+  const [submitting, setSubmitting] = useState(false)
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
 
-    setLoading(true)
+    setSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
@@ -70,20 +33,20 @@ useEffect(() => {
 
       if (!error) {
         setName('')
-        fetchCategories()
+        await refreshCategories()
         if (onCategoriesUpdated) onCategoriesUpdated()
       } else {
         alert('Error al crear categoría: ' + error.message)
       }
     }
-    setLoading(false)
+    setSubmitting(false)
   }
 
   async function handleDeleteCategory(id: string) {
     if (confirm('¿Quieres eliminar esta categoría?')) {
       const { error } = await supabase.from('categories').delete().eq('id', id)
       if (!error) {
-        fetchCategories()
+        await refreshCategories()
         if (onCategoriesUpdated) onCategoriesUpdated()
       } else {
         alert('Error al eliminar la categoría: ' + error.message)
@@ -97,6 +60,10 @@ useEffect(() => {
       <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
         <Tag className="text-amber-500" size={18} /> Mis Categorías
       </h3>
+
+      {categoriesError && (
+        <p className="text-xs font-semibold text-rose-600">{categoriesError}</p>
+      )}
 
       {/* Formulario Nueva Categoría */}
       <form onSubmit={handleAddCategory} className="flex gap-2">
@@ -117,7 +84,7 @@ useEffect(() => {
         />
         <button
           type="submit"
-          disabled={loading}
+          disabled={submitting}
           className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1 cursor-pointer"
         >
           <Plus size={16} /> Crear
@@ -126,7 +93,9 @@ useEffect(() => {
 
       {/* Lista de Categorías */}
       <div className="flex flex-wrap gap-2 pt-2">
-        {categories.length === 0 ? (
+        {categoriesLoading ? (
+          <p className="text-xs text-gray-400 animate-pulse">Cargando categorías...</p>
+        ) : categories.length === 0 ? (
           <p className="text-xs text-gray-400">Aún no creaste categorías personalizadas.</p>
         ) : (
           categories.map((cat) => (

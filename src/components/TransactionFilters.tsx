@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { Category, Transaction } from '@/types'
+import { useCategories } from '@/context/CategoriesContext'
+import { Transaction } from '@/types'
 import { Search, Filter, Download } from 'lucide-react'
 
 interface TransactionFiltersProps {
@@ -14,24 +14,10 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
   const [searchTerm, setSearchTerm] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories } = useCategories()
   // Guardamos el resultado del filtrado para que "Exportar CSV" exporte
   // lo que el usuario está viendo, no siempre la lista completa.
   const [visibleTransactions, setVisibleTransactions] = useState<Transaction[]>(transactions)
-
-  useEffect(() => {
-    async function loadCategories() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name', { ascending: true })
-      if (data) setCategories(data)
-    }
-    loadCategories()
-  }, [])
 
   // Aplicar filtros localmente en tiempo real
   useEffect(() => {

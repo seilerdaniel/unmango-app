@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Category } from '@/types'
+import { useCategories } from '@/context/CategoriesContext'
 import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag } from 'lucide-react'
 
 interface TransactionFormProps {
@@ -16,27 +16,12 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [paymentMethod, setPaymentMethod] = useState('Billetera Virtual')
   const [walletProvider, setWalletProvider] = useState('Mercado Pago')
   const [categoryId, setCategoryId] = useState<string>('')
-  const [categories, setCategories] = useState<Category[]>([])
-  
+  const { categories } = useCategories()
+
   const [isUsd, setIsUsd] = useState(false)
   const [amountUsd, setAmountUsd] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1200')
   const [loading, setLoading] = useState(false)
-
-  async function loadCategories() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('name', { ascending: true })
-    if (data) setCategories(data)
-  }
-
-  useEffect(() => {
-    loadCategories()
-  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

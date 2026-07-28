@@ -61,9 +61,20 @@ Cambios:
     auditoría (`TransactionForm`, `TransactionFilters`, `PrivacyContext`).
     No los toqué para no meter cambios de comportamiento fuera de
     alcance; quedan para una futura tanda de refactor de efectos.
-- [ ] Extraer un hook/contexto `useCategories()` compartido — hoy se
-  fetchean categorías por separado en 5 componentes distintos con código
-  casi idéntico.
+- [x] **Hook/contexto compartido de categorías**: se agregó
+  `src/context/CategoriesContext.tsx` (`CategoriesProvider` +
+  `useCategories()`), colgado del layout junto al `PrivacyProvider`. Antes
+  se repetía casi el mismo `fetch` de categorías en 5 componentes
+  (`TransactionForm`, `CategoryManager`, `BudgetManager`,
+  `RecurringManager`, `TransactionFilters`); ahora todos leen del mismo
+  contexto y `CategoryManager` llama a `refreshCategories()` después de
+  crear/borrar. Verificado con `npx tsc --noEmit`: 0 errores.
+  - Nota de lint: el `useEffect` que dispara la carga inicial en
+    `CategoriesContext` tiene el mismo warning pre-existente
+    (`react-hooks/set-state-in-effect`) que ya tenían varios componentes
+    antes de esta auditoría — es el patrón normal de "cargar datos al
+    montar", lo dejo anotado junto con los demás para una futura tanda de
+    refactor de efectos, no es un bug funcional.
 - [ ] Agregar paginación o límite a la consulta de transacciones
   (`page.tsx` trae el historial completo sin límite).
 - [ ] Evaluar si conviene implementar `middleware.ts` + `@supabase/ssr`

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Category, RecurringExpense } from '@/types'
+import { RecurringExpense } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useCategories } from '@/context/CategoriesContext'
 import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power } from 'lucide-react'
 
 interface RecurringManagerProps {
@@ -11,7 +12,7 @@ interface RecurringManagerProps {
 }
 
 export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories } = useCategories()
   const [recurring, setRecurring] = useState<RecurringExpense[]>([])
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
@@ -34,15 +35,13 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const [{ data: catsData }, { data: recData }] = await Promise.all([
-          supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
-          supabase.from('recurring_expenses').select('*, categories(*)').eq('user_id', user.id).order('billing_day', { ascending: true })
-        ])
+        const { data: recData } = await supabase
+          .from('recurring_expenses')
+          .select('*, categories(*)')
+          .eq('user_id', user.id)
+          .order('billing_day', { ascending: true })
 
-        if (isMounted) {
-          if (catsData) setCategories(catsData)
-          if (recData) setRecurring(recData)
-        }
+        if (isMounted && recData) setRecurring(recData)
       } catch (err) {
         console.error('Error al cargar gastos recurrentes:', err)
       } finally {
@@ -64,11 +63,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [{ data: catsData }, { data: recData }] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
-        supabase.from('recurring_expenses').select('*, categories(*)').eq('user_id', user.id).order('billing_day', { ascending: true })
-      ])
-      if (catsData) setCategories(catsData)
+      const { data: recData } = await supabase
+        .from('recurring_expenses')
+        .select('*, categories(*)')
+        .eq('user_id', user.id)
+        .order('billing_day', { ascending: true })
+
       if (recData) setRecurring(recData)
     } catch (err) {
       console.error('Error recargando suscripciones:', err)

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Category, Transaction, Budget } from '@/types'
+import { Transaction, Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useCategories } from '@/context/CategoriesContext'
 import { Target, Plus, Trash2, AlertCircle } from 'lucide-react'
 
 interface BudgetManagerProps {
@@ -11,7 +12,7 @@ interface BudgetManagerProps {
 }
 
 export default function BudgetManager({ transactions }: BudgetManagerProps) {
-  const [categories, setCategories] = useState<Category[]>([])
+  const { categories } = useCategories()
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [limitAmount, setLimitAmount] = useState<string>('')
@@ -30,15 +31,13 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const [{ data: catsData }, { data: budgetsData }] = await Promise.all([
-          supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
-          supabase.from('budgets').select('*, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false })
-        ])
+        const { data: budgetsData } = await supabase
+          .from('budgets')
+          .select('*, categories(*)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
 
-        if (isMounted) {
-          if (catsData) setCategories(catsData)
-          if (budgetsData) setBudgets(budgetsData)
-        }
+        if (isMounted && budgetsData) setBudgets(budgetsData)
       } catch (err) {
         console.error('Error al cargar presupuestos:', err)
         if (isMounted) setLoadError('No se pudieron cargar los presupuestos. Reintentá más tarde.')
@@ -62,11 +61,12 @@ export default function BudgetManager({ transactions }: BudgetManagerProps) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [{ data: catsData }, { data: budgetsData }] = await Promise.all([
-        supabase.from('categories').select('*').eq('user_id', user.id).order('name', { ascending: true }),
-        supabase.from('budgets').select('*, categories(*)').eq('user_id', user.id).order('created_at', { ascending: false })
-      ])
-      if (catsData) setCategories(catsData)
+      const { data: budgetsData } = await supabase
+        .from('budgets')
+        .select('*, categories(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
       if (budgetsData) setBudgets(budgetsData)
       setLoadError(null)
     } catch (err) {
