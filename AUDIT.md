@@ -234,20 +234,16 @@ nuevo), `npx vitest run` (4 archivos, 6 tests, todos pasando).
   `@custom-variant dark (&:where(.dark, .dark *))` para que el toggle
   manual funcione (Tailwind v4). El botón está en el header.
 
-  **⚠️ Alcance parcial, siendo honesto**: apliqué clases `dark:` completas
-  al shell principal de `page.tsx` (header, tarjetas de balance, historial
-  de movimientos) y a `layout.tsx`/`globals.css`. **Los componentes
-  restantes** (`BudgetManager`, `RecurringManager`, `TransactionForm`,
-  `TransactionFilters`, `CategoryManager`, `WalletManager`, `SavingsGoals`,
-  `TrendChart`, `ImportTransactions`, `FinanceChart`) **todavía no tienen
-  sus propias clases `dark:`**, así que hoy se van a seguir viendo con
-  fondo blanco/claro incluso con el toggle activado. Retocarlos es
-  mecánico (son variaciones del mismo patrón `bg-white` →
-  `dark:bg-gray-800`, `border-gray-100` → `dark:border-gray-700`,
-  `text-gray-900` → `dark:text-gray-100`, etc., que ya usé en `page.tsx`
-  como referencia) pero es repetir eso en ~9 archivos más, y preferí
-  entregar la infraestructura funcionando de punta a punta antes que
-  apurar cambios cosméticos sin verificar en todos lados.
+  **✅ Completado (actualización posterior)**: se agregaron clases `dark:`
+  a los 10 componentes que faltaban (`BudgetManager`, `RecurringManager`,
+  `TransactionForm`, `TransactionFilters`, `CategoryManager`,
+  `WalletManager`, `SavingsGoals`, `TrendChart`, `ImportTransactions`,
+  `FinanceChart`) y a la pantalla de `login`. Los gráficos de chart.js
+  (`TrendChart`, `FinanceChart`) no reaccionan solo a clases CSS —ahí
+  usan `useTheme()` para pasarle explícitamente el color de texto/grilla
+  correcto según el tema activo. Se agregó un mock de `window.matchMedia`
+  en `vitest.setup.ts` (jsdom no lo implementa) para que los tests que
+  usan `ThemeProvider` no rompan.
 
 - [x] **Importar resumen bancario (CSV)** — `ImportTransactions.tsx`
   (usa `papaparse`): subís un `.csv`, elegís qué columna es fecha/

@@ -146,26 +146,26 @@ export default function BudgetManager() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando presupuestos...</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Target className="w-5 h-5 text-amber-600" />
-          <h2 className="text-lg font-bold text-gray-900">Presupuestos Mensuales</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Presupuestos Mensuales</h2>
         </div>
-        <span className="text-[11px] font-semibold bg-amber-50 text-amber-800 px-2.5 py-1 rounded-full">
+        <span className="text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-400 px-2.5 py-1 rounded-full">
           Mes Actual
         </span>
       </div>
 
       {loadError && (
-        <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
+        <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50 text-rose-700 dark:text-rose-400 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
           <AlertCircle size={14} className="shrink-0" /> {loadError}
         </div>
       )}
@@ -176,7 +176,7 @@ export default function BudgetManager() {
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
           required
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
         >
           <option value="">Seleccionar Categoría...</option>
           {categories.map((cat) => (
@@ -194,7 +194,7 @@ export default function BudgetManager() {
           required
           min="1"
           step="any"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
         />
 
         <button
@@ -235,18 +235,18 @@ export default function BudgetManager() {
             }
 
             return (
-              <div key={b.id} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 space-y-2">
+              <div key={b.id} className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: b.categories?.color || '#3b82f6' }}
                     />
-                    <span className="text-xs font-bold text-gray-800">
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
                       {b.categories?.name || 'Categoría'}
                     </span>
                     {isExceeded && (
-                      <span className="flex items-center gap-1 text-[10px] font-extrabold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md">
+                      <span className="flex items-center gap-1 text-[10px] font-extrabold bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 px-2 py-0.5 rounded-md">
                         <AlertCircle size={12} /> Excedido
                       </span>
                     )}
@@ -267,7 +267,7 @@ export default function BudgetManager() {
                 </div>
 
                 {/* Barra de progreso */}
-                <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${progressColor} transition-all duration-500`}
                     style={{ width: `${widthPercentage}%` }}
@@ -275,7 +275,7 @@ export default function BudgetManager() {
                 </div>
 
                 {/* Lectura de montos */}
-                <div className="flex justify-between items-center text-[11px] text-gray-500 font-medium">
+                <div className="flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400 font-medium">
                   <span>Gastado: {formatAmount(spent)}</span>
                   <span>Límite: {formatAmount(limit)}</span>
                 </div>

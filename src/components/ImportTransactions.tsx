@@ -192,17 +192,17 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-      <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+      <h3 className="text-base font-extrabold text-gray-900 dark:text-gray-100 flex items-center gap-2">
         <FileSpreadsheet className="text-amber-500" size={18} /> Importar Resumen (CSV)
       </h3>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-gray-500 dark:text-gray-400">
         Subí un CSV exportado de tu banco o billetera. Funciona con cualquier formato que tenga
         una columna de fecha, una de descripción y una de monto — vos elegís cuál es cuál abajo.
       </p>
 
-      <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-6 cursor-pointer hover:bg-gray-50 transition text-xs font-semibold text-gray-500">
+      <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl py-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition text-xs font-semibold text-gray-500 dark:text-gray-400">
         <Upload size={16} />
         {rawRows.length > 0 ? `${rawRows.length} filas cargadas — elegí otro archivo` : 'Elegí un archivo .csv'}
         <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
@@ -212,11 +212,11 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
-              <label className="block text-[11px] font-bold text-gray-600 mb-1">Columna de fecha</label>
+              <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Columna de fecha</label>
               <select
                 value={dateColumn}
                 onChange={(e) => setDateColumn(e.target.value)}
-                className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium text-gray-700"
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 font-medium text-gray-700 dark:text-gray-200"
               >
                 <option value="">Elegir...</option>
                 {headers.map((h) => (
@@ -227,11 +227,11 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-gray-600 mb-1">Columna de descripción</label>
+              <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Columna de descripción</label>
               <select
                 value={descriptionColumn}
                 onChange={(e) => setDescriptionColumn(e.target.value)}
-                className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium text-gray-700"
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 font-medium text-gray-700 dark:text-gray-200"
               >
                 <option value="">Elegir...</option>
                 {headers.map((h) => (
@@ -242,11 +242,11 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-gray-600 mb-1">Columna de monto</label>
+              <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Columna de monto</label>
               <select
                 value={amountColumn}
                 onChange={(e) => setAmountColumn(e.target.value)}
-                className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium text-gray-700"
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 font-medium text-gray-700 dark:text-gray-200"
               >
                 <option value="">Elegir...</option>
                 {headers.map((h) => (
@@ -259,7 +259,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600">
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-400">
               <input
                 type="checkbox"
                 checked={negativeIsExpense}
@@ -273,7 +273,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium text-gray-700"
+              className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 font-medium text-gray-700 dark:text-gray-200"
             >
               <option value="">Categoría para todo el lote (opcional)</option>
               {categories.map((c) => (
@@ -285,7 +285,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
             <select
               value={walletId}
               onChange={(e) => setWalletId(e.target.value)}
-              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium text-gray-700"
+              className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 font-medium text-gray-700 dark:text-gray-200"
             >
               <option value="">Billetera para todo el lote (opcional)</option>
               {wallets.map((w) => (
@@ -298,24 +298,24 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
 
           {dateColumn && descriptionColumn && amountColumn && (
             <>
-              <div className="max-h-56 overflow-y-auto border border-gray-100 rounded-xl">
+              <div className="max-h-56 overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-xl">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-gray-50 sticky top-0">
+                  <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                     <tr>
-                      <th className="text-left px-2 py-1.5 font-bold text-gray-500">Fecha</th>
-                      <th className="text-left px-2 py-1.5 font-bold text-gray-500">Descripción</th>
-                      <th className="text-right px-2 py-1.5 font-bold text-gray-500">Monto</th>
-                      <th className="text-left px-2 py-1.5 font-bold text-gray-500">Tipo</th>
+                      <th className="text-left px-2 py-1.5 font-bold text-gray-500 dark:text-gray-400">Fecha</th>
+                      <th className="text-left px-2 py-1.5 font-bold text-gray-500 dark:text-gray-400">Descripción</th>
+                      <th className="text-right px-2 py-1.5 font-bold text-gray-500 dark:text-gray-400">Monto</th>
+                      <th className="text-left px-2 py-1.5 font-bold text-gray-500 dark:text-gray-400">Tipo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {validRows.slice(0, 100).map((r, i) => (
-                      <tr key={i} className="border-t border-gray-50">
-                        <td className="px-2 py-1 text-gray-600">
+                      <tr key={i} className="border-t border-gray-50 dark:border-gray-800">
+                        <td className="px-2 py-1 text-gray-600 dark:text-gray-400">
                           {r.date?.toLocaleDateString('es-AR')}
                         </td>
-                        <td className="px-2 py-1 text-gray-800 font-medium">{r.description}</td>
-                        <td className="px-2 py-1 text-right text-gray-800">{r.amount?.toFixed(2)}</td>
+                        <td className="px-2 py-1 text-gray-800 dark:text-gray-200 font-medium">{r.description}</td>
+                        <td className="px-2 py-1 text-right text-gray-800 dark:text-gray-200">{r.amount?.toFixed(2)}</td>
                         <td className="px-2 py-1">
                           <span
                             className={
@@ -333,7 +333,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
                 </table>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-gray-500 font-medium">
+              <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 font-medium">
                 <span>
                   {validRows.length} filas listas para importar
                   {invalidCount > 0 && ` · ${invalidCount} se descartaron (fecha/monto/descripción vacíos)`}
@@ -354,7 +354,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
       )}
 
       {importedCount !== null && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
+        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-400 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
           <CheckCircle2 size={14} /> Se importaron {importedCount} movimientos.
         </div>
       )}

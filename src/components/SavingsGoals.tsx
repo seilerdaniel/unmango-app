@@ -169,17 +169,17 @@ export default function SavingsGoals() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando metas de ahorro...</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center gap-2">
         <PiggyBank className="w-5 h-5 text-emerald-600" />
-        <h2 className="text-lg font-bold text-gray-900">Metas de Ahorro</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Metas de Ahorro</h2>
       </div>
 
       {loadError && <p className="text-xs font-semibold text-rose-600">{loadError}</p>}
@@ -192,7 +192,7 @@ export default function SavingsGoals() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <input
           type="number"
@@ -202,7 +202,7 @@ export default function SavingsGoals() {
           required
           min="1"
           step="any"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <input
           type="number"
@@ -210,7 +210,7 @@ export default function SavingsGoals() {
           value={currentAmount}
           onChange={(e) => setCurrentAmount(e.target.value)}
           step="any"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <input
           type="number"
@@ -218,7 +218,7 @@ export default function SavingsGoals() {
           value={monthlyContribution}
           onChange={(e) => setMonthlyContribution(e.target.value)}
           step="any"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <button
           type="submit"
@@ -237,7 +237,7 @@ export default function SavingsGoals() {
           value={monthlyInterestPercent}
           onChange={(e) => setMonthlyInterestPercent(e.target.value)}
           step="any"
-          className="w-20 text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-20 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
       </div>
 
@@ -270,9 +270,9 @@ export default function SavingsGoals() {
             }
 
             return (
-              <div key={goal.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-3">
+              <div key={goal.id} className="p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-gray-900">{goal.name}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{goal.name}</span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleUpdateCurrentAmount(goal)}
@@ -291,14 +291,14 @@ export default function SavingsGoals() {
                   </div>
                 </div>
 
-                <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 transition-all duration-500"
                     style={{ width: `${percentage}%` }}
                   />
                 </div>
 
-                <div className="flex justify-between items-center text-[11px] text-gray-500 font-medium">
+                <div className="flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400 font-medium">
                   <span>
                     {isPrivate
                       ? '••••••'
@@ -321,7 +321,7 @@ export default function SavingsGoals() {
                   </div>
                 )}
 
-                <p className="text-[11px] font-semibold text-gray-600">
+                <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">
                   {monthsNeeded === 0
                     ? '¡Meta alcanzada! 🎉'
                     : reachable

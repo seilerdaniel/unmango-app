@@ -249,29 +249,29 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando suscripciones...</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Repeat className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-bold text-gray-900">Suscripciones y Gastos Fijos</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Suscripciones y Gastos Fijos</h2>
         </div>
         <div className="text-right">
           <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Fijo Comprometido</span>
-          <span className="text-xs font-black text-indigo-700">
+          <span className="text-xs font-black text-indigo-700 dark:text-indigo-400">
             {isPrivate ? '••••••' : formatAmount(totalFixedARS)}
           </span>
         </div>
       </div>
 
       {dueSoon.length > 0 && (
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
+        <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-300 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <span>
             Vencen pronto:{' '}
@@ -290,7 +290,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
         <div className="flex gap-1">
@@ -302,12 +302,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
             required
             min="1"
             step="any"
-            className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value as 'ARS' | 'USD')}
-            className="text-xs bg-gray-100 border border-gray-200 rounded-xl px-2 font-bold text-gray-700 focus:outline-none"
+            className="text-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-2 font-bold text-gray-700 dark:text-gray-200 focus:outline-none"
           >
             <option value="ARS">ARS</option>
             <option value="USD">USD</option>
@@ -322,13 +322,13 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           required
           min="1"
           max="31"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
         <select
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">Categoría (Opcional)...</option>
           {categories.map((cat) => (
@@ -358,14 +358,18 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
             <div
               key={item.id}
               className={`p-3 rounded-xl border transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${
-                item.is_active ? 'bg-gray-50/60 border-gray-100' : 'bg-gray-100/40 border-gray-200 opacity-60'
+                item.is_active
+                  ? 'bg-gray-50/60 dark:bg-gray-800/40 border-gray-100 dark:border-gray-800'
+                  : 'bg-gray-100/40 dark:bg-gray-800/20 border-gray-200 dark:border-gray-700 opacity-60'
               }`}
             >
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleToggleActive(item)}
                   className={`p-1.5 rounded-lg transition cursor-pointer ${
-                    item.is_active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-500'
+                    item.is_active
+                      ? 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                   }`}
                   title={item.is_active ? 'Pausar suscripción' : 'Activar suscripción'}
                 >
@@ -374,7 +378,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-900">{item.title}</span>
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{item.title}</span>
                     {item.categories && (
                       <span
                         className="text-[10px] px-2 py-0.5 rounded-md font-medium text-white"
@@ -388,7 +392,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                     <Calendar size={12} />
                     <span>Vence el día {item.billing_day} de cada mes</span>
                     {item.is_active && daysUntilNextBilling(item.billing_day) <= DUE_SOON_DAYS && (
-                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
                         {daysUntilNextBilling(item.billing_day) <= 0
                           ? 'Vence hoy'
                           : `Vence en ${daysUntilNextBilling(item.billing_day)}d`}
@@ -399,7 +403,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                <span className="text-xs font-extrabold text-gray-900">
+                <span className="text-xs font-extrabold text-gray-900 dark:text-gray-100">
                   {isPrivate
                     ? '••••••'
                     : item.currency === 'USD'
@@ -411,7 +415,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                   <button
                     onClick={() => handleImpactTransaction(item)}
                     disabled={!item.is_active || impactingId === item.id}
-                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60 text-[11px] font-bold py-1 px-2.5 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/50 text-[11px] font-bold py-1 px-2.5 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Pagar / Registrar en gastos de este mes"
                   >
                     <CheckCircle2 size={13} />

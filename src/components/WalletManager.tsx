@@ -126,23 +126,23 @@ export default function WalletManager() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando billeteras...</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <WalletIcon className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-bold text-gray-900">Mis Billeteras</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Mis Billeteras</h2>
         </div>
         {wallets.length > 0 && (
           <div className="text-right">
             <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Total</span>
-            <span className="text-xs font-black text-indigo-700">
+            <span className="text-xs font-black text-indigo-700 dark:text-indigo-400">
               {isPrivate ? '••••••' : formatAmount(totalBalance)}
             </span>
           </div>
@@ -161,13 +161,13 @@ export default function WalletManager() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
         <select
           value={type}
           onChange={(e) => setType(e.target.value as Wallet['type'])}
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           {WALLET_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -182,14 +182,14 @@ export default function WalletManager() {
           value={initialBalance}
           onChange={(e) => setInitialBalance(e.target.value)}
           step="any"
-          className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
         <input
           type="color"
           value={color}
           onChange={(e) => setColor(e.target.value)}
-          className="w-full h-9 p-1 bg-white rounded-xl border border-gray-200 cursor-pointer"
+          className="w-full h-9 p-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer"
           title="Elegir color"
         />
 
@@ -214,7 +214,7 @@ export default function WalletManager() {
             return (
               <div
                 key={w.id}
-                className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 bg-gray-50/50"
+                className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -224,7 +224,7 @@ export default function WalletManager() {
                     <Icon size={18} />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900">{w.name}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{w.name}</p>
                     <p className="text-[11px] text-gray-400 font-medium">
                       {WALLET_TYPES.find((t) => t.value === w.type)?.label ?? 'Otra'}
                     </p>
@@ -233,7 +233,7 @@ export default function WalletManager() {
 
                 <div className="flex items-center gap-3">
                   <span
-                    className={`text-sm font-extrabold ${w.balance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}
+                    className={`text-sm font-extrabold ${w.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-rose-600'}`}
                   >
                     {isPrivate ? '••••••' : formatAmount(w.balance)}
                   </span>

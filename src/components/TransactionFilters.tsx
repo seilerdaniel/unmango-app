@@ -76,10 +76,10 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
     document.body.removeChild(link)
   }
 
-  const selectStyle = "px-3 py-2 rounded-xl border border-gray-300 bg-white !text-gray-900 font-semibold text-xs outline-none focus:ring-2 focus:ring-amber-500/50"
+  const selectStyle = "px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs outline-none focus:ring-2 focus:ring-amber-500/50"
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-gray-50/80 p-3.5 rounded-2xl border border-gray-100">
+    <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-gray-50/80 dark:bg-gray-800/40 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800">
       <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
         {/* Buscar por texto */}
         <div className="relative flex-1 sm:w-48">
@@ -89,7 +89,7 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
             placeholder="Buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-300 bg-white !text-gray-900 font-semibold text-xs placeholder:!text-gray-400 outline-none focus:ring-2 focus:ring-amber-500/50"
+            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs placeholder:!text-gray-400 dark:placeholder:!text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50"
           />
         </div>
 

@@ -56,8 +56,8 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-      <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
+      <h3 className="text-base font-extrabold text-gray-900 dark:text-gray-100 flex items-center gap-2">
         <Tag className="text-amber-500" size={18} /> Mis Categorías
       </h3>
 
@@ -73,13 +73,13 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
           onChange={(e) => setName(e.target.value)}
           placeholder="Nueva categoría (ej: Salidas)"
           required
-          className="flex-1 px-3.5 py-2 rounded-xl border border-gray-300 bg-white !text-gray-900 font-semibold text-xs placeholder:!text-gray-400 outline-none focus:ring-2 focus:ring-amber-500/50"
+          className="flex-1 px-3.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs placeholder:!text-gray-400 dark:placeholder:!text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50"
         />
         <input
           type="color"
           value={color}
           onChange={(e) => setColor(e.target.value)}
-          className="w-10 h-9 p-1 bg-white rounded-xl border border-gray-300 cursor-pointer"
+          className="w-10 h-9 p-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 cursor-pointer"
           title="Elegir color"
         />
         <button
@@ -101,7 +101,7 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
           categories.map((cat) => (
             <div
               key={cat.id}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-100 shadow-xs"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-100 dark:border-gray-700 shadow-xs"
               style={{ backgroundColor: `${cat.color || '#94a3b8'}15`, color: cat.color || '#94a3b8' }}
             >
               <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color || '#94a3b8' }} />

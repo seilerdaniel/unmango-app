@@ -11,6 +11,7 @@ import {
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
+import { useTheme } from '@/context/ThemeContext'
 import { TrendingUp } from 'lucide-react'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
@@ -26,6 +27,7 @@ export default function TrendChart() {
   const [rows, setRows] = useState<{ month_start: string; total_income: number; total_expense: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { theme } = useTheme()
 
   useEffect(() => {
     async function loadTrend() {
@@ -47,7 +49,7 @@ export default function TrendChart() {
 
   if (loading) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando tendencia...</p>
       </div>
     )
@@ -55,7 +57,7 @@ export default function TrendChart() {
 
   if (error) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
         <p className="text-xs font-semibold text-rose-600">{error}</p>
       </div>
     )
@@ -63,11 +65,18 @@ export default function TrendChart() {
 
   if (rows.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
         <p className="text-xs text-gray-400">Todavía no hay suficientes movimientos para ver una tendencia.</p>
       </div>
     )
   }
+
+  // chart.js dibuja en un <canvas>, así que no reacciona solo a las
+  // clases dark: de Tailwind — hay que pasarle el color de texto/grilla
+  // explícitamente según el tema activo.
+  const isDark = theme === 'dark'
+  const tickColor = isDark ? '#9ca3af' : '#4b5563'
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'
 
   const data = {
     labels: rows.map((r) => formatMonthLabel(r.month_start)),
@@ -88,8 +97,8 @@ export default function TrendChart() {
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-      <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+      <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
         <TrendingUp size={16} className="text-indigo-600" /> Tendencia — últimos {MONTHS_TO_SHOW} meses
       </h3>
       <div className="h-56">
@@ -98,8 +107,11 @@ export default function TrendChart() {
           options={{
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } },
-            scales: { y: { beginAtZero: true } },
+            plugins: { legend: { position: 'bottom', labels: { color: tickColor } } },
+            scales: {
+              x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+              y: { beginAtZero: true, ticks: { color: tickColor }, grid: { color: gridColor } },
+            },
           }}
         />
       </div>

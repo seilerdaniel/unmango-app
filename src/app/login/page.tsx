@@ -47,25 +47,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-amber-50/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-xl border border-amber-100/60 space-y-6">
+    <div className="min-h-screen bg-amber-50/40 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl p-8 shadow-xl border border-amber-100/60 dark:border-gray-800 space-y-6">
         
         {/* Branding UnMango */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-500/30 mb-2">
             <span className="text-3xl">🥭</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">
             UnMango
           </h1>
-          <p className="text-sm text-gray-500 font-medium">
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
             {isSignUp ? 'Crea tu cuenta para cuidar tus finanzas' : 'Inicia sesión para controlar hasta el último mango'}
           </p>
         </div>
 
         {/* Mensaje de error */}
         {errorMsg && (
-          <div className="bg-rose-50 text-rose-600 p-3 rounded-xl text-xs font-semibold border border-rose-100 text-center">
+          <div className="bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 p-3 rounded-xl text-xs font-semibold border border-rose-100 dark:border-rose-900/50 text-center">
             {errorMsg}
           </div>
         )}
@@ -73,7 +73,7 @@ export default function LoginPage() {
         {/* Formulario */}
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Correo Electrónico</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico</label>
             <input
               type="email"
               value={email}
@@ -81,12 +81,12 @@ export default function LoginPage() {
               required
               autoComplete="username"
               placeholder="tu@email.com"
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 font-medium text-sm placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium text-sm placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Contraseña</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Contraseña</label>
             <input
               type="password"
               value={password}
@@ -94,7 +94,7 @@ export default function LoginPage() {
               required
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
               placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 font-medium text-sm placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium text-sm placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
             />
           </div>
 
@@ -118,7 +118,7 @@ export default function LoginPage() {
         </form>
 
         {/* Toggle Login/Registro */}
-        <div className="text-center pt-2 border-t border-gray-100">
+        <div className="text-center pt-2 border-t border-gray-100 dark:border-gray-800">
           <button
             type="button"
             onClick={() => {

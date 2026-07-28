@@ -89,22 +89,22 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
     setLoading(false)
   }
 
-  const inputStyle = "w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white !text-gray-900 font-semibold text-sm placeholder:!text-gray-400 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition shadow-sm"
+  const inputStyle = "w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-sm placeholder:!text-gray-400 dark:placeholder:!text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition shadow-sm"
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+        <h2 className="text-lg font-extrabold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <PlusCircle className="text-amber-500" size={20} /> Cargar Movimiento
         </h2>
         
         {/* Toggle Ingreso / Gasto */}
-        <div className="flex bg-gray-100 p-1 rounded-xl text-xs font-semibold">
+        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold">
           <button
             type="button"
             onClick={() => setType('expense')}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition ${
-              type === 'expense' ? 'bg-rose-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              type === 'expense' ? 'bg-rose-500 text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <ArrowDownCircle size={14} /> Gasto
@@ -113,7 +113,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
             type="button"
             onClick={() => setType('income')}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition ${
-              type === 'income' ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              type === 'income' ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <ArrowUpCircle size={14} /> Ingreso
@@ -125,7 +125,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         {/* Descripción y Categoría */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1">Concepto / Descripción</label>
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Concepto / Descripción</label>
             <input
               type="text"
               value={description}
@@ -137,7 +137,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1">Categoría</label>
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Categoría</label>
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
@@ -156,7 +156,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         {/* Moneda y Montos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1">
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">
               {isUsd ? 'Monto en USD' : 'Monto en Pesos (ARS)'}
             </label>
             <input
@@ -176,8 +176,8 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
               onClick={() => setIsUsd(!isUsd)}
               className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-2 ${
                 isUsd 
-                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
-                  : 'bg-gray-50 border-gray-300 text-gray-800 hover:bg-gray-100'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' 
+                  : 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
               <DollarSign size={16} /> {isUsd ? 'Operación en USD' : 'Cambiar a USD'}
@@ -187,9 +187,9 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
 
         {/* Cotización USD */}
         {isUsd && (
-          <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200 grid grid-cols-2 gap-3">
+          <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-900/50 grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-amber-950 mb-1">Cotización / Tipo Cambio</label>
+              <label className="block text-xs font-bold text-amber-950 dark:text-amber-300 mb-1">Cotización / Tipo Cambio</label>
               <input
                 type="number"
                 value={exchangeRate}
@@ -199,8 +199,8 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-amber-950 mb-1">Total Estimado ARS</label>
-              <div className="py-2.5 font-extrabold text-amber-950 text-sm">
+              <label className="block text-xs font-bold text-amber-950 dark:text-amber-300 mb-1">Total Estimado ARS</label>
+              <div className="py-2.5 font-extrabold text-amber-950 dark:text-amber-300 text-sm">
                 $ {(Number(amountUsd || 0) * Number(exchangeRate || 0)).toLocaleString('es-AR')}
               </div>
             </div>
@@ -210,7 +210,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         {/* Billetera (opcional) */}
         {wallets.length > 0 && (
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1">
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">
               Billetera (opcional)
             </label>
             <select
@@ -231,7 +231,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         {/* Medio de Pago */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1">Medio de Pago</label>
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Medio de Pago</label>
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
@@ -247,7 +247,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
 
           {paymentMethod === 'Billetera Virtual' && (
             <div>
-              <label className="block text-xs font-bold text-gray-800 mb-1">Proveedor / App</label>
+              <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Proveedor / App</label>
               <select
                 value={walletProvider}
                 onChange={(e) => setWalletProvider(e.target.value)}
