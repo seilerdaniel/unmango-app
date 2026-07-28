@@ -30,18 +30,21 @@ export interface Database {
           user_id: string
           name: string
           color: string | null
+          budget_group: 'necesidad' | 'deseo' | 'ahorro' | null
         }
         Insert: {
           id?: string
           user_id: string
           name: string
           color?: string | null
+          budget_group?: 'necesidad' | 'deseo' | 'ahorro' | null
         }
         Update: {
           id?: string
           user_id?: string
           name?: string
           color?: string | null
+          budget_group?: 'necesidad' | 'deseo' | 'ahorro' | null
         }
         Relationships: []
       }

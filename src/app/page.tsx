@@ -32,6 +32,10 @@ import ImportTransactions from "@/components/ImportTransactions";
 import ZeroSpendStreak from "@/components/ZeroSpendStreak";
 import ArsUsdCalculator from "@/components/ArsUsdCalculator";
 import BackupRestore from "@/components/BackupRestore";
+import BudgetRule502030 from "@/components/BudgetRule502030";
+import MonthEndProjection from "@/components/MonthEndProjection";
+import AntExpenses from "@/components/AntExpenses";
+import ShareBalanceCard from "@/components/ShareBalanceCard";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
@@ -241,6 +245,8 @@ export default function Home() {
               )}
             </button>
 
+            <ShareBalanceCard balance={balance} totalIncome={totalIncome} totalExpense={totalExpense} />
+
             {/* Botón Salir */}
             <button
               onClick={handleSignOut}
@@ -288,6 +294,8 @@ export default function Home() {
         </div>
 
         <ZeroSpendStreak />
+        <MonthEndProjection />
+        <AntExpenses />
 
         {/* Formulario y Lateral (Gráfico + Categorías) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -303,6 +311,7 @@ export default function Home() {
             <FinanceChart income={totalIncome} expense={totalExpense} />
             <TrendChart />
             <WalletManager />
+            <BudgetRule502030 />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
             <BackupRestore />
           </div>

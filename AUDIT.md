@@ -376,5 +376,51 @@ mes, gastos hormiga, gastos en cuotas, bot de Telegram, escaneo de
 comprobantes/QR, etc.) — evaluadas con esfuerzo/infraestructura
 necesaria en la conversación, para retomar cuando se decida.
 
+## ✅ Ideas nuevas — segunda tanda (sin infraestructura nueva)
+
+De las 13 ideas restantes, se implementan las 4 que se apoyan 100% en
+lo que ya existe (sin SQL nuevo de infraestructura pesada, salvo una
+columna chica):
+
+- [x] **Presupuestos 50/30/20** (idea #20) —
+  `supabase/budget_groups.sql` agrega `budget_group` (necesidad/deseo/
+  ahorro, nullable) a `categories`. `BudgetRule502030.tsx` compara el
+  gasto real de cada balde contra el objetivo 50/30/20 del ingreso del
+  mes, con una vista para clasificar las categorías sin asignar. La
+  cuenta (`computeRule502030`) es pura y está testeada (5 tests).
+  **⚠️ Acción tuya**: correr `budget_groups.sql` en Supabase.
+
+- [x] **Proyección a fin de mes** (idea #2) — `MonthEndProjection.tsx`:
+  toma el promedio diario de gasto variable (separando lo que ya vino de
+  "Pagar" una suscripción, que cuenta como fijo) y lo extrapola a lo que
+  queda del mes, sumando los gastos fijos activos. `projectMonthEnd()` es
+  pura y testeada (4 tests). Mismo criterio que "Fijo Comprometido" en
+  Suscripciones: solo considera gastos fijos en ARS.
+
+- [x] **Detección de gastos hormiga** (idea #4) — `AntExpenses.tsx`:
+  suma los gastos del mes por debajo de un umbral configurable (por
+  defecto $3.000, editable y persistido en localStorage).
+  `detectAntExpenses()` es pura y testeada (4 tests).
+
+- [x] **Captura "segura" para compartir** (idea #10) —
+  `ShareBalanceCard.tsx`: genera una tarjeta de imagen (dibujada en
+  `<canvas>`, sin librerías externas) con el balance del mes, **censurada
+  por defecto** — hay que tocar explícitamente "Mostrar montos reales"
+  antes de descargar. La lógica de qué mostrar/censurar
+  (`buildShareCardLines`) es pura y está testeada (3 tests); el dibujo en
+  sí no es testeable con Vitest (jsdom no implementa `<canvas>`, ver nota
+  en Fase 4).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(2 casos nuevos del mismo warning pre-existente de "cargar al montar" en
+`AntExpenses` y `BudgetRule502030" — nada nuevo grave), `npx vitest run`
+(**17 archivos, 69 tests**, todos pasando).
+
+Quedan **9 ideas** de las 13 originales, todas con infraestructura nueva
+o complejidad significativa (alerta de inflación de suscripciones,
+simulador de brecha cambiaria, gastos en cuotas, PWA, exportar a PDF,
+temas de contraste personalizados, ingreso por voz, escaneo de QR/AFIP,
+bot de Telegram) — quedan para tandas siguientes.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._
