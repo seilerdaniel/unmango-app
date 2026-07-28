@@ -12,3 +12,12 @@ body {
   color: #111827;
   background-color: #f3f4f6;
 }
+
+/* Variante OLED: negro puro en vez del gris oscuro habitual del modo
+   oscuro, para ahorrar batería en pantallas OLED. Solo toca el fondo de
+   página (body/main) — las tarjetas individuales quedan con su tono de
+   gris oscuro normal, mismo alcance parcial documentado en ThemeContext. */
+html.dark.oled body,
+html.dark.oled main {
+  background-color: #000000 !important;
+}

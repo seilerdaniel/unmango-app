@@ -32,3 +32,9 @@ export type WalletWithBalance = Wallet & {
 }
 
 export type SavingsGoal = Database['public']['Tables']['savings_goals']['Row']
+
+export type InstallmentPurchase = Database['public']['Tables']['installment_purchases']['Row'] & {
+  categories?: { name: string; color: string | null } | null
+}
+
+export type InstallmentPayment = Database['public']['Tables']['installment_payments']['Row']

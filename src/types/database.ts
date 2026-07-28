@@ -252,6 +252,73 @@ export interface Database {
         }
         Relationships: []
       }
+      installment_purchases: {
+        Row: {
+          id: string
+          user_id: string
+          category_id: string | null
+          description: string
+          total_amount: number
+          installments_count: number
+          first_installment_date: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category_id?: string | null
+          description: string
+          total_amount: number
+          installments_count: number
+          first_installment_date?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category_id?: string | null
+          description?: string
+          total_amount?: number
+          installments_count?: number
+          first_installment_date?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "installment_purchases_category_id_fkey"
+            columns: ["category_id"]
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      installment_payments: {
+        Row: {
+          id: string
+          installment_purchase_id: string
+          user_id: string
+          installment_number: number
+          transaction_id: string | null
+          paid_at: string
+        }
+        Insert: {
+          id?: string
+          installment_purchase_id: string
+          user_id: string
+          installment_number: number
+          transaction_id?: string | null
+          paid_at?: string
+        }
+        Update: {
+          id?: string
+          installment_purchase_id?: string
+          user_id?: string
+          installment_number?: number
+          transaction_id?: string | null
+          paid_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -270,6 +337,15 @@ export interface Database {
       get_monthly_trend: {
         Args: { p_months: number }
         Returns: { month_start: string; total_income: number; total_expense: number }[]
+      }
+      get_recurring_price_changes: {
+        Args: Record<string, never>
+        Returns: {
+          recurring_expense_id: string
+          current_amount: number
+          previous_amount: number | null
+          currency: string
+        }[]
       }
     }
   }

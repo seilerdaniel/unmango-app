@@ -422,5 +422,58 @@ simulador de brecha cambiaria, gastos en cuotas, PWA, exportar a PDF,
 temas de contraste personalizados, ingreso por voz, escaneo de QR/AFIP,
 bot de Telegram) — quedan para tandas siguientes.
 
+## ✅ Ideas nuevas — tercera tanda
+
+De las 9 restantes, se resuelven 3 completas y 1 parcial, todas sin
+necesitar que el usuario cree ninguna cuenta externa:
+
+- [x] **Temas de contraste personalizados** (idea #9) — **alcance
+  parcial, evaluado y reducido a propósito**: la app usa un color de
+  acento DISTINTO por sección (ámbar en transacciones, índigo en
+  billeteras/suscripciones, esmeralda en ahorro/categorías) en vez de un
+  único color de marca reemplazable. Reskinear paletas completas tipo
+  "Cyber Neon" requeriría antes unificar esos colores en un sistema de
+  tokens — un trabajo de diseño aparte, no un ajuste rápido. Lo que sí se
+  implementó: la variante **OLED verdadero negro**
+  (`ThemeContext.tsx` + `globals.css`), que en modo oscuro reemplaza el
+  gris oscuro habitual por negro puro en el fondo de página — en
+  pantallas OLED cada píxel negro está apagado, así que ahorra batería de
+  verdad, no es solo estético. Toggle en el header, solo visible en modo
+  oscuro.
+
+- [x] **Alerta de inflación de suscripciones** (idea #3) —
+  `supabase/subscription_price_history.sql`: un trigger graba
+  automáticamente un snapshot del monto cada vez que se crea o actualiza
+  una suscripción (no hay que acordarse de nada), y una función
+  (`get_recurring_price_changes`) compara el precio actual contra el
+  anterior. `SubscriptionPriceAlerts.tsx` muestra un aviso cuando algo
+  aumentó. `detectPriceIncreases()` es pura y está testeada (4 tests).
+  **⚠️ Acción tuya**: correr `subscription_price_history.sql`. Ojo: el
+  historial arranca desde que corras el SQL — no hay manera de reconstruir
+  aumentos de suscripciones que ya tenías cargadas antes de esto.
+
+- [x] **Gastos en cuotas** (idea #14) — `supabase/installments.sql`
+  (tablas `installment_purchases` e `installment_payments`) +
+  `InstallmentTracker.tsx`: registrás una compra en N cuotas fijas y el
+  plan se calcula en el momento (`computeInstallmentSchedule`, pura,
+  testeada con 6 tests — reparte el redondeo en la última cuota para que
+  la suma dé exacto). A diferencia de crear N transacciones futuras de
+  una, cada cuota se convierte en una transacción real recién cuando la
+  marcás como pagada (mismo patrón que "Pagar" en Suscripciones).
+  **⚠️ Acción tuya**: correr `installments.sql`.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+declarar la relación `installment_purchases -> categories` en
+`database.ts` para que el join tipado con `categories(name, color)`
+funcionara), `npx eslint .` (1 caso nuevo del mismo warning
+pre-existente, nada nuevo grave), `npx vitest run` (**19 archivos, 79
+tests**, todos pasando).
+
+**⚠️ 2 SQL nuevos para correr** (después de todos los anteriores):
+`subscription_price_history.sql` → `installments.sql`.
+
+Quedan **6 ideas**: simulador de brecha cambiaria, exportar a PDF, PWA,
+ingreso por voz, escaneo de QR/AFIP, bot de Telegram.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

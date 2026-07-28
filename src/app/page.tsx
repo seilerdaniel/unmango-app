@@ -22,6 +22,7 @@ import {
   EyeOff,
   Sun,
   Moon,
+  Circle,
 } from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -36,6 +37,8 @@ import BudgetRule502030 from "@/components/BudgetRule502030";
 import MonthEndProjection from "@/components/MonthEndProjection";
 import AntExpenses from "@/components/AntExpenses";
 import ShareBalanceCard from "@/components/ShareBalanceCard";
+import SubscriptionPriceAlerts from "@/components/SubscriptionPriceAlerts";
+import InstallmentTracker from "@/components/InstallmentTracker";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
@@ -58,7 +61,7 @@ export default function Home() {
 
   // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, oledBlack, toggleOledBlack } = useTheme();
 
   // Atajos de teclado: N nueva transacción, P modo privado, / buscar.
   useKeyboardShortcuts({
@@ -226,6 +229,22 @@ export default function Home() {
               {theme === "dark" ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-gray-500" />}
             </button>
 
+            {/* Toggle OLED (solo tiene sentido en modo oscuro) */}
+            {theme === "dark" && (
+              <button
+                onClick={toggleOledBlack}
+                title={oledBlack ? "Desactivar negro OLED" : "Activar negro OLED (ahorra batería)"}
+                className={`p-2 sm:px-3 rounded-xl border text-xs font-semibold transition shadow-sm flex items-center gap-2 cursor-pointer ${
+                  oledBlack
+                    ? "bg-black border-gray-700 text-amber-400"
+                    : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                }`}
+              >
+                <Circle size={16} fill={oledBlack ? "currentColor" : "none"} />
+                <span className="hidden sm:inline">OLED</span>
+              </button>
+            )}
+
             {/* Botón Modo Privacidad */}
             <button
               onClick={togglePrivacy}
@@ -296,6 +315,7 @@ export default function Home() {
         <ZeroSpendStreak />
         <MonthEndProjection />
         <AntExpenses />
+        <SubscriptionPriceAlerts />
 
         {/* Formulario y Lateral (Gráfico + Categorías) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -303,6 +323,7 @@ export default function Home() {
             <TransactionForm onTransactionAdded={fetchTransactions} />
             <ImportTransactions onImported={fetchTransactions} />
             <RecurringManager onTransactionAdded={fetchTransactions} />
+            <InstallmentTracker onTransactionAdded={fetchTransactions} />
             <BudgetManager />
             <SavingsGoals />
           </div>

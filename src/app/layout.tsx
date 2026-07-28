@@ -30,6 +30,9 @@ const themeInitScript = `
     var saved = localStorage.getItem('unmango_theme');
     var isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (isDark) document.documentElement.classList.add('dark');
+    if (localStorage.getItem('unmango_oled_black') === 'true') {
+      document.documentElement.classList.add('oled');
+    }
   } catch (e) {}
 })();
 `;
