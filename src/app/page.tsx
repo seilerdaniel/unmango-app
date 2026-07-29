@@ -12,6 +12,8 @@ import CategoryManager from "@/components/CategoryManager";
 import BudgetManager from "@/components/BudgetManager";
 import FinanceChart from "@/components/FinanceChart";
 import TrendChart from "@/components/TrendChart";
+import ExchangeGapSimulator from "@/components/ExchangeGapSimulator";
+import TelegramLink from "@/components/TelegramLink";
 import TransactionFilters from "@/components/TransactionFilters";
 import {
   LogOut,
@@ -372,10 +374,12 @@ export default function Home() {
           <div className="lg:col-span-1 space-y-6">
             <FinanceChart income={totalIncome} expense={totalExpense} />
             <TrendChart />
+            <ExchangeGapSimulator />
             <WalletManager onWalletsUpdated={fetchWalletTotal} />
             <BudgetRule502030 />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
             <BackupRestore />
+            <TelegramLink />
           </div>
         </div>
 

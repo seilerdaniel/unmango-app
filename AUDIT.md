@@ -723,5 +723,60 @@ pasando).
 **⚠️ 2 SQL nuevos para correr** (después de todos los anteriores, en
 este orden): `wallet_cards.sql` → `wallet_link_and_installment_fields.sql`.
 
+## ✅ Cierre de las 6 ideas pendientes — últimas 3
+
+- [x] **Simulador de brecha cambiaria** (idea #11) —
+  `supabase/net_worth_snapshots.sql`: no existía forma de saber cómo
+  varió el patrimonio en pesos vs. su equivalente en USD Blue en el
+  tiempo (no había datos históricos ni de cotización ni de patrimonio
+  guardados). Se agregó una tabla de snapshots + `ExchangeGapSimulator.tsx`:
+  botón "Tomar snapshot hoy" que guarda el balance actual junto con la
+  cotización del Blue de ese día (trae la cotización de dolarapi.com,
+  igual que la calculadora ARS/USD). Con 2+ snapshots, un gráfico
+  compara la evolución en pesos vs. en dólares, y un resumen en texto
+  ("le ganaste X% a la devaluación" / "perdiste X% de valor real").
+  `computeGapSummary()` es pura y está testeada (6 tests) — durante el
+  testing encontré y corregí un error de signo en mi primera versión de
+  la fórmula. **Como siempre con este tipo de dato histórico**: arranca
+  vacío, no hay forma de reconstruir el pasado — crece a partir de que
+  tomes snapshots. **⚠️ Acción tuya**: correr `net_worth_snapshots.sql`.
+
+- [x] **PWA** (idea #6) — se generaron los íconos (192px, 512px,
+  apple-touch-icon) con el emoji 🥭 sobre fondo ámbar, `manifest.json`,
+  un service worker (`public/sw.js`, estrategia network-first — los
+  datos financieros siempre frescos, con la app abriendo igual sin
+  conexión aunque sin datos actualizados), y se actualizó la metadata
+  de `layout.tsx` (manifest, íconos, theme-color, apple-web-app). Ya se
+  puede instalar como app desde el navegador ("Agregar a la pantalla de
+  inicio" / el ícono de instalar en la barra de direcciones).
+
+- [x] **Bot de Telegram** (idea #18) —
+  `supabase/functions/telegram-webhook/`: Edge Function que recibe los
+  mensajes del bot. Dos casos: un código de 6 dígitos vincula esa cuenta
+  de Telegram con un usuario de UnMango; cualquier otro mensaje con un
+  monto reconocible (ej. "Gasto 4500 café") se registra como un gasto
+  real, si el chat ya está vinculado. La lógica de parseo
+  (`message-parser.ts`) es la misma idea que
+  `naturalLanguageExpense.ts` del frontend pero reescrita porque corre
+  en Deno, un runtime aparte — 8 tests. `TelegramLink.tsx` en la app
+  genera el código de vinculación (2 tests sobre `generateLinkingCode`).
+  **⚠️ Esto es infraestructura lista para desplegar, no algo que yo
+  pueda activar solo**: necesitás crear tu propio bot con @BotFather en
+  Telegram (gratis) y configurar 2 secrets — paso a paso completo en
+  `supabase/functions/telegram-webhook/README.md`.
+
+Con esto se completaron las **20 ideas originales**: 3 ya existían, 17
+se construyeron en esta sesión (algunas con alcance parcial
+explícitamente documentado y justificado: temas de contraste, PWA
+básica, recordatorios en dos capas).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (2 casos nuevos del mismo warning pre-existente de
+"cargar al montar", nada nuevo grave), `npx vitest run` (**28 archivos,
+130 tests**, todos pasando).
+
+**⚠️ 2 SQL nuevos para correr** (después de todos los anteriores, en
+este orden): `net_worth_snapshots.sql` → `telegram_links.sql`.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

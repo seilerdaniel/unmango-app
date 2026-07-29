@@ -349,6 +349,60 @@ export interface Database {
         }
         Relationships: []
       }
+      net_worth_snapshots: {
+        Row: {
+          id: string
+          user_id: string
+          snapshot_date: string
+          total_balance_ars: number
+          usd_blue_rate: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          snapshot_date?: string
+          total_balance_ars: number
+          usd_blue_rate: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          snapshot_date?: string
+          total_balance_ars?: number
+          usd_blue_rate?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      telegram_links: {
+        Row: {
+          id: string
+          user_id: string
+          linking_code: string
+          telegram_chat_id: number | null
+          created_at: string
+          linked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          linking_code: string
+          telegram_chat_id?: number | null
+          created_at?: string
+          linked_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          linking_code?: string
+          telegram_chat_id?: number | null
+          created_at?: string
+          linked_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {

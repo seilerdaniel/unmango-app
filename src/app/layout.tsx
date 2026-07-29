@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PrivacyProvider } from "@/context/PrivacyContext";
 import { CategoriesProvider } from "@/context/CategoriesContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,6 +19,23 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "UnMango - Finanzas Personales",
   description: "Dashboard personal para control de gastos y finanzas",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "UnMango",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f59e0b",
 };
 
 // Script mínimo e inline para aplicar la clase "dark" ANTES de la
@@ -58,6 +76,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors">
+        <ServiceWorkerRegister />
         <ThemeProvider>
           <PrivacyProvider>
             <CategoriesProvider>
