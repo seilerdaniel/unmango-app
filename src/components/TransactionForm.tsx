@@ -15,14 +15,17 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [amountArs, setAmountArs] = useState('')
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [paymentMethod, setPaymentMethod] = useState('Billetera Virtual')
-  const [walletProvider, setWalletProvider] = useState('Mercado Pago')
   const [categoryId, setCategoryId] = useState<string>('')
   const { categories } = useCategories()
 
   // Billetera asociada al movimiento (Fase 5 — saldo por billetera). Es
   // opcional: si no se elige ninguna, el movimiento no impacta el saldo
   // de ninguna cuenta, igual que las transacciones cargadas antes de
-  // esta feature.
+  // esta feature. Antes había ADEMÁS un selector separado y hardcodeado
+  // de "Proveedor / App" (Mercado Pago, Ualá, etc.) que no tenía nada
+  // que ver con las billeteras reales que se crean en WalletManager —
+  // por eso una billetera nueva no aparecía ahí. Se unificó en este
+  // único selector, que sí lee las billeteras reales del usuario.
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [walletId, setWalletId] = useState<string>('')
 
@@ -31,19 +34,43 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [exchangeRate, setExchangeRate] = useState('1200')
   const [loading, setLoading] = useState(false)
 
+  async function loadWallets() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+    if (data) setWallets(data)
+  }
+
   useEffect(() => {
-    async function loadWallets() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-      if (data) setWallets(data)
-    }
     loadWallets()
   }, [])
+
+  async function handleQuickAddWallet() {
+    const name = window.prompt('Nombre de la nueva billetera (ej: Mercado Pago, Banco Galicia):')
+    if (!name || !name.trim()) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from('wallets')
+      .insert([{ user_id: user.id, name: name.trim(), type: 'virtual_wallet', color: '#6366f1' }])
+      .select('id')
+      .single()
+
+    if (error) {
+      alert('Error al crear la billetera: ' + error.message)
+      console.error('Error creando billetera desde el formulario:', error)
+      return
+    }
+
+    await loadWallets()
+    if (data) setWalletId(data.id)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -61,6 +88,8 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       ? Number(amountUsd) * Number(exchangeRate) 
       : Number(amountArs)
 
+    const selectedWallet = wallets.find((w) => w.id === walletId)
+
     const { error } = await supabase.from('transactions').insert([
       {
         user_id: user.id,
@@ -69,7 +98,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
         category_id: categoryId || null,
         wallet_id: walletId || null,
         payment_method: paymentMethod,
-        wallet_provider: paymentMethod === 'Billetera Virtual' ? walletProvider : null,
+        wallet_provider: selectedWallet?.name ?? null,
         is_usd: isUsd,
         amount_usd: isUsd ? Number(amountUsd) : null,
         amount_ars: finalAmountArs,
@@ -208,61 +237,55 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
           </div>
         )}
 
-        {/* Billetera (opcional) */}
-        {wallets.length > 0 && (
-          <div>
-            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">
+        {/* Billetera (opcional) — reemplaza al viejo selector hardcodeado
+            de "Proveedor / App"; ahora lee las billeteras reales. */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300">
               Billetera (opcional)
             </label>
-            <select
-              value={walletId}
-              onChange={(e) => setWalletId(e.target.value)}
-              className={inputStyle}
+            <button
+              type="button"
+              onClick={handleQuickAddWallet}
+              className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
             >
-              <option value="">Sin asignar</option>
-              {wallets.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
+              + Nueva
+            </button>
           </div>
-        )}
+          <select
+            value={walletId}
+            onChange={(e) => setWalletId(e.target.value)}
+            className={inputStyle}
+          >
+            <option value="">Sin asignar</option>
+            {wallets.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+          {wallets.length === 0 && (
+            <p className="text-[10px] text-gray-400 mt-1">
+              Todavía no tenés billeteras — creá una con &quot;+ Nueva&quot; o desde la sección
+              Billeteras (donde también podés editarlas o eliminarlas).
+            </p>
+          )}
+        </div>
 
         {/* Medio de Pago */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Medio de Pago</label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className={inputStyle}
-            >
-              <option value="Billetera Virtual">Billetera Virtual</option>
-              <option value="Efectivo">Efectivo</option>
-              <option value="Transferencia">Transferencia Bancaria</option>
-              <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
-              <option value="Tarjeta de Débito">Tarjeta de Débito</option>
-            </select>
-          </div>
-
-          {paymentMethod === 'Billetera Virtual' && (
-            <div>
-              <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Proveedor / App</label>
-              <select
-                value={walletProvider}
-                onChange={(e) => setWalletProvider(e.target.value)}
-                className={inputStyle}
-              >
-                <option value="Mercado Pago">Mercado Pago</option>
-                <option value="Personal Pay">Personal Pay</option>
-                <option value="Ualá">Ualá</option>
-                <option value="Lemon Cash">Lemon Cash</option>
-                <option value="Naranja X">Naranja X</option>
-                <option value="Otra">Otra</option>
-              </select>
-            </div>
-          )}
+        <div>
+          <label className="block text-xs font-bold text-gray-800 dark:text-gray-300 mb-1">Medio de Pago</label>
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            className={inputStyle}
+          >
+            <option value="Billetera Virtual">Billetera Virtual</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Transferencia">Transferencia Bancaria</option>
+            <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+            <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+          </select>
         </div>
 
         <button

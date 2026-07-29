@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
+import ColorPicker from '@/components/ColorPicker'
 import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone } from 'lucide-react'
 
 const WALLET_TYPES: { value: Wallet['type']; label: string }[] = [
@@ -154,10 +155,11 @@ export default function WalletManager() {
       )}
 
       {/* Formulario de alta */}
-      <form onSubmit={handleAddWallet} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+      <form onSubmit={handleAddWallet} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
-          placeholder="Nombre (ej. Mercado Pago)"
+          placeholder="Nombre"
+          title="Ej: Mercado Pago"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -185,14 +187,6 @@ export default function WalletManager() {
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-          className="w-full h-9 p-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer"
-          title="Elegir color"
-        />
-
         <button
           type="submit"
           disabled={submitting}
@@ -201,6 +195,11 @@ export default function WalletManager() {
           <Plus size={16} /> {submitting ? 'Guardando...' : 'Agregar'}
         </button>
       </form>
+
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 shrink-0">Color:</span>
+        <ColorPicker value={color} onChange={setColor} />
+      </div>
 
       {/* Lista de billeteras */}
       {wallets.length === 0 ? (

@@ -475,5 +475,73 @@ tests**, todos pasando).
 Quedan **6 ideas**: simulador de brecha cambiaria, exportar a PDF, PWA,
 ingreso por voz, escaneo de QR/AFIP, bot de Telegram.
 
+## ✅ Auditoría de UX/UI (a partir de capturas del usuario)
+
+El usuario mandó capturas mostrando que en `WalletManager` y
+`RecurringManager` los campos del formulario "Agregar" se veían
+cortados/incompletos ("Nom", "Mont", "Día del mes (1-31" truncado). Se
+encontró la causa raíz y se corrigió en las 4 secciones que compartían el
+mismo problema:
+
+- [x] **Grids rígidos de 5 columnas** — `WalletManager`,
+  `RecurringManager`, `SavingsGoals` e `InstallmentTracker` usaban
+  `lg:grid-cols-5` (5 columnas fijas sin importar el ancho real del
+  contenido). Se cambió a
+  `lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]` en los 4: ahora
+  cada campo tiene un mínimo de 150px y el grid los acomoda solo, bajando
+  de línea si no entran, en vez de comprimirlos. También se acortaron
+  placeholders largos ("Nombre (ej. Mercado Pago)" → "Nombre", con el
+  ejemplo movido a un `title` de tooltip) para que entren cómodos incluso
+  en pantallas angostas.
+
+- [x] **Colores predefinidos** — `ColorPicker.tsx`: 7 pastillas de color
+  (ámbar, esmeralda, índigo, rosa, cian, violeta, rojo) más una opción
+  "personalizado" que abre el selector nativo del navegador, en vez de
+  tener que abrir el selector cada vez. Integrado en `WalletManager` y
+  `CategoryManager`.
+
+- [x] **Íconos por categoría** — `supabase/category_icons.sql` agrega
+  `icon` (texto) a `categories`. `IconPicker.tsx` ofrece 16 íconos
+  curados (carrito, auto, casa, salud, educación, etc. — catálogo en
+  `src/lib/categoryIcons.ts`). Los chips de categorías ahora muestran el
+  ícono elegido en vez de solo un punto de color.
+  **⚠️ Acción tuya**: correr `category_icons.sql`.
+
+- [x] **15 categorías sugeridas** — `src/lib/suggestedCategories.ts`:
+  catálogo de 15 categorías típicas de gastos personales (Supermercado,
+  Transporte, Alquiler/Vivienda, Servicios, Salud, Educación,
+  Entretenimiento, Ropa y Calzado, Restaurantes y Delivery, Mascotas,
+  Cuidado Personal, Tecnología, Regalos, Viajes, Ahorro/Inversión), cada
+  una con color e ícono coherente. Botón "Sugeridas" en `CategoryManager`
+  que las carga de un click sin duplicar las que ya tengas (compara por
+  nombre). Testeado: 7 tests (15 categorías exactas, sin nombres
+  duplicados, todos los íconos referenciados existen en el catálogo).
+
+- [x] **"Proveedor / App" no reflejaba las billeteras reales** — en
+  `TransactionForm` había DOS selectores de billetera superpuestos: uno
+  hardcodeado en el código (Mercado Pago, Personal Pay, Ualá, Lemon Cash,
+  Naranja X, Otra — una lista fija que no tenía nada que ver con las
+  billeteras reales que se crean en `WalletManager`, por eso una
+  billetera nueva no aparecía ahí) y otro real (el que ya se había hecho
+  en la Fase 5, que sí lee `wallets`). Se eliminó el selector hardcodeado
+  y se unificó todo en el selector real, agregándole un botón "+ Nueva"
+  que crea una billetera al vuelo sin salir del formulario de carga
+  (para editarla o eliminarla, hay que ir a la sección Billeteras, que ya
+  tiene esa gestión completa).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(mismo patrón pre-existente de siempre, nada nuevo grave), `npx vitest
+run` (**20 archivos, 86 tests**, todos pasando — se actualizó también
+`WalletManager.test.tsx` porque buscaba el placeholder viejo).
+
+### 📌 Backlog (idea del usuario, marcada explícitamente como "a futuro")
+
+**Ejemplos predeterminados de metas de ahorro / presupuestos /
+inversiones**: si el usuario no tiene ninguna meta/presupuesto cargado,
+ofrecerle 2-3 sugerencias predefinidas para elegir (similar al patrón que
+ya se implementó para categorías sugeridas). No se implementó en esta
+sesión porque el usuario lo planteó explícitamente como una idea a
+futuro, no un pedido para ahora — queda anotado para cuando se priorice.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

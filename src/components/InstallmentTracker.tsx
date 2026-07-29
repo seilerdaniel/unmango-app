@@ -187,10 +187,11 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         <CreditCard className="text-violet-600" size={20} /> Compras en Cuotas
       </h2>
 
-      <form onSubmit={handleAddPurchase} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+      <form onSubmit={handleAddPurchase} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
-          placeholder="Descripción (ej. Notebook)"
+          placeholder="Descripción"
+          title="Ej: Notebook"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           required
@@ -208,7 +209,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         />
         <input
           type="number"
-          placeholder="Cantidad de cuotas"
+          placeholder="Cuotas"
           value={installmentsCount}
           onChange={(e) => setInstallmentsCount(e.target.value)}
           required

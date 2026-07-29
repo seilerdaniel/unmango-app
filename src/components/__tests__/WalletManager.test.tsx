@@ -61,7 +61,7 @@ describe('WalletManager', () => {
 
     await screen.findByText(/Todavía no creaste ninguna billetera/i)
 
-    await userEvent.type(screen.getByPlaceholderText('Nombre (ej. Mercado Pago)'), 'Ualá')
+    await userEvent.type(screen.getByPlaceholderText('Nombre'), 'Ualá')
     await userEvent.click(screen.getByRole('button', { name: /agregar/i }))
 
     // Ojo: from('wallets') se llama varias veces (carga inicial, el

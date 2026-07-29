@@ -31,6 +31,7 @@ export interface Database {
           name: string
           color: string | null
           budget_group: 'necesidad' | 'deseo' | 'ahorro' | null
+          icon: string | null
         }
         Insert: {
           id?: string
@@ -38,6 +39,7 @@ export interface Database {
           name: string
           color?: string | null
           budget_group?: 'necesidad' | 'deseo' | 'ahorro' | null
+          icon?: string | null
         }
         Update: {
           id?: string
@@ -45,6 +47,7 @@ export interface Database {
           name?: string
           color?: string | null
           budget_group?: 'necesidad' | 'deseo' | 'ahorro' | null
+          icon?: string | null
         }
         Relationships: []
       }

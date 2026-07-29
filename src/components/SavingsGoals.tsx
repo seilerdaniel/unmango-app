@@ -185,10 +185,11 @@ export default function SavingsGoals() {
       {loadError && <p className="text-xs font-semibold text-rose-600">{loadError}</p>}
 
       {/* Formulario de alta */}
-      <form onSubmit={handleAddGoal} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+      <form onSubmit={handleAddGoal} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
-          placeholder="Meta (ej. Vacaciones)"
+          placeholder="Nombre de la meta"
+          title="Ej: Vacaciones"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required

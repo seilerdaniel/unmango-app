@@ -283,10 +283,11 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       )}
 
       {/* Formulario de Alta */}
-      <form onSubmit={handleAddRecurring} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+      <form onSubmit={handleAddRecurring} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
-          placeholder="Servicio (ej. Netflix)"
+          placeholder="Servicio"
+          title="Ej: Netflix"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
@@ -316,7 +317,8 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
         <input
           type="number"
-          placeholder="Día del mes (1-31)"
+          placeholder="Día del mes"
+          title="Entre 1 y 31"
           value={billingDay}
           onChange={(e) => setBillingDay(e.target.value)}
           required
