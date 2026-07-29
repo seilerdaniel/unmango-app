@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { RecurringExpense } from '@/types'
+import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
-import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle } from 'lucide-react'
+import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
 
 interface RecurringManagerProps {
@@ -18,6 +18,19 @@ interface RecurringManagerProps {
 // cron en Supabase (Edge Function + pg_cron) más un servicio de email —
 // eso requiere credenciales que no tenemos en esta sesión. Ver AUDIT.md.
 const DUE_SOON_DAYS = 7
+
+const PAYMENT_METHODS = ['Billetera Virtual', 'Efectivo', 'Transferencia', 'Tarjeta de Crédito', 'Tarjeta de Débito']
+
+// A qué tipo(s) de billetera corresponde cada medio de pago, para
+// filtrar el selector de "cuál billetera puntual" y no mostrar, por
+// ejemplo, tarjetas de crédito cuando el medio de pago es "Efectivo".
+const WALLET_TYPES_BY_PAYMENT_METHOD: Record<string, Wallet['type'][]> = {
+  'Billetera Virtual': ['virtual_wallet'],
+  Efectivo: ['cash'],
+  Transferencia: ['bank'],
+  'Tarjeta de Crédito': ['credit_card'],
+  'Tarjeta de Débito': ['debit_card'],
+}
 
 /**
  * Calcula cuántos días faltan para el próximo vencimiento de una
@@ -45,23 +58,41 @@ function daysUntilNextBilling(billingDay: number): number {
   return Math.round(diffMs / (1000 * 60 * 60 * 24))
 }
 
+const emptyForm = {
+  title: '',
+  amount: '',
+  billingDay: '',
+  categoryId: '',
+  currency: 'ARS' as 'ARS' | 'USD',
+  paymentMethod: '',
+  walletId: '',
+  membershipType: '',
+  taxPercentage: '',
+}
+
 export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
   const { categories } = useCategories()
   const [recurring, setRecurring] = useState<RecurringExpense[]>([])
-  const [title, setTitle] = useState('')
-  const [amount, setAmount] = useState('')
-  const [billingDay, setBillingDay] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
-  const [paymentMethod, setPaymentMethod] = useState('')
-  const [membershipType, setMembershipType] = useState('')
-  const [taxPercentage, setTaxPercentage] = useState('')
+  const [wallets, setWallets] = useState<Wallet[]>([])
+  const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [impactingId, setImpactingId] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+
+  async function loadWallets() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+    if (data) setWallets(data)
+  }
 
   // Carga inicial segura para React 19
   useEffect(() => {
@@ -72,11 +103,14 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const { data: recData } = await supabase
-          .from('recurring_expenses')
-          .select('*, categories(*)')
-          .eq('user_id', user.id)
-          .order('billing_day', { ascending: true })
+        const [{ data: recData }] = await Promise.all([
+          supabase
+            .from('recurring_expenses')
+            .select('*, categories(*)')
+            .eq('user_id', user.id)
+            .order('billing_day', { ascending: true }),
+          loadWallets(),
+        ])
 
         if (isMounted && recData) setRecurring(recData)
       } catch (err) {
@@ -112,9 +146,33 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     }
   }
 
-  const handleAddRecurring = async (e: React.FormEvent) => {
+  function resetForm() {
+    setForm(emptyForm)
+    setEditingId(null)
+  }
+
+  function startEditing(item: RecurringExpense) {
+    setEditingId(item.id)
+    setForm({
+      title: item.title,
+      amount: String(item.amount),
+      billingDay: String(item.billing_day),
+      categoryId: item.category_id || '',
+      currency: item.currency,
+      paymentMethod: item.payment_method || '',
+      walletId: item.wallet_id || '',
+      membershipType: item.membership_type || '',
+      taxPercentage: item.tax_percentage ? String(item.tax_percentage) : '',
+    })
+    // Llevamos la vista arriba, al formulario, para que quede claro que
+    // se está editando (si no, el usuario no ve el cambio si la lista es
+    // larga y el formulario quedó scrolleado fuera de vista).
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title || !amount || !billingDay || Number(amount) <= 0) return
+    if (!form.title || !form.amount || !form.billingDay || Number(form.amount) <= 0) return
 
     setSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -124,34 +182,28 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       return
     }
 
-    const { error } = await supabase.from('recurring_expenses').insert([
-      {
-        user_id: user.id,
-        title,
-        amount: Number(amount),
-        currency,
-        billing_day: Number(billingDay),
-        category_id: categoryId || null,
-        is_active: true,
-        payment_method: paymentMethod || null,
-        membership_type: membershipType || null,
-        tax_percentage: Number(taxPercentage) || 0,
-      }
-    ])
+    const payload = {
+      title: form.title,
+      amount: Number(form.amount),
+      currency: form.currency,
+      billing_day: Number(form.billingDay),
+      category_id: form.categoryId || null,
+      payment_method: form.paymentMethod || null,
+      wallet_id: form.walletId || null,
+      membership_type: form.membershipType || null,
+      tax_percentage: Number(form.taxPercentage) || 0,
+    }
+
+    const { error } = editingId
+      ? await supabase.from('recurring_expenses').update(payload).eq('id', editingId)
+      : await supabase.from('recurring_expenses').insert([{ ...payload, user_id: user.id, is_active: true }])
 
     if (!error) {
-      setTitle('')
-      setAmount('')
-      setBillingDay('')
-      setCategoryId('')
-      setCurrency('ARS')
-      setPaymentMethod('')
-      setMembershipType('')
-      setTaxPercentage('')
+      resetForm()
       await reloadData()
     } else {
-      alert('Error al agregar la suscripción: ' + error.message)
-      console.error('Error agregando suscripción:', error)
+      alert(`Error al ${editingId ? 'editar' : 'agregar'} la suscripción: ` + error.message)
+      console.error(`Error ${editingId ? 'editando' : 'agregando'} suscripción:`, error)
     }
 
     setSubmitting(false)
@@ -182,6 +234,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
     if (!error) {
       setRecurring((prev) => prev.filter((r) => r.id !== id))
+      if (editingId === id) resetForm()
     } else {
       alert('Error al eliminar la suscripción: ' + error.message)
       console.error('Error eliminando suscripción:', error)
@@ -227,12 +280,15 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     // Campos alineados con el tipo Transaction / schema real de la tabla
     // (antes se mandaban "title" y "notes", que no existen, y faltaban
     // "description", "payment_method" e "is_usd", que son requeridos).
+    // wallet_id se copia de la suscripción para que el pago también
+    // impacte el saldo de la billetera/tarjeta correspondiente.
     const { error } = await supabase.from('transactions').insert([
       {
         user_id: user.id,
         type: 'expense',
         description: `[Suscripción] ${item.title}`,
         payment_method: item.payment_method || 'Transferencia',
+        wallet_id: item.wallet_id || null,
         is_usd: item.currency === 'USD',
         amount_usd: item.currency === 'USD' ? taxedAmount : null,
         exchange_rate: exchangeRate,
@@ -251,7 +307,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     setImpactingId(null)
   }
 
-
   const totalFixedARS = recurring
     .filter((r) => r.is_active && r.currency === 'ARS')
     .reduce((acc, r) => acc + applyTax(Number(r.amount), r.tax_percentage ?? 0), 0)
@@ -261,6 +316,13 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     .map((r) => ({ ...r, daysLeft: daysUntilNextBilling(r.billing_day) }))
     .filter((r) => r.daysLeft <= DUE_SOON_DAYS)
     .sort((a, b) => a.daysLeft - b.daysLeft)
+
+  // Billeteras relevantes para el medio de pago elegido en el formulario
+  // (ej. si elegiste "Efectivo", solo billeteras de tipo cash).
+  const relevantWalletTypes = WALLET_TYPES_BY_PAYMENT_METHOD[form.paymentMethod]
+  const relevantWallets = relevantWalletTypes
+    ? wallets.filter((w) => relevantWalletTypes.includes(w.type))
+    : []
 
   if (loading) {
     return (
@@ -297,14 +359,23 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         </div>
       )}
 
-      {/* Formulario de Alta */}
-      <form onSubmit={handleAddRecurring} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+      {editingId && (
+        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 text-xs font-bold px-3.5 py-2 rounded-xl">
+          <span>Editando &quot;{form.title}&quot;</span>
+          <button onClick={resetForm} className="flex items-center gap-1 hover:underline cursor-pointer">
+            <X size={12} /> Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Formulario de Alta / Edición */}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
           placeholder="Servicio"
           title="Ej: Netflix"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          value={form.title}
+          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           required
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
@@ -313,16 +384,16 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           <input
             type="number"
             placeholder="Monto"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            value={form.amount}
+            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             required
             min="1"
             step="any"
             className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value as 'ARS' | 'USD')}
+            value={form.currency}
+            onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value as 'ARS' | 'USD' }))}
             className="text-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-2 font-bold text-gray-700 dark:text-gray-200 focus:outline-none"
           >
             <option value="ARS">ARS</option>
@@ -334,8 +405,8 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           type="number"
           placeholder="Día del mes"
           title="Entre 1 y 31"
-          value={billingDay}
-          onChange={(e) => setBillingDay(e.target.value)}
+          value={form.billingDay}
+          onChange={(e) => setForm((f) => ({ ...f, billingDay: e.target.value }))}
           required
           min="1"
           max="31"
@@ -343,8 +414,8 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         />
 
         <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          value={form.categoryId}
+          onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">Categoría (Opcional)...</option>
@@ -356,24 +427,41 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         </select>
 
         <select
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value)}
+          value={form.paymentMethod}
+          onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value, walletId: '' }))}
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">Medio de pago (opcional)</option>
-          <option value="Billetera Virtual">Billetera Virtual</option>
-          <option value="Efectivo">Efectivo</option>
-          <option value="Transferencia">Transferencia Bancaria</option>
-          <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
-          <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+          {PAYMENT_METHODS.map((method) => (
+            <option key={method} value={method}>
+              {method}
+            </option>
+          ))}
         </select>
+
+        {/* Solo aparece si el medio de pago elegido tiene billeteras
+            creadas de ese tipo (ej. "Efectivo" -> billeteras tipo cash). */}
+        {form.paymentMethod && relevantWallets.length > 0 && (
+          <select
+            value={form.walletId}
+            onChange={(e) => setForm((f) => ({ ...f, walletId: e.target.value }))}
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">¿Cuál? (opcional)</option>
+            {relevantWallets.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           type="text"
           placeholder="Membresía"
           title="Ej: Premium, Familiar, Individual"
-          value={membershipType}
-          onChange={(e) => setMembershipType(e.target.value)}
+          value={form.membershipType}
+          onChange={(e) => setForm((f) => ({ ...f, membershipType: e.target.value }))}
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
@@ -381,8 +469,8 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           type="number"
           placeholder="Impuestos %"
           title="% que el precio NO incluye (ej. IVA, impuesto PAIS)"
-          value={taxPercentage}
-          onChange={(e) => setTaxPercentage(e.target.value)}
+          value={form.taxPercentage}
+          onChange={(e) => setForm((f) => ({ ...f, taxPercentage: e.target.value }))}
           min="0"
           step="any"
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -393,9 +481,17 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           disabled={submitting}
           className="w-full sm:col-span-2 lg:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
         >
-          <Plus size={16} /> {submitting ? 'Guardando...' : 'Agregar'}
+          <Plus size={16} /> {submitting ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar'}
         </button>
       </form>
+
+      {form.paymentMethod && relevantWallets.length === 0 && (
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
+          No tenés ninguna billetera/cuenta de tipo &quot;{form.paymentMethod}&quot; creada todavía
+          — podés crear una en la sección Billeteras si querés vincular esta suscripción a una
+          cuenta puntual (es opcional).
+        </p>
+      )}
 
       <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
         El monto que cargás es el precio de lista — muchas suscripciones (sobre todo pagadas en
@@ -491,6 +587,14 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                   >
                     <CheckCircle2 size={13} />
                     {impactingId === item.id ? 'Impactando...' : 'Pagar'}
+                  </button>
+
+                  <button
+                    onClick={() => startEditing(item)}
+                    className="text-gray-400 hover:text-indigo-600 transition p-1 cursor-pointer"
+                    title="Editar"
+                  >
+                    <Pencil size={14} />
                   </button>
 
                   <button

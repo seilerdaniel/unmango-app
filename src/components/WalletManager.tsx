@@ -5,14 +5,18 @@ import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import ColorPicker from '@/components/ColorPicker'
-import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone } from 'lucide-react'
+import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard } from 'lucide-react'
 
 const WALLET_TYPES: { value: Wallet['type']; label: string }[] = [
   { value: 'virtual_wallet', label: 'Billetera Virtual' },
   { value: 'bank', label: 'Banco' },
   { value: 'cash', label: 'Efectivo' },
+  { value: 'credit_card', label: 'Tarjeta de Crédito' },
+  { value: 'debit_card', label: 'Tarjeta de Débito' },
   { value: 'other', label: 'Otra' },
 ]
+
+const CARD_NETWORKS = ['Visa', 'Mastercard', 'American Express', 'Otra']
 
 function walletIconFor(type: Wallet['type']) {
   switch (type) {
@@ -22,17 +26,21 @@ function walletIconFor(type: Wallet['type']) {
       return Banknote
     case 'virtual_wallet':
       return Smartphone
+    case 'credit_card':
+    case 'debit_card':
+      return CreditCard
     default:
       return WalletIcon
   }
 }
 
-export default function WalletManager() {
+export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?: () => void }) {
   const [wallets, setWallets] = useState<WalletWithBalance[]>([])
   const [name, setName] = useState('')
   const [type, setType] = useState<Wallet['type']>('virtual_wallet')
   const [color, setColor] = useState('#6366f1')
-  const [initialBalance, setInitialBalance] = useState('0')
+  const [initialBalance, setInitialBalance] = useState('')
+  const [cardNetwork, setCardNetwork] = useState('Visa')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -85,6 +93,7 @@ export default function WalletManager() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
+      const isCard = type === 'credit_card' || type === 'debit_card'
       const { error } = await supabase.from('wallets').insert([
         {
           user_id: user.id,
@@ -92,13 +101,15 @@ export default function WalletManager() {
           type,
           color,
           initial_balance: Number(initialBalance) || 0,
+          card_network: isCard ? cardNetwork : null,
         },
       ])
 
       if (!error) {
         setName('')
-        setInitialBalance('0')
+        setInitialBalance('')
         await loadWallets()
+        if (onWalletsUpdated) onWalletsUpdated()
       } else {
         alert('Error al crear la billetera: ' + error.message)
         console.error('Error creando billetera:', error)
@@ -116,6 +127,7 @@ export default function WalletManager() {
       const { error } = await supabase.from('wallets').delete().eq('id', id)
       if (!error) {
         await loadWallets()
+        if (onWalletsUpdated) onWalletsUpdated()
       } else {
         alert('Error al eliminar la billetera: ' + error.message)
         console.error('Error eliminando billetera:', error)
@@ -181,11 +193,26 @@ export default function WalletManager() {
         <input
           type="number"
           placeholder="Saldo inicial"
+          title="Cuánto tenés hoy en esta cuenta/billetera, para arrancar el conteo desde ahí (dejalo vacío si arranca en $0)"
           value={initialBalance}
           onChange={(e) => setInitialBalance(e.target.value)}
           step="any"
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
+
+        {(type === 'credit_card' || type === 'debit_card') && (
+          <select
+            value={cardNetwork}
+            onChange={(e) => setCardNetwork(e.target.value)}
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {CARD_NETWORKS.map((network) => (
+              <option key={network} value={network}>
+                {network}
+              </option>
+            ))}
+          </select>
+        )}
 
         <button
           type="submit"
@@ -200,6 +227,11 @@ export default function WalletManager() {
         <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 shrink-0">Color:</span>
         <ColorPicker value={color} onChange={setColor} />
       </div>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
+        ¿Tenés varias tarjetas? Cargá cada una por separado con “Tarjeta de Crédito” o “Tarjeta de
+        Débito” — no hay límite, y podés ponerle un nombre distinto a cada una (ej. “Visa Galicia”,
+        “Mastercard Naranja X”) para distinguirlas.
+      </p>
 
       {/* Lista de billeteras */}
       {wallets.length === 0 ? (
@@ -228,6 +260,7 @@ export default function WalletManager() {
                     </p>
                     <p className="text-[11px] text-gray-400 font-medium">
                       {WALLET_TYPES.find((t) => t.value === w.type)?.label ?? 'Otra'}
+                      {w.card_network ? ` · ${w.card_network}` : ''}
                     </p>
                   </div>
                 </div>

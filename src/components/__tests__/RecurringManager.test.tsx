@@ -179,3 +179,78 @@ describe('RecurringManager — aviso de vencimiento próximo (Fase 5)', () => {
     expect(screen.queryByText(/Vencen pronto/i)).not.toBeInTheDocument()
   })
 })
+
+describe('RecurringManager — editar suscripción existente', () => {
+  it('el botón Editar precarga el formulario con los datos de la suscripción', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: { data: [RECURRING_ITEM_ARS], error: null },
+        },
+      })
+    )
+
+    renderWithProviders(<RecurringManager />)
+
+    const editButton = await screen.findByTitle('Editar')
+    await userEvent.click(editButton)
+
+    expect(screen.getByDisplayValue('Netflix')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('5000')).toBeInTheDocument()
+    expect(screen.getByText(/Editando "Netflix"/i)).toBeInTheDocument()
+  })
+
+  it('guardar los cambios llama a update() en vez de insert()', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: { data: [RECURRING_ITEM_ARS], error: null },
+        },
+      })
+    )
+
+    renderWithProviders(<RecurringManager />)
+
+    const editButton = await screen.findByTitle('Editar')
+    await userEvent.click(editButton)
+
+    const submitButton = screen.getByRole('button', { name: /guardar cambios/i })
+    await userEvent.click(submitButton)
+
+    await waitFor(() => {
+      const builders = supabaseMock.from.mock.results
+        .filter((_, idx) => supabaseMock._fromCalls[idx] === 'recurring_expenses')
+        .map((r) => r.value)
+      const updatedBuilder = builders.find((b) => b.update.mock.calls.length > 0)
+      expect(updatedBuilder).toBeDefined()
+      expect(updatedBuilder!.insert).not.toHaveBeenCalled()
+    })
+  })
+
+  it('cancelar la edición vuelve al formulario vacío para crear una nueva', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: { data: [RECURRING_ITEM_ARS], error: null },
+        },
+      })
+    )
+
+    renderWithProviders(<RecurringManager />)
+
+    const editButton = await screen.findByTitle('Editar')
+    await userEvent.click(editButton)
+    expect(screen.getByDisplayValue('Netflix')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /cancelar/i }))
+
+    expect(screen.queryByText(/Editando/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^agregar$/i })).toBeInTheDocument()
+  })
+})

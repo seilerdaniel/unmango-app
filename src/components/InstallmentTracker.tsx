@@ -21,6 +21,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const [totalAmount, setTotalAmount] = useState('')
   const [installmentsCount, setInstallmentsCount] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [payingId, setPayingId] = useState<string | null>(null)
@@ -84,6 +86,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
           total_amount: Number(totalAmount),
           installments_count: Number(installmentsCount),
           category_id: categoryId || null,
+          payment_method: paymentMethod || null,
+          notes: notes.trim() || null,
         },
       ])
 
@@ -92,6 +96,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         setTotalAmount('')
         setInstallmentsCount('')
         setCategoryId('')
+        setPaymentMethod('')
+        setNotes('')
         await loadPurchases()
       } else {
         alert('Error al crear la compra en cuotas: ' + error.message)
@@ -136,7 +142,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
           user_id: user.id,
           type: 'expense',
           description: `[Cuota ${nextItem.installmentNumber}/${purchase.installments_count}] ${purchase.description}`,
-          payment_method: 'Tarjeta de Crédito',
+          payment_method: purchase.payment_method || 'Tarjeta de Crédito',
           is_usd: false,
           amount_usd: null,
           amount_ars: nextItem.amount,
@@ -229,6 +235,26 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
             </option>
           ))}
         </select>
+        <select
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+        >
+          <option value="">Medio de pago (opcional)</option>
+          <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+          <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+          <option value="Billetera Virtual">Billetera Virtual</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Efectivo">Efectivo</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Notas"
+          title="Ej: es una devolución a mi hermano, cuotas sin interés, etc."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+        />
         <button
           type="submit"
           disabled={submitting}
@@ -255,7 +281,12 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
             return (
               <div key={purchase.id} className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{purchase.description}</span>
+                  <div>
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{purchase.description}</span>
+                    {purchase.payment_method && (
+                      <span className="text-[10px] text-gray-400 ml-2">{purchase.payment_method}</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleDeletePurchase(purchase.id)}
                     className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
@@ -263,6 +294,10 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
                     <Trash2 size={14} />
                   </button>
                 </div>
+
+                {purchase.notes && (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 italic">{purchase.notes}</p>
+                )}
 
                 <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
                   <div

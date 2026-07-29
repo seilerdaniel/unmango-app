@@ -644,5 +644,84 @@ nuevo), `npx vitest run` (**25 archivos, 111 tests**, todos pasando).
 
 Quedan **3 ideas**: simulador de brecha cambiaria, PWA, bot de Telegram.
 
+## ✅ Ronda de aclaraciones y mejoras (a partir de preguntas del usuario)
+
+El usuario hizo 3 preguntas conceptuales legítimas sobre partes que no
+quedaban claras, más varios pedidos concretos. Primero las respuestas
+conceptuales (reflejadas también como aclaraciones visibles en la UI):
+
+- **"¿Los montos de Mis Billeteras no deberían verse en Balance
+  Disponible?"** — Son cálculos distintos a propósito: Balance
+  Disponible suma TODOS los movimientos tengan o no billetera asignada;
+  el saldo de cada billetera solo cuenta lo que se le asignó
+  explícitamente + su saldo inicial. Si se asigna billetera a todo,
+  deberían coincidir. Se agregó un tooltip (ícono ℹ️) en la tarjeta de
+  Balance Disponible explicándolo, y se muestra "En billeteras: $X"
+  debajo para que sea visible de un vistazo.
+- **"No veo los Gastos Hormiga"** — Bug de UX real: el componente se
+  ocultaba POR COMPLETO si no detectaba gastos por debajo del umbral ese
+  mes, sin avisar que existía. Ahora siempre se muestra, con un mensaje
+  si no hay nada ese mes.
+- **"¿Qué es el 0 de interés mensual? ¿Son chanchitos las Metas de
+  Ahorro?"** — Se agregó una aclaración visible en `SavingsGoals`: es
+  solo seguimiento manual (una "alcancía virtual"), no está conectado a
+  ninguna billetera real, y el interés es opcional (para simular
+  inversión). Tooltips en cada campo del formulario.
+
+Y los cambios de código concretos:
+
+- [x] **Tarjetas múltiples (Visa/Mastercard/Amex/Otra)** —
+  `supabase/wallet_cards.sql`: nuevos tipos de billetera `credit_card` y
+  `debit_card`, más una columna `card_network`. `WalletManager.tsx`
+  ahora tiene un selector de marca cuando el tipo es tarjeta, y podés
+  crear todas las que tengas (una fila por tarjeta, con nombre propio
+  como "Visa Galicia", "Mastercard Naranja X").
+
+- [x] **Editar suscripciones existentes** — `RecurringManager.tsx` se
+  reescribió con un estado de formulario unificado: botón "Editar"
+  (ícono lápiz) que precarga todos los campos de la suscripción
+  elegida, "Guardar cambios" hace `update()` en vez de `insert()`, y un
+  botón "Cancelar" para volver al modo de alta. 3 tests nuevos
+  (precarga, update en vez de insert, cancelar).
+
+- [x] **Billetera vinculada al medio de pago en Suscripciones** —
+  `supabase/wallet_link_and_installment_fields.sql` agrega `wallet_id` a
+  `recurring_expenses`. Al elegir "Efectivo", "Billetera Virtual",
+  "Transferencia" o una tarjeta como medio de pago, aparece un selector
+  con SOLO las billeteras de ese tipo que ya creaste (ej. "Efectivo" →
+  solo billeteras tipo cash). Si no tenés ninguna de ese tipo, se
+  avisa en vez de mostrar un selector vacío. El botón "Pagar" ahora
+  también copia el `wallet_id` a la transacción generada, así el pago
+  impacta el saldo de esa billetera.
+
+- [x] **Compras en Cuotas: método de pago y notas** — mismo SQL de
+  arriba agrega `payment_method` y `notes` a `installment_purchases`.
+  El medio de pago elegido se usa al registrar cada cuota (antes estaba
+  hardcodeado en "Tarjeta de Crédito" siempre). Las notas se muestran en
+  cursiva en la card (para casos como "es una devolución a mi hermano").
+
+- [x] **Login: mostrar/ocultar contraseña + login social** — ícono de
+  ojo en el campo de contraseña. Botones de Google/Microsoft/Apple vía
+  `supabase.auth.signInWithOAuth()`.
+  **⚠️ Acción tuya, no puedo activarlo yo**: cada proveedor necesita
+  configurarse en Supabase Dashboard → Authentication → Providers, con
+  tus propias credenciales OAuth de cada plataforma (son cuentas de
+  desarrollador separadas — Google Cloud Console, Azure Portal, Apple
+  Developer). Hasta que actives alguno, el botón correspondiente va a
+  fallar con un mensaje claro indicando el motivo. **Login por
+  teléfono no se implementó**: además de activarlo en Supabase, requiere
+  contratar un servicio de SMS aparte (ej. Twilio), que es un gasto
+  recurrente — quedó fuera de alcance de esta sesión, avisado en la
+  propia pantalla de login.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(1 error nuevo real corregido — comillas dobles sin escapar en JSX en
+`WalletManager`, quedó igual que el resto de la línea base pre-existente
+después del fix), `npx vitest run` (**25 archivos, 114 tests**, todos
+pasando).
+
+**⚠️ 2 SQL nuevos para correr** (después de todos los anteriores, en
+este orden): `wallet_cards.sql` → `wallet_link_and_installment_fields.sql`.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

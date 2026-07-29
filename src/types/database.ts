@@ -160,6 +160,7 @@ export interface Database {
           payment_method: string | null
           membership_type: string | null
           tax_percentage: number
+          wallet_id: string | null
         }
         Insert: {
           id?: string
@@ -174,6 +175,7 @@ export interface Database {
           payment_method?: string | null
           membership_type?: string | null
           tax_percentage?: number
+          wallet_id?: string | null
         }
         Update: {
           id?: string
@@ -188,12 +190,19 @@ export interface Database {
           payment_method?: string | null
           membership_type?: string | null
           tax_percentage?: number
+          wallet_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "recurring_expenses_category_id_fkey"
             columns: ["category_id"]
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_expenses_wallet_id_fkey"
+            columns: ["wallet_id"]
+            referencedRelation: "wallets"
             referencedColumns: ["id"]
           }
         ]
@@ -203,28 +212,31 @@ export interface Database {
           id: string
           user_id: string
           name: string
-          type: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          type: 'cash' | 'bank' | 'virtual_wallet' | 'credit_card' | 'debit_card' | 'other'
           color: string | null
           initial_balance: number
           created_at: string
+          card_network: string | null
         }
         Insert: {
           id?: string
           user_id: string
           name: string
-          type?: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          type?: 'cash' | 'bank' | 'virtual_wallet' | 'credit_card' | 'debit_card' | 'other'
           color?: string | null
           initial_balance?: number
           created_at?: string
+          card_network?: string | null
         }
         Update: {
           id?: string
           user_id?: string
           name?: string
-          type?: 'cash' | 'bank' | 'virtual_wallet' | 'other'
+          type?: 'cash' | 'bank' | 'virtual_wallet' | 'credit_card' | 'debit_card' | 'other'
           color?: string | null
           initial_balance?: number
           created_at?: string
+          card_network?: string | null
         }
         Relationships: []
       }
@@ -274,6 +286,8 @@ export interface Database {
           installments_count: number
           first_installment_date: string
           created_at: string
+          payment_method: string | null
+          notes: string | null
         }
         Insert: {
           id?: string
@@ -284,6 +298,8 @@ export interface Database {
           installments_count: number
           first_installment_date?: string
           created_at?: string
+          payment_method?: string | null
+          notes?: string | null
         }
         Update: {
           id?: string
@@ -294,6 +310,8 @@ export interface Database {
           installments_count?: number
           first_installment_date?: string
           created_at?: string
+          payment_method?: string | null
+          notes?: string | null
         }
         Relationships: [
           {

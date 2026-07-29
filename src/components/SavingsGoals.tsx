@@ -59,9 +59,9 @@ export default function SavingsGoals() {
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [name, setName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
-  const [currentAmount, setCurrentAmount] = useState('0')
+  const [currentAmount, setCurrentAmount] = useState('')
   const [monthlyContribution, setMonthlyContribution] = useState('')
-  const [monthlyInterestPercent, setMonthlyInterestPercent] = useState('0')
+  const [monthlyInterestPercent, setMonthlyInterestPercent] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -118,9 +118,9 @@ export default function SavingsGoals() {
       if (!error) {
         setName('')
         setTargetAmount('')
-        setCurrentAmount('0')
+        setCurrentAmount('')
         setMonthlyContribution('')
-        setMonthlyInterestPercent('0')
+        setMonthlyInterestPercent('')
         await loadGoals()
       } else {
         alert('Error al crear la meta: ' + error.message)
@@ -181,6 +181,10 @@ export default function SavingsGoals() {
         <PiggyBank className="w-5 h-5 text-emerald-600" />
         <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Metas de Ahorro</h2>
       </div>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500 -mt-3">
+        Son como una alcancía virtual: fijás un objetivo y vas actualizando a mano cuánto llevás
+        ahorrado. No están conectadas a ninguna billetera real — el número es el que vos cargues.
+      </p>
 
       {loadError && <p className="text-xs font-semibold text-rose-600">{loadError}</p>}
 
@@ -198,6 +202,7 @@ export default function SavingsGoals() {
         <input
           type="number"
           placeholder="Objetivo ($)"
+          title="Cuánto querés juntar en total"
           value={targetAmount}
           onChange={(e) => setTargetAmount(e.target.value)}
           required
@@ -208,6 +213,7 @@ export default function SavingsGoals() {
         <input
           type="number"
           placeholder="Ya ahorrado ($)"
+          title="Si ya tenés algo guardado para esto, poné cuánto. Si es una meta nueva, dejalo vacío (arranca en $0)."
           value={currentAmount}
           onChange={(e) => setCurrentAmount(e.target.value)}
           step="any"
@@ -216,6 +222,7 @@ export default function SavingsGoals() {
         <input
           type="number"
           placeholder="Aporte mensual ($)"
+          title="Cuánto pensás destinarle cada mes a esta meta"
           value={monthlyContribution}
           onChange={(e) => setMonthlyContribution(e.target.value)}
           step="any"
@@ -230,11 +237,15 @@ export default function SavingsGoals() {
         </button>
       </form>
       <div className="flex items-center gap-2 -mt-2">
-        <label className="text-[11px] text-gray-500 font-medium">
+        <label
+          className="text-[11px] text-gray-500 font-medium"
+          title="Si pensás que ese ahorro va a generar interés (ej. un plazo fijo o fondo), poné el % mensual acá. Si no, dejalo en 0."
+        >
           Interés mensual estimado (opcional, en %):
         </label>
         <input
           type="number"
+          placeholder="0"
           value={monthlyInterestPercent}
           onChange={(e) => setMonthlyInterestPercent(e.target.value)}
           step="any"

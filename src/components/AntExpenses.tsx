@@ -56,11 +56,7 @@ export default function AntExpenses() {
     localStorage.setItem(STORAGE_KEY, String(num))
   }
 
-  if (loading) return null
-
   const result = detectAntExpenses(expenses, threshold)
-
-  if (result.count === 0) return null
 
   return (
     <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
@@ -76,14 +72,24 @@ export default function AntExpenses() {
           <Pencil size={10} /> umbral: {formatAmount(threshold)}
         </button>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        Este mes tuviste <span className="font-bold text-gray-800 dark:text-gray-200">{result.count}</span> gastos
-        menores a {formatAmount(threshold)} que suman{' '}
-        <span className="font-extrabold text-amber-600 dark:text-amber-400">
-          {isPrivate ? '••••••' : formatAmount(result.total)}
-        </span>
-        .
-      </p>
+
+      {loading ? (
+        <p className="text-xs text-gray-400 animate-pulse">Revisando el mes...</p>
+      ) : result.count === 0 ? (
+        <p className="text-xs text-gray-400">
+          No encontré gastos menores a {formatAmount(threshold)} este mes. Si te parece un umbral
+          raro, tocá &quot;umbral&quot; arriba para cambiarlo.
+        </p>
+      ) : (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Este mes tuviste <span className="font-bold text-gray-800 dark:text-gray-200">{result.count}</span> gastos
+          menores a {formatAmount(threshold)} que suman{' '}
+          <span className="font-extrabold text-amber-600 dark:text-amber-400">
+            {isPrivate ? '••••••' : formatAmount(result.total)}
+          </span>
+          .
+        </p>
+      )}
     </div>
   )
 }

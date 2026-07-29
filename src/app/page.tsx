@@ -23,6 +23,7 @@ import {
   Sun,
   Moon,
   Circle,
+  Info,
 } from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -57,6 +58,7 @@ export default function Home() {
     Transaction[]
   >([]);
   const [totals, setTotals] = useState({ totalIncome: 0, totalExpense: 0 });
+  const [totalWalletBalance, setTotalWalletBalance] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -91,6 +93,33 @@ export default function Home() {
     }
   }
 
+  // Suma de los saldos de todas las billeteras — se muestra al lado del
+  // Balance Disponible porque son cálculos DISTINTOS (ver tooltip en la
+  // tarjeta) y pueden no coincidir: el Balance Disponible cuenta todos
+  // los movimientos tengan o no billetera asignada; el total de
+  // billeteras solo cuenta lo que se asignó explícitamente + el saldo
+  // inicial de cada una.
+  async function fetchWalletTotal() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: walletsData, error: walletsError } = await supabase
+      .from("wallets")
+      .select("id")
+      .eq("user_id", user.id);
+    if (walletsError || !walletsData || walletsData.length === 0) {
+      setTotalWalletBalance(null);
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("get_wallet_balances");
+    if (!error && data) {
+      setTotalWalletBalance(data.reduce((acc, w) => acc + (Number(w.balance) || 0), 0));
+    } else if (error) {
+      console.error("Error calculando el total de billeteras:", error);
+    }
+  }
+
   // Primera página del historial (la más reciente). Se llama al iniciar y
   // después de cualquier alta/baja de movimiento.
   async function fetchTransactions() {
@@ -117,6 +146,7 @@ export default function Home() {
     }
 
     await fetchTotals();
+    await fetchWalletTotal();
   }
 
   // Trae la siguiente página y la agrega al final de lo ya cargado.
@@ -282,14 +312,22 @@ export default function Home() {
         {/* Tarjetas de Métricas principales formateadas con formatAmount */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Balance Disponible
+            <p
+              className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"
+              title="Suma TODOS tus movimientos, tengan o no una billetera asignada. Por eso puede no coincidir con la suma de tus billeteras (abajo) — esa solo cuenta lo que asignaste explícitamente a cada una, más su saldo inicial."
+            >
+              Balance Disponible <Info size={11} className="text-gray-300 dark:text-gray-600" />
             </p>
             <h3
               className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900 dark:text-gray-100" : "text-rose-600"}`}
             >
               {formatAmount(balance)}
             </h3>
+            {totalWalletBalance !== null && (
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                En billeteras: {isPrivate ? "••••••" : formatAmount(totalWalletBalance)}
+              </p>
+            )}
           </div>
 
           <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
@@ -334,7 +372,7 @@ export default function Home() {
           <div className="lg:col-span-1 space-y-6">
             <FinanceChart income={totalIncome} expense={totalExpense} />
             <TrendChart />
-            <WalletManager />
+            <WalletManager onWalletsUpdated={fetchWalletTotal} />
             <BudgetRule502030 />
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
             <BackupRestore />
