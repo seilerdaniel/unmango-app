@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import ColorPicker from '@/components/ColorPicker'
-import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard } from 'lucide-react'
+import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard, Pencil, X } from 'lucide-react'
 
 const WALLET_TYPES: { value: Wallet['type']; label: string }[] = [
   { value: 'virtual_wallet', label: 'Billetera Virtual' },
@@ -41,6 +41,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [color, setColor] = useState('#6366f1')
   const [initialBalance, setInitialBalance] = useState('')
   const [cardNetwork, setCardNetwork] = useState('Visa')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -85,7 +86,26 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     loadWallets()
   }, [])
 
-  async function handleAddWallet(e: React.FormEvent) {
+  function resetForm() {
+    setName('')
+    setType('virtual_wallet')
+    setColor('#6366f1')
+    setInitialBalance('')
+    setCardNetwork('Visa')
+    setEditingId(null)
+  }
+
+  function startEditing(w: WalletWithBalance) {
+    setEditingId(w.id)
+    setName(w.name)
+    setType(w.type)
+    setColor(w.color || '#6366f1')
+    setInitialBalance(String(w.initial_balance ?? ''))
+    setCardNetwork(w.card_network || 'Visa')
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
 
@@ -94,25 +114,25 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
 
     if (user) {
       const isCard = type === 'credit_card' || type === 'debit_card'
-      const { error } = await supabase.from('wallets').insert([
-        {
-          user_id: user.id,
-          name: name.trim(),
-          type,
-          color,
-          initial_balance: Number(initialBalance) || 0,
-          card_network: isCard ? cardNetwork : null,
-        },
-      ])
+      const payload = {
+        name: name.trim(),
+        type,
+        color,
+        initial_balance: Number(initialBalance) || 0,
+        card_network: isCard ? cardNetwork : null,
+      }
+
+      const { error } = editingId
+        ? await supabase.from('wallets').update(payload).eq('id', editingId)
+        : await supabase.from('wallets').insert([{ ...payload, user_id: user.id }])
 
       if (!error) {
-        setName('')
-        setInitialBalance('')
+        resetForm()
         await loadWallets()
         if (onWalletsUpdated) onWalletsUpdated()
       } else {
-        alert('Error al crear la billetera: ' + error.message)
-        console.error('Error creando billetera:', error)
+        alert(`Error al ${editingId ? 'editar' : 'crear'} la billetera: ` + error.message)
+        console.error(`Error ${editingId ? 'editando' : 'creando'} billetera:`, error)
       }
     }
     setSubmitting(false)
@@ -126,6 +146,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     ) {
       const { error } = await supabase.from('wallets').delete().eq('id', id)
       if (!error) {
+        if (editingId === id) resetForm()
         await loadWallets()
         if (onWalletsUpdated) onWalletsUpdated()
       } else {
@@ -166,8 +187,17 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         <p className="text-xs font-semibold text-rose-600">{loadError}</p>
       )}
 
-      {/* Formulario de alta */}
-      <form onSubmit={handleAddWallet} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+      {editingId && (
+        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 text-xs font-bold px-3.5 py-2 rounded-xl">
+          <span>Editando &quot;{name}&quot;</span>
+          <button onClick={resetForm} className="flex items-center gap-1 hover:underline cursor-pointer">
+            <X size={12} /> Cancelar
+          </button>
+        </div>
+      )}
+
+      {/* Formulario de alta / edición */}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
           placeholder="Nombre"
@@ -219,7 +249,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
           disabled={submitting}
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition shadow-sm flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
         >
-          <Plus size={16} /> {submitting ? 'Guardando...' : 'Agregar'}
+          <Plus size={16} /> {submitting ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar'}
         </button>
       </form>
 
@@ -273,6 +303,13 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                   >
                     {isPrivate ? '••••••' : formatAmount(w.balance)}
                   </span>
+                  <button
+                    onClick={() => startEditing(w)}
+                    className="text-gray-400 hover:text-indigo-600 transition p-1 cursor-pointer"
+                    title="Editar billetera"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     onClick={() => handleDeleteWallet(w.id)}
                     className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"

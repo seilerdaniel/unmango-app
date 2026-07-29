@@ -87,4 +87,35 @@ describe('WalletManager', () => {
     expect(insertedRow).toHaveProperty('type')
     expect(insertedRow).toHaveProperty('initial_balance')
   })
+
+  it('el botón Editar precarga el formulario y guarda con update() en vez de insert()', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: { wallets: { data: [WALLET_ROW], error: null } },
+        rpcResults: {
+          get_wallet_balances: { data: [{ wallet_id: 'wallet-1', balance: 4500 }], error: null },
+        },
+      })
+    )
+
+    renderWithProviders()
+
+    const editButton = await screen.findByTitle('Editar billetera')
+    await userEvent.click(editButton)
+
+    expect(screen.getByDisplayValue('Mercado Pago')).toBeInTheDocument()
+
+    const submitButton = screen.getByRole('button', { name: /guardar cambios/i })
+    await userEvent.click(submitButton)
+
+    await waitFor(() => {
+      const walletBuilders = supabaseMock.from.mock.results
+        .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+        .map((r) => r.value)
+      const updatedBuilder = walletBuilders.find((b) => b.update.mock.calls.length > 0)
+      expect(updatedBuilder).toBeDefined()
+      expect(updatedBuilder!.insert).not.toHaveBeenCalled()
+    })
+  })
 })

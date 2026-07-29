@@ -778,5 +778,67 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 **⚠️ 2 SQL nuevos para correr** (después de todos los anteriores, en
 este orden): `net_worth_snapshots.sql` → `telegram_links.sql`.
 
+## ✅ Ronda de nuevos pedidos (sección Servicios/Alquiler, edición, layout)
+
+- [x] **Sección "Servicios y Alquiler"** separada de Suscripciones —
+  `supabase/recurring_kind_and_frequency.sql` agrega `expense_kind`
+  ('subscription' | 'utility_rent') a `recurring_expenses`.
+  `RecurringManager.tsx` ahora recibe una prop `kind` y filtra/renderiza
+  según corresponda — misma mecánica (vencimientos, billetera
+  vinculada, pago, edición) para las dos secciones, sin duplicar
+  código. `page.tsx` renderiza el componente dos veces.
+
+- [x] **Mensual/Anual en gastos fijos** — mismo SQL agrega
+  `billing_frequency` y `billing_month`. `daysUntilNextBilling()` se
+  extrajo a `src/lib/recurringBilling.ts` (antes vivía adentro del
+  componente, no se podía testear) y ahora soporta ambas frecuencias —
+  8 tests. `monthlyEquivalentAmount()` prorratea los gastos anuales
+  (÷12) para que un seguro anual no pese como si fuera un gasto
+  mensual completo en "Fijo Comprometido /mes" ni en la Proyección a
+  Fin de Mes (se corrigió `MonthEndProjection.tsx` de paso, que
+  tampoco reconocía el prefijo nuevo `[Servicio/Alquiler]`).
+
+- [x] **Editar billeteras existentes** (nombre, tipo, saldo inicial,
+  color, marca de tarjeta) — `WalletManager.tsx` con el mismo patrón de
+  edición que ya tenía `RecurringManager` (botón lápiz, precarga el
+  formulario, "Guardar cambios" hace `update()`). Test nuevo.
+
+- [x] **Selector de íconos en columna vertical** — causa: el panel del
+  popover (`PopoverPicker.tsx`) no tenía un ancho explícito, así que en
+  ciertos contextos colapsaba y el `flex-wrap` de los íconos terminaba
+  apilando todo en una sola columna. Se le puso un ancho mínimo/máximo
+  explícito al panel, y `IconPicker.tsx` pasó a un grid de 6 columnas
+  fijo (más predecible que `flex-wrap` cuando el ancho disponible es
+  ambiguo).
+
+- [x] **Header desbordando en mobile** — el header tenía 5 botones
+  (tema, OLED, privacidad, compartir, salir) en una sola fila sin
+  permitir que se acomodaran, más el logo/título — en pantallas
+  angostas esto se desbordaba. Se cambió a `flex-col sm:flex-row` (en
+  mobile el logo y los botones quedan en líneas separadas) más
+  `flex-wrap` en el grupo de botones, y el texto de "Compartir balance"
+  ahora se oculta en mobile (queda solo el ícono, igual que ya hacía el
+  botón de privacidad).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**29 archivos, 139 tests**, todos pasando).
+
+**⚠️ 1 SQL nuevo para correr**: `recurring_kind_and_frequency.sql`
+(después de todos los anteriores).
+
+### 📌 Pendiente de esta ronda (quedó para la próxima tanda)
+
+- **Sección Deudas y Préstamos** — todavía no se diseñó ni implementó.
+- **Sincronizar con Calendario + notificaciones** — necesita definir
+  el enfoque (¿exportar archivo `.ics`? ¿integrar con Google Calendar,
+  que requiere que el usuario configure OAuth como con el login
+  social? ¿notificaciones push del navegador, más simples pero solo
+  funcionan con la app abierta/en background reciente?) antes de
+  empezar a construir.
+- **Recordatorio pendiente para el usuario**: retomar el troubleshooting
+  del bot de Telegram (`getWebhookInfo`, revisar logs de la Edge
+  Function) la próxima vez que esté en la computadora.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

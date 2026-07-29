@@ -87,7 +87,7 @@ export default function ShareBalanceCard({ balance, totalIncome, totalExpense }:
         onClick={() => setIsOpen(true)}
         className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold px-3 py-2 rounded-xl transition cursor-pointer"
       >
-        <Share2 size={14} /> Compartir balance
+        <Share2 size={14} /> <span className="hidden sm:inline">Compartir balance</span>
       </button>
 
       {isOpen && (

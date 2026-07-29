@@ -9,7 +9,7 @@ interface IconPickerProps {
 
 export default function IconPicker({ value, onChange }: IconPickerProps) {
   return (
-    <div className="flex items-center gap-1 flex-wrap max-w-xs">
+    <div className="grid grid-cols-6 gap-1">
       {Object.entries(CATEGORY_ICONS).map(([name, Icon]) => (
         <button
           key={name}

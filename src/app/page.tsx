@@ -235,7 +235,7 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50/60 dark:bg-gray-950 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header con botón de privacidad y tema */}
-        <header className="flex justify-between items-center bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-3xl">🥭</span>
             <div>
@@ -244,7 +244,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Ayuda de atajos de teclado (solo desktop, no compite por espacio en mobile) */}
             <div
               className="hidden lg:flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 font-medium mr-1"
