@@ -6,6 +6,7 @@ import { RecurringExpense } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle } from 'lucide-react'
+import { applyTax } from '@/lib/applyTax'
 
 interface RecurringManagerProps {
   onTransactionAdded?: () => void
@@ -52,6 +53,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const [billingDay, setBillingDay] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [membershipType, setMembershipType] = useState('')
+  const [taxPercentage, setTaxPercentage] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -128,7 +132,10 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         currency,
         billing_day: Number(billingDay),
         category_id: categoryId || null,
-        is_active: true
+        is_active: true,
+        payment_method: paymentMethod || null,
+        membership_type: membershipType || null,
+        tax_percentage: Number(taxPercentage) || 0,
       }
     ])
 
@@ -138,6 +145,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       setBillingDay('')
       setCategoryId('')
       setCurrency('ARS')
+      setPaymentMethod('')
+      setMembershipType('')
+      setTaxPercentage('')
       await reloadData()
     } else {
       alert('Error al agregar la suscripción: ' + error.message)
@@ -182,10 +192,15 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const handleImpactTransaction = async (item: RecurringExpense) => {
     if (!item.id) return
 
+    // El monto cargado es el precio de lista, que en general NO incluye
+    // impuestos (IVA, impuesto PAIS en suscripciones del exterior, etc.)
+    // — se aplica el % configurado para registrar el gasto real.
+    const taxedAmount = applyTax(Number(item.amount), item.tax_percentage ?? 0)
+
     // Si es en USD necesitamos una cotización real para calcular el ARS,
     // en vez del multiplicador fijo *1000 que quedaba desactualizado.
     let exchangeRate: number | null = null
-    let amountArs = Number(item.amount)
+    let amountArs = taxedAmount
 
     if (item.currency === 'USD') {
       const rateInput = window.prompt(
@@ -198,7 +213,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         alert('Cotización inválida. No se registró el pago.')
         return
       }
-      amountArs = Number(item.amount) * exchangeRate
+      amountArs = taxedAmount * exchangeRate
     }
 
     setImpactingId(item.id)
@@ -217,9 +232,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         user_id: user.id,
         type: 'expense',
         description: `[Suscripción] ${item.title}`,
-        payment_method: 'Transferencia',
+        payment_method: item.payment_method || 'Transferencia',
         is_usd: item.currency === 'USD',
-        amount_usd: item.currency === 'USD' ? Number(item.amount) : null,
+        amount_usd: item.currency === 'USD' ? taxedAmount : null,
         exchange_rate: exchangeRate,
         amount_ars: amountArs,
         category_id: item.category_id || null,
@@ -239,7 +254,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
   const totalFixedARS = recurring
     .filter((r) => r.is_active && r.currency === 'ARS')
-    .reduce((acc, r) => acc + Number(r.amount), 0)
+    .reduce((acc, r) => acc + applyTax(Number(r.amount), r.tax_percentage ?? 0), 0)
 
   const dueSoon = recurring
     .filter((r) => r.is_active)
@@ -340,6 +355,39 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           ))}
         </select>
 
+        <select
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="">Medio de pago (opcional)</option>
+          <option value="Billetera Virtual">Billetera Virtual</option>
+          <option value="Efectivo">Efectivo</option>
+          <option value="Transferencia">Transferencia Bancaria</option>
+          <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+          <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+        </select>
+
+        <input
+          type="text"
+          placeholder="Membresía"
+          title="Ej: Premium, Familiar, Individual"
+          value={membershipType}
+          onChange={(e) => setMembershipType(e.target.value)}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
+        <input
+          type="number"
+          placeholder="Impuestos %"
+          title="% que el precio NO incluye (ej. IVA, impuesto PAIS)"
+          value={taxPercentage}
+          onChange={(e) => setTaxPercentage(e.target.value)}
+          min="0"
+          step="any"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
         <button
           type="submit"
           disabled={submitting}
@@ -348,6 +396,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           <Plus size={16} /> {submitting ? 'Guardando...' : 'Agregar'}
         </button>
       </form>
+
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
+        El monto que cargás es el precio de lista — muchas suscripciones (sobre todo pagadas en
+        USD desde Argentina) suman impuestos aparte. Si cargás el % de impuestos, el total real se
+        calcula solo y se usa al registrar el pago.
+      </p>
 
       {/* Lista de Suscripciones */}
       {recurring.length === 0 ? (
@@ -379,7 +433,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                 </button>
 
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{item.title}</span>
                     {item.categories && (
                       <span
@@ -389,10 +443,16 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                         {item.categories.name}
                       </span>
                     )}
+                    {item.membership_type && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300">
+                        {item.membership_type}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
+                  <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5 flex-wrap">
                     <Calendar size={12} />
                     <span>Vence el día {item.billing_day} de cada mes</span>
+                    {item.payment_method && <span>· {item.payment_method}</span>}
                     {item.is_active && daysUntilNextBilling(item.billing_day) <= DUE_SOON_DAYS && (
                       <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
                         {daysUntilNextBilling(item.billing_day) <= 0
@@ -405,13 +465,22 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                <span className="text-xs font-extrabold text-gray-900 dark:text-gray-100">
-                  {isPrivate
-                    ? '••••••'
-                    : item.currency === 'USD'
-                    ? `USD $${item.amount}`
-                    : formatAmount(item.amount)}
-                </span>
+                <div className="text-right">
+                  <span className="text-xs font-extrabold text-gray-900 dark:text-gray-100 block">
+                    {isPrivate
+                      ? '••••••'
+                      : item.currency === 'USD'
+                      ? `USD $${item.amount}`
+                      : formatAmount(item.amount)}
+                  </span>
+                  {!isPrivate && item.tax_percentage > 0 && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold block">
+                      c/imp: {item.currency === 'USD'
+                        ? `USD $${applyTax(Number(item.amount), item.tax_percentage).toFixed(2)}`
+                        : formatAmount(applyTax(Number(item.amount), item.tax_percentage))}
+                    </span>
+                  )}
+                </div>
 
                 <div className="flex items-center gap-1.5">
                   <button

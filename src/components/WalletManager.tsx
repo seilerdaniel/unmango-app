@@ -213,24 +213,28 @@ export default function WalletManager() {
             return (
               <div
                 key={w.id}
-                className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40"
+                className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2.5"
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className="p-2 rounded-xl"
+                    className="p-2 rounded-xl shrink-0"
                     style={{ backgroundColor: `${w.color || '#6366f1'}18`, color: w.color || '#6366f1' }}
                   >
                     <Icon size={18} />
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{w.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate" title={w.name}>
+                      {w.name}
+                    </p>
                     <p className="text-[11px] text-gray-400 font-medium">
                       {WALLET_TYPES.find((t) => t.value === w.type)?.label ?? 'Otra'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Saldo en su propia línea, alineado bajo el nombre — así
+                    nunca se aprieta contra el nombre en cards angostas. */}
+                <div className="flex items-center justify-between pl-[44px]">
                   <span
                     className={`text-sm font-extrabold ${w.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-rose-600'}`}
                   >

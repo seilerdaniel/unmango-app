@@ -157,6 +157,9 @@ export interface Database {
           billing_day: number
           is_active: boolean
           created_at: string
+          payment_method: string | null
+          membership_type: string | null
+          tax_percentage: number
         }
         Insert: {
           id?: string
@@ -168,6 +171,9 @@ export interface Database {
           billing_day: number
           is_active?: boolean
           created_at?: string
+          payment_method?: string | null
+          membership_type?: string | null
+          tax_percentage?: number
         }
         Update: {
           id?: string
@@ -179,6 +185,9 @@ export interface Database {
           billing_day?: number
           is_active?: boolean
           created_at?: string
+          payment_method?: string | null
+          membership_type?: string | null
+          tax_percentage?: number
         }
         Relationships: [
           {

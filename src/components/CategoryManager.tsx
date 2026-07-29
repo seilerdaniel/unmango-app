@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, createElement } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import ColorPicker from '@/components/ColorPicker'
 import IconPicker from '@/components/IconPicker'
+import PopoverPicker from '@/components/PopoverPicker'
 import { getCategoryIcon } from '@/lib/categoryIcons'
 import { SUGGESTED_CATEGORIES } from '@/lib/suggestedCategories'
-import { Tag, Plus, Trash2, Sparkles } from 'lucide-react'
+import { Tag, Plus, Trash2, Sparkles, Palette } from 'lucide-react'
 
 interface CategoryManagerProps {
   onCategoriesUpdated?: () => void
@@ -117,37 +118,46 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
         <p className="text-xs font-semibold text-rose-600">{categoriesError}</p>
       )}
 
-      {/* Formulario Nueva Categoría */}
-      <form onSubmit={handleAddCategory} className="space-y-2.5">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nueva categoría"
-            title="Ej: Salidas"
-            required
-            className="flex-1 px-3.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs placeholder:!text-gray-400 dark:placeholder:!text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50"
-          />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
-          >
-            <Plus size={16} /> Crear
-          </button>
-        </div>
+      {/* Formulario Nueva Categoría — el color y el ícono se eligen desde
+          menúes desplegables compactos en vez de estar sueltos ocupando
+          todo el ancho. */}
+      <form onSubmit={handleAddCategory} className="flex items-center gap-2">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nueva categoría"
+          title="Ej: Salidas"
+          required
+          className="flex-1 min-w-0 px-3.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs placeholder:!text-gray-400 dark:placeholder:!text-gray-500 outline-none focus:ring-2 focus:ring-amber-500/50"
+        />
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 shrink-0">Color:</span>
-            <ColorPicker value={color} onChange={setColor} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 shrink-0">Ícono:</span>
-            <IconPicker value={icon} onChange={setIcon} />
-          </div>
-        </div>
+        <PopoverPicker
+          label="Elegir color"
+          trigger={
+            <>
+              <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              <Palette size={12} className="text-gray-400" />
+            </>
+          }
+        >
+          <ColorPicker value={color} onChange={setColor} />
+        </PopoverPicker>
+
+        <PopoverPicker
+          label="Elegir ícono"
+          trigger={createElement(getCategoryIcon(icon), { size: 16, className: 'text-gray-600 dark:text-gray-300' })}
+        >
+          <IconPicker value={icon} onChange={setIcon} />
+        </PopoverPicker>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl text-xs transition flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+        >
+          <Plus size={16} /> Crear
+        </button>
       </form>
 
       {/* Lista de Categorías */}

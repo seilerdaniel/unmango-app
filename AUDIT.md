@@ -543,5 +543,60 @@ ya se implementó para categorías sugeridas). No se implementó en esta
 sesión porque el usuario lo planteó explícitamente como una idea a
 futuro, no un pedido para ahora — queda anotado para cuando se priorice.
 
+## ✅ Segunda vuelta de auditoría UX/UI
+
+- [x] **Controles nativos del navegador (flechas de número, dropdown de
+  select) no seguían el tema oscuro** — causa raíz: `color-scheme`
+  estaba fijo en `light` en `globals.css`, así que el navegador pintaba
+  esos controles (flechas, el globo nativo "Completa este campo") con
+  estética clara sin importar el tema activo de la app. Se agregó
+  `html.dark { color-scheme: dark; }`. Además se ocultaron las flechas
+  nativas de `<input type="number">` (inconsistentes entre navegadores,
+  chocaban visualmente con el globo de validación) y se le puso una
+  flecha propia a todos los `<select>` de la app — arreglado en un solo
+  lugar (CSS global), sin tocar cada formulario uno por uno. La lista de
+  opciones desplegada de un `<select>` la sigue pintando el sistema
+  operativo — eso no se puede re-estilar con CSS en ningún sitio web, no
+  es una limitación de esta app en particular.
+
+- [x] **Calculadora normal** (`BasicCalculator.tsx`) — botón flotante
+  gris apilado arriba del verde de ARS/USD Blue, para que se distingan a
+  simple vista. 4 operaciones básicas. `applyOperator()` pura y testeada
+  (5 tests) + 2 tests de interacción (calcula 2+3=5, el botón "C"
+  reinicia).
+
+- [x] **Mis Categorías: íconos y colores en un menú compacto** — antes
+  el selector de íconos (16 opciones) estaba siempre visible ocupando
+  una fila entera. Se armó `PopoverPicker.tsx` (genérico, se cierra al
+  clickear afuera) y ahora tanto el color como el ícono son un botón
+  chico que abre un panel al tocarlo.
+
+- [x] **Suscripciones y Gastos Fijos** — se agregó medio de pago (mismo
+  set de opciones que `TransactionForm`), tipo de membresía (texto
+  libre, ej. "Premium", "Familiar"), y % de impuestos que el precio de
+  lista NO incluye (con una nota aclaratoria visible en el formulario).
+  El botón "Pagar" ahora registra el monto **con** impuestos incluidos
+  (el gasto real que sale de la cuenta), y "Fijo Comprometido" también
+  los contempla. `applyTax()` pura y testeada (4 tests).
+  **⚠️ Acción tuya**: correr `supabase/recurring_extra_fields.sql`.
+
+- [x] **Cards de "Mis Billeteras" con el saldo apretado contra el
+  nombre** (a partir de una captura del usuario) — el layout ponía
+  ícono+nombre a la izquierda y saldo+borrar a la derecha en la MISMA
+  línea, dentro de una card angosta (grid de 2 columnas dentro de una
+  barra lateral ya de por sí estrecha). Con nombres más largos como
+  "Credicoop" no entraba y se apretaba todo. Se rediseñó apilando el
+  saldo en su propia línea, alineado bajo el nombre — nunca se vuelve a
+  apretar sin importar el ancho de la card, y el nombre trunca con
+  `title` (tooltip) en vez de desbordar si es muy largo.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+resolver además un error nuevo de `react-hooks/static-components` en
+`CategoryManager`, causado por asignar el ícono elegido a una variable
+con mayúscula y usarla como JSX; se resolvió con `createElement`
+directo), `npx eslint .` (misma línea base pre-existente de siempre,
+nada nuevo), `npx vitest run` (**23 archivos, 97 tests**, todos
+pasando).
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._

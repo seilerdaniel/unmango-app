@@ -32,6 +32,7 @@ import SavingsGoals from "@/components/SavingsGoals";
 import ImportTransactions from "@/components/ImportTransactions";
 import ZeroSpendStreak from "@/components/ZeroSpendStreak";
 import ArsUsdCalculator from "@/components/ArsUsdCalculator";
+import BasicCalculator from "@/components/BasicCalculator";
 import BackupRestore from "@/components/BackupRestore";
 import BudgetRule502030 from "@/components/BudgetRule502030";
 import MonthEndProjection from "@/components/MonthEndProjection";
@@ -456,6 +457,7 @@ export default function Home() {
       </div>
 
       <ArsUsdCalculator />
+      <BasicCalculator />
     </main>
   );
 }

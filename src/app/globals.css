@@ -21,3 +21,41 @@ html.dark.oled body,
 html.dark.oled main {
   background-color: #000000 !important;
 }
+
+/* El navegador pinta los controles nativos (flechas de <input type=number>,
+   el globo de validación "Completa este campo", scrollbars) según
+   color-scheme. Estaba fijo en "light", así que se veían con estética
+   clara incluso en modo oscuro — se ve mal y desentona. Ahora sigue al
+   modo activo. */
+html.dark {
+  color-scheme: dark;
+}
+
+/* <input type="number">: las flechas nativas del navegador se ven
+   inconsistentes entre navegadores y chocan visualmente con el globo de
+   validación nativo ("Completa este campo"). Se ocultan y se maneja el
+   incremento/decremento con el teclado (flechas arriba/abajo) o
+   escribiendo directo, que es como la mayoría los usa igual. */
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* <select>: se saca la flechita nativa (que no sigue el tema) y se pone
+   una propia consistente en todos los selects de la app. La lista
+   desplegada en sí (las opciones) la sigue pintando el sistema
+   operativo/navegador — eso no se puede re-estilar con CSS en ningún
+   sitio, es una limitación de la plataforma, no de esta app. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239ca3af'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 14px;
+  padding-right: 2rem !important;
+}
