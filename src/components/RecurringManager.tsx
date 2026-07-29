@@ -5,25 +5,43 @@ import { supabase } from '@/lib/supabaseClient'
 import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
-import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
+import { Repeat, Home, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
+import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
 
 interface RecurringManagerProps {
+  /** "subscription" = Suscripciones (Netflix, Spotify...), "utility_rent" = Servicios y Alquiler (luz, gas, alquiler). Misma mecánica, dos secciones separadas para no mezclarlas. */
+  kind: 'subscription' | 'utility_rent'
   onTransactionAdded?: () => void
 }
 
-// Ventana dentro de la cual avisamos que una suscripción está por vencer.
+const KIND_CONFIG = {
+  subscription: {
+    title: 'Suscripciones y Gastos Fijos',
+    icon: Repeat,
+    accent: 'indigo',
+    emptyMessage: 'No tenés suscripciones o gastos fijos registrados.',
+    namePlaceholder: 'Servicio',
+    nameTitle: 'Ej: Netflix',
+  },
+  utility_rent: {
+    title: 'Servicios y Alquiler',
+    icon: Home,
+    accent: 'teal',
+    emptyMessage: 'No tenés servicios ni alquiler registrados todavía.',
+    namePlaceholder: 'Servicio/Alquiler',
+    nameTitle: 'Ej: Luz, Gas, Alquiler',
+  },
+} as const
+
+// Ventana dentro de la cual avisamos que algo está por vencer.
 // Nota de alcance: esto es un aviso DENTRO de la app (no un email/push).
-// Un recordatorio real que llegue aunque no abras UnMango necesitaría un
-// cron en Supabase (Edge Function + pg_cron) más un servicio de email —
-// eso requiere credenciales que no tenemos en esta sesión. Ver AUDIT.md.
+// Para las suscripciones ya existe además un recordatorio real por
+// email (ver supabase/functions/send-renewal-reminders/).
 const DUE_SOON_DAYS = 7
 
 const PAYMENT_METHODS = ['Billetera Virtual', 'Efectivo', 'Transferencia', 'Tarjeta de Crédito', 'Tarjeta de Débito']
 
-// A qué tipo(s) de billetera corresponde cada medio de pago, para
-// filtrar el selector de "cuál billetera puntual" y no mostrar, por
-// ejemplo, tarjetas de crédito cuando el medio de pago es "Efectivo".
 const WALLET_TYPES_BY_PAYMENT_METHOD: Record<string, Wallet['type'][]> = {
   'Billetera Virtual': ['virtual_wallet'],
   Efectivo: ['cash'],
@@ -32,36 +50,12 @@ const WALLET_TYPES_BY_PAYMENT_METHOD: Record<string, Wallet['type'][]> = {
   'Tarjeta de Débito': ['debit_card'],
 }
 
-/**
- * Calcula cuántos días faltan para el próximo vencimiento de una
- * suscripción, dado el día de facturación (1-31). Si el mes actual no
- * tiene ese día (ej. 31 en febrero), usa el último día del mes.
- */
-function daysUntilNextBilling(billingDay: number): number {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const clampToLastDayOfMonth = (year: number, month: number, day: number) => {
-    const lastDay = new Date(year, month + 1, 0).getDate()
-    return Math.min(day, lastDay)
-  }
-
-  const year = today.getFullYear()
-  const month = today.getMonth()
-
-  let nextBilling = new Date(year, month, clampToLastDayOfMonth(year, month, billingDay))
-  if (nextBilling < today) {
-    nextBilling = new Date(year, month + 1, clampToLastDayOfMonth(year, month + 1, billingDay))
-  }
-
-  const diffMs = nextBilling.getTime() - today.getTime()
-  return Math.round(diffMs / (1000 * 60 * 60 * 24))
-}
-
 const emptyForm = {
   title: '',
   amount: '',
   billingDay: '',
+  billingMonth: '1',
+  billingFrequency: 'monthly' as BillingFrequency,
   categoryId: '',
   currency: 'ARS' as 'ARS' | 'USD',
   paymentMethod: '',
@@ -70,9 +64,12 @@ const emptyForm = {
   taxPercentage: '',
 }
 
-export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
+export default function RecurringManager({ kind, onTransactionAdded }: RecurringManagerProps) {
+  const config = KIND_CONFIG[kind]
+  const KindIcon = config.icon
+
   const { categories } = useCategories()
-  const [recurring, setRecurring] = useState<RecurringExpense[]>([])
+  const [items, setItems] = useState<RecurringExpense[]>([])
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -94,7 +91,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     if (data) setWallets(data)
   }
 
-  // Carga inicial segura para React 19
   useEffect(() => {
     let isMounted = true
 
@@ -103,46 +99,46 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const [{ data: recData }] = await Promise.all([
+        const [{ data: itemsData }] = await Promise.all([
           supabase
             .from('recurring_expenses')
             .select('*, categories(*)')
             .eq('user_id', user.id)
+            .eq('expense_kind', kind)
             .order('billing_day', { ascending: true }),
           loadWallets(),
         ])
 
-        if (isMounted && recData) setRecurring(recData)
+        if (isMounted && itemsData) setItems(itemsData)
       } catch (err) {
-        console.error('Error al cargar gastos recurrentes:', err)
+        console.error(`Error al cargar ${config.title}:`, err)
       } finally {
-        if (isMounted) {
-          setLoading(false)
-        }
+        if (isMounted) setLoading(false)
       }
     }
 
     loadData()
-
     return () => {
       isMounted = false
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind])
 
   const reloadData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: recData } = await supabase
+      const { data: itemsData } = await supabase
         .from('recurring_expenses')
         .select('*, categories(*)')
         .eq('user_id', user.id)
+        .eq('expense_kind', kind)
         .order('billing_day', { ascending: true })
 
-      if (recData) setRecurring(recData)
+      if (itemsData) setItems(itemsData)
     } catch (err) {
-      console.error('Error recargando suscripciones:', err)
+      console.error(`Error recargando ${config.title}:`, err)
     }
   }
 
@@ -157,6 +153,8 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       title: item.title,
       amount: String(item.amount),
       billingDay: String(item.billing_day),
+      billingMonth: String(item.billing_month ?? 1),
+      billingFrequency: item.billing_frequency,
       categoryId: item.category_id || '',
       currency: item.currency,
       paymentMethod: item.payment_method || '',
@@ -164,9 +162,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       membershipType: item.membership_type || '',
       taxPercentage: item.tax_percentage ? String(item.tax_percentage) : '',
     })
-    // Llevamos la vista arriba, al formulario, para que quede claro que
-    // se está editando (si no, el usuario no ve el cambio si la lista es
-    // larga y el formulario quedó scrolleado fuera de vista).
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -176,7 +171,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
     setSubmitting(true)
     const { data: { user } } = await supabase.auth.getUser()
-
     if (!user) {
       setSubmitting(false)
       return
@@ -187,11 +181,14 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       amount: Number(form.amount),
       currency: form.currency,
       billing_day: Number(form.billingDay),
+      billing_frequency: form.billingFrequency,
+      billing_month: form.billingFrequency === 'annual' ? Number(form.billingMonth) : null,
       category_id: form.categoryId || null,
       payment_method: form.paymentMethod || null,
       wallet_id: form.walletId || null,
       membership_type: form.membershipType || null,
       tax_percentage: Number(form.taxPercentage) || 0,
+      expense_kind: kind,
     }
 
     const { error } = editingId
@@ -202,29 +199,20 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       resetForm()
       await reloadData()
     } else {
-      alert(`Error al ${editingId ? 'editar' : 'agregar'} la suscripción: ` + error.message)
-      console.error(`Error ${editingId ? 'editando' : 'agregando'} suscripción:`, error)
+      alert(`Error al ${editingId ? 'editar' : 'agregar'}: ` + error.message)
+      console.error(`Error ${editingId ? 'editando' : 'agregando'}:`, error)
     }
-
     setSubmitting(false)
   }
 
   const handleToggleActive = async (item: RecurringExpense) => {
     if (!item.id) return
     const newStatus = !item.is_active
+    setItems((prev) => prev.map((r) => (r.id === item.id ? { ...r, is_active: newStatus } : r)))
 
-    // Optimistic UI Update
-    setRecurring((prev) =>
-      prev.map((r) => (r.id === item.id ? { ...r, is_active: newStatus } : r))
-    )
-
-    const { error } = await supabase
-      .from('recurring_expenses')
-      .update({ is_active: newStatus })
-      .eq('id', item.id)
-
+    const { error } = await supabase.from('recurring_expenses').update({ is_active: newStatus }).eq('id', item.id)
     if (error) {
-      alert('Error al actualizar la suscripción: ' + error.message)
+      alert('Error al actualizar: ' + error.message)
       console.error('Error actualizando estado:', error)
       await reloadData()
     }
@@ -233,34 +221,25 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
     if (!error) {
-      setRecurring((prev) => prev.filter((r) => r.id !== id))
+      setItems((prev) => prev.filter((r) => r.id !== id))
       if (editingId === id) resetForm()
     } else {
-      alert('Error al eliminar la suscripción: ' + error.message)
-      console.error('Error eliminando suscripción:', error)
+      alert('Error al eliminar: ' + error.message)
+      console.error('Error eliminando:', error)
     }
   }
 
-  // Registrar la suscripción como un gasto real en las transacciones
   const handleImpactTransaction = async (item: RecurringExpense) => {
     if (!item.id) return
 
-    // El monto cargado es el precio de lista, que en general NO incluye
-    // impuestos (IVA, impuesto PAIS en suscripciones del exterior, etc.)
-    // — se aplica el % configurado para registrar el gasto real.
     const taxedAmount = applyTax(Number(item.amount), item.tax_percentage ?? 0)
 
-    // Si es en USD necesitamos una cotización real para calcular el ARS,
-    // en vez del multiplicador fijo *1000 que quedaba desactualizado.
     let exchangeRate: number | null = null
     let amountArs = taxedAmount
 
     if (item.currency === 'USD') {
-      const rateInput = window.prompt(
-        `Cotización actual del dólar para registrar "${item.title}":`,
-        '1200'
-      )
-      if (rateInput === null) return // el usuario canceló
+      const rateInput = window.prompt(`Cotización actual del dólar para registrar "${item.title}":`, '1200')
+      if (rateInput === null) return
       exchangeRate = Number(rateInput)
       if (!exchangeRate || exchangeRate <= 0) {
         alert('Cotización inválida. No se registró el pago.')
@@ -270,23 +249,18 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     }
 
     setImpactingId(item.id)
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setImpactingId(null)
       return
     }
 
-    // Campos alineados con el tipo Transaction / schema real de la tabla
-    // (antes se mandaban "title" y "notes", que no existen, y faltaban
-    // "description", "payment_method" e "is_usd", que son requeridos).
-    // wallet_id se copia de la suscripción para que el pago también
-    // impacte el saldo de la billetera/tarjeta correspondiente.
+    const label = kind === 'subscription' ? 'Suscripción' : 'Servicio/Alquiler'
     const { error } = await supabase.from('transactions').insert([
       {
         user_id: user.id,
         type: 'expense',
-        description: `[Suscripción] ${item.title}`,
+        description: `[${label}] ${item.title}`,
         payment_method: item.payment_method || 'Transferencia',
         wallet_id: item.wallet_id || null,
         is_usd: item.currency === 'USD',
@@ -294,7 +268,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         exchange_rate: exchangeRate,
         amount_ars: amountArs,
         category_id: item.category_id || null,
-      }
+      },
     ])
 
     if (!error) {
@@ -303,31 +277,28 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       alert('Error al registrar el pago: ' + error.message)
       console.error('Error al registrar transacción:', error)
     }
-
     setImpactingId(null)
   }
 
-  const totalFixedARS = recurring
+  const totalFixedARS = items
     .filter((r) => r.is_active && r.currency === 'ARS')
-    .reduce((acc, r) => acc + applyTax(Number(r.amount), r.tax_percentage ?? 0), 0)
+    .reduce((acc, r) => acc + monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency), 0)
 
-  const dueSoon = recurring
+  const dueSoon = items
     .filter((r) => r.is_active)
-    .map((r) => ({ ...r, daysLeft: daysUntilNextBilling(r.billing_day) }))
+    .map((r) => ({ ...r, daysLeft: daysUntilNextBilling(r.billing_day, r.billing_frequency, r.billing_month) }))
     .filter((r) => r.daysLeft <= DUE_SOON_DAYS)
     .sort((a, b) => a.daysLeft - b.daysLeft)
 
-  // Billeteras relevantes para el medio de pago elegido en el formulario
-  // (ej. si elegiste "Efectivo", solo billeteras de tipo cash).
   const relevantWalletTypes = WALLET_TYPES_BY_PAYMENT_METHOD[form.paymentMethod]
-  const relevantWallets = relevantWalletTypes
-    ? wallets.filter((w) => relevantWalletTypes.includes(w.type))
-    : []
+  const relevantWallets = relevantWalletTypes ? wallets.filter((w) => relevantWalletTypes.includes(w.type)) : []
+
+  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
-        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando suscripciones...</p>
+        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando {config.title.toLowerCase()}...</p>
       </div>
     )
   }
@@ -336,11 +307,11 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Repeat className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Suscripciones y Gastos Fijos</h2>
+          <KindIcon className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{config.title}</h2>
         </div>
         <div className="text-right">
-          <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Fijo Comprometido</span>
+          <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Fijo Comprometido /mes</span>
           <span className="text-xs font-black text-indigo-700 dark:text-indigo-400">
             {isPrivate ? '••••••' : formatAmount(totalFixedARS)}
           </span>
@@ -351,10 +322,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-300 text-xs font-semibold px-3.5 py-2.5 rounded-xl">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <span>
-            Vencen pronto:{' '}
-            {dueSoon
-              .map((r) => `${r.title} (${r.daysLeft <= 0 ? 'hoy' : `en ${r.daysLeft}d`})`)
-              .join(', ')}
+            Vencen pronto: {dueSoon.map((r) => `${r.title} (${r.daysLeft <= 0 ? 'hoy' : `en ${r.daysLeft}d`})`).join(', ')}
           </span>
         </div>
       )}
@@ -368,12 +336,11 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         </div>
       )}
 
-      {/* Formulario de Alta / Edición */}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
           type="text"
-          placeholder="Servicio"
-          title="Ej: Netflix"
+          placeholder={config.namePlaceholder}
+          title={config.nameTitle}
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           required
@@ -401,9 +368,32 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           </select>
         </div>
 
+        <select
+          value={form.billingFrequency}
+          onChange={(e) => setForm((f) => ({ ...f, billingFrequency: e.target.value as BillingFrequency }))}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="monthly">Mensual</option>
+          <option value="annual">Anual</option>
+        </select>
+
+        {form.billingFrequency === 'annual' && (
+          <select
+            value={form.billingMonth}
+            onChange={(e) => setForm((f) => ({ ...f, billingMonth: e.target.value }))}
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {MONTH_NAMES.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m}
+              </option>
+            ))}
+          </select>
+        )}
+
         <input
           type="number"
-          placeholder="Día del mes"
+          placeholder="Día"
           title="Entre 1 y 31"
           value={form.billingDay}
           onChange={(e) => setForm((f) => ({ ...f, billingDay: e.target.value }))}
@@ -439,8 +429,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           ))}
         </select>
 
-        {/* Solo aparece si el medio de pago elegido tiene billeteras
-            creadas de ese tipo (ej. "Efectivo" -> billeteras tipo cash). */}
         {form.paymentMethod && relevantWallets.length > 0 && (
           <select
             value={form.walletId}
@@ -456,14 +444,16 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           </select>
         )}
 
-        <input
-          type="text"
-          placeholder="Membresía"
-          title="Ej: Premium, Familiar, Individual"
-          value={form.membershipType}
-          onChange={(e) => setForm((f) => ({ ...f, membershipType: e.target.value }))}
-          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        {kind === 'subscription' && (
+          <input
+            type="text"
+            placeholder="Membresía"
+            title="Ej: Premium, Familiar, Individual"
+            value={form.membershipType}
+            onChange={(e) => setForm((f) => ({ ...f, membershipType: e.target.value }))}
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        )}
 
         <input
           type="number"
@@ -487,26 +477,15 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
       {form.paymentMethod && relevantWallets.length === 0 && (
         <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
-          No tenés ninguna billetera/cuenta de tipo &quot;{form.paymentMethod}&quot; creada todavía
-          — podés crear una en la sección Billeteras si querés vincular esta suscripción a una
-          cuenta puntual (es opcional).
+          No tenés ninguna billetera/cuenta de tipo &quot;{form.paymentMethod}&quot; creada todavía — es opcional.
         </p>
       )}
 
-      <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
-        El monto que cargás es el precio de lista — muchas suscripciones (sobre todo pagadas en
-        USD desde Argentina) suman impuestos aparte. Si cargás el % de impuestos, el total real se
-        calcula solo y se usa al registrar el pago.
-      </p>
-
-      {/* Lista de Suscripciones */}
-      {recurring.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-4">
-          No tenés suscripciones o gastos fijos registrados.
-        </p>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-4">{config.emptyMessage}</p>
       ) : (
         <div className="space-y-2.5 pt-2">
-          {recurring.map((item) => (
+          {items.map((item) => (
             <div
               key={item.id}
               className={`p-3 rounded-xl border transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${
@@ -523,7 +502,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                       ? 'bg-indigo-100 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400'
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                   }`}
-                  title={item.is_active ? 'Pausar suscripción' : 'Activar suscripción'}
+                  title={item.is_active ? 'Pausar' : 'Activar'}
                 >
                   <Power size={14} />
                 </button>
@@ -544,18 +523,27 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                         {item.membership_type}
                       </span>
                     )}
+                    <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      {item.billing_frequency === 'annual' ? 'Anual' : 'Mensual'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5 flex-wrap">
                     <Calendar size={12} />
-                    <span>Vence el día {item.billing_day} de cada mes</span>
+                    <span>
+                      Vence el {item.billing_day}
+                      {item.billing_frequency === 'annual' && item.billing_month
+                        ? ` de ${MONTH_NAMES[item.billing_month - 1]}`
+                        : ' de cada mes'}
+                    </span>
                     {item.payment_method && <span>· {item.payment_method}</span>}
-                    {item.is_active && daysUntilNextBilling(item.billing_day) <= DUE_SOON_DAYS && (
-                      <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        {daysUntilNextBilling(item.billing_day) <= 0
-                          ? 'Vence hoy'
-                          : `Vence en ${daysUntilNextBilling(item.billing_day)}d`}
-                      </span>
-                    )}
+                    {item.is_active &&
+                      daysUntilNextBilling(item.billing_day, item.billing_frequency, item.billing_month) <= DUE_SOON_DAYS && (
+                        <span className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          {daysUntilNextBilling(item.billing_day, item.billing_frequency, item.billing_month) <= 0
+                            ? 'Vence hoy'
+                            : `Vence en ${daysUntilNextBilling(item.billing_day, item.billing_frequency, item.billing_month)}d`}
+                        </span>
+                      )}
                   </div>
                 </div>
               </div>
@@ -563,15 +551,12 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="text-right">
                   <span className="text-xs font-extrabold text-gray-900 dark:text-gray-100 block">
-                    {isPrivate
-                      ? '••••••'
-                      : item.currency === 'USD'
-                      ? `USD $${item.amount}`
-                      : formatAmount(item.amount)}
+                    {isPrivate ? '••••••' : item.currency === 'USD' ? `USD $${item.amount}` : formatAmount(item.amount)}
                   </span>
                   {!isPrivate && item.tax_percentage > 0 && (
                     <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold block">
-                      c/imp: {item.currency === 'USD'
+                      c/imp:{' '}
+                      {item.currency === 'USD'
                         ? `USD $${applyTax(Number(item.amount), item.tax_percentage).toFixed(2)}`
                         : formatAmount(applyTax(Number(item.amount), item.tax_percentage))}
                     </span>

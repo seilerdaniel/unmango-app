@@ -161,6 +161,9 @@ export interface Database {
           membership_type: string | null
           tax_percentage: number
           wallet_id: string | null
+          expense_kind: 'subscription' | 'utility_rent'
+          billing_frequency: 'monthly' | 'annual'
+          billing_month: number | null
         }
         Insert: {
           id?: string
@@ -176,6 +179,9 @@ export interface Database {
           membership_type?: string | null
           tax_percentage?: number
           wallet_id?: string | null
+          expense_kind?: 'subscription' | 'utility_rent'
+          billing_frequency?: 'monthly' | 'annual'
+          billing_month?: number | null
         }
         Update: {
           id?: string
@@ -191,6 +197,9 @@ export interface Database {
           membership_type?: string | null
           tax_percentage?: number
           wallet_id?: string | null
+          expense_kind?: 'subscription' | 'utility_rent'
+          billing_frequency?: 'monthly' | 'annual'
+          billing_month?: number | null
         }
         Relationships: [
           {

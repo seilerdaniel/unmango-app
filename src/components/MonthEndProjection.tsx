@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { projectMonthEnd } from '@/lib/monthProjection'
+import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
 import { TrendingUp } from 'lucide-react'
 
 export default function MonthEndProjection() {
@@ -30,7 +31,7 @@ export default function MonthEndProjection() {
             .eq('user_id', user.id)
             .eq('type', 'expense')
             .gte('created_at', monthStart),
-          supabase.from('recurring_expenses').select('amount, currency').eq('user_id', user.id).eq('is_active', true),
+          supabase.from('recurring_expenses').select('amount, currency, billing_frequency').eq('user_id', user.id).eq('is_active', true),
         ])
 
         if (trendResult.error) throw trendResult.error
@@ -39,18 +40,19 @@ export default function MonthEndProjection() {
 
         const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
 
-        // Separamos lo que ya vino de "Pagar" una suscripción (fijo,
-        // usa el mismo prefijo que arma RecurringManager) del resto
-        // (variable).
+        // Separamos lo que ya vino de "Pagar" una suscripción o un
+        // servicio/alquiler (fijo, usa el mismo prefijo que arma
+        // RecurringManager) del resto (variable).
         const variableSpendSoFar = (expensesResult.data ?? [])
-          .filter((t) => !t.description?.startsWith('[Suscripción]'))
+          .filter((t) => !t.description?.startsWith('[Suscripción]') && !t.description?.startsWith('[Servicio/Alquiler]'))
           .reduce((acc, t) => acc + Number(t.amount_ars), 0)
 
         // Mismo criterio que "Fijo Comprometido" en Suscripciones: solo
-        // ARS, para no depender de una cotización USD acá.
+        // ARS (para no depender de una cotización USD acá), y los
+        // anuales se prorratean a su equivalente mensual.
         const fixedMonthlyCosts = (recurringResult.data ?? [])
           .filter((r) => r.currency === 'ARS')
-          .reduce((acc, r) => acc + Number(r.amount), 0)
+          .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
         setProjection(
           projectMonthEnd({ variableSpendSoFar, fixedMonthlyCosts, monthlyIncome, dayOfMonth, daysInMonth })
