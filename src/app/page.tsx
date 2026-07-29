@@ -33,6 +33,8 @@ import ImportTransactions from "@/components/ImportTransactions";
 import ZeroSpendStreak from "@/components/ZeroSpendStreak";
 import ArsUsdCalculator from "@/components/ArsUsdCalculator";
 import BasicCalculator from "@/components/BasicCalculator";
+import VoiceExpenseInput from "@/components/VoiceExpenseInput";
+import QrInvoiceScanner from "@/components/QrInvoiceScanner";
 import BackupRestore from "@/components/BackupRestore";
 import BudgetRule502030 from "@/components/BudgetRule502030";
 import MonthEndProjection from "@/components/MonthEndProjection";
@@ -458,6 +460,8 @@ export default function Home() {
 
       <ArsUsdCalculator />
       <BasicCalculator />
+      <VoiceExpenseInput onTransactionAdded={fetchTransactions} />
+      <QrInvoiceScanner onTransactionAdded={fetchTransactions} />
     </main>
   );
 }

@@ -7,11 +7,29 @@ import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 import type { Transaction } from '@/types'
 
-const { supabaseMock } = vi.hoisted(() => ({
-  supabaseMock: {} as ReturnType<typeof CreateSupabaseMock>,
-}))
+const { supabaseMock, jsPdfInstanceMock, autoTableMock } = vi.hoisted(() => {
+  const jsPdfInstanceMock = {
+    setFontSize: vi.fn().mockReturnThis(),
+    setTextColor: vi.fn().mockReturnThis(),
+    text: vi.fn().mockReturnThis(),
+    save: vi.fn(),
+  }
+  return {
+    supabaseMock: {} as ReturnType<typeof CreateSupabaseMock>,
+    jsPdfInstanceMock,
+    autoTableMock: vi.fn(),
+  }
+})
 
 vi.mock('@/lib/supabaseClient', () => ({ supabase: supabaseMock }))
+vi.mock('jspdf', () => ({
+  default: vi.fn().mockImplementation(function () {
+    return jsPdfInstanceMock
+  }),
+}))
+vi.mock('jspdf-autotable', () => ({
+  default: autoTableMock,
+}))
 
 function makeTx(overrides: Partial<Transaction>): Transaction {
   return {
@@ -71,7 +89,7 @@ describe('TransactionFilters — exportar CSV (regresión Fase 2)', () => {
     const typeSelect = await screen.findByDisplayValue('Todos los Tipos')
     await userEvent.selectOptions(typeSelect, 'Solo Ingresos')
 
-    const exportButton = screen.getByRole('button', { name: /exportar csv/i })
+    const exportButton = screen.getByRole('button', { name: /^csv$/i })
     await userEvent.click(exportButton)
 
     expect(clickSpy).toHaveBeenCalledTimes(1)
@@ -88,5 +106,28 @@ describe('TransactionFilters — exportar CSV (regresión Fase 2)', () => {
     expect(decoded).not.toContain('Supermercado')
 
     createElementSpy.mockRestore()
+  })
+
+  it('exporta a PDF solo las transacciones visibles/filtradas, no todas', async () => {
+    render(
+      <CategoriesProvider>
+        <TransactionFilters transactions={TRANSACTIONS} onFiltered={() => {}} />
+      </CategoriesProvider>
+    )
+
+    const typeSelect = await screen.findByDisplayValue('Todos los Tipos')
+    await userEvent.selectOptions(typeSelect, 'Solo Ingresos')
+
+    const exportButton = screen.getByRole('button', { name: /^pdf$/i })
+    await userEvent.click(exportButton)
+
+    expect(jsPdfInstanceMock.save).toHaveBeenCalledTimes(1)
+    expect(autoTableMock).toHaveBeenCalledTimes(1)
+
+    const tableArgs = autoTableMock.mock.calls[0][1] as { body: string[][] }
+    const bodyRows = tableArgs.body
+    const descriptions = bodyRows.map((row) => row[2])
+    expect(descriptions).toContain('Sueldo')
+    expect(descriptions).not.toContain('Supermercado')
   })
 })

@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useCategories } from '@/context/CategoriesContext'
 import { Transaction } from '@/types'
-import { Search, Filter, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { Search, Filter, Download, FileText } from 'lucide-react'
 
 interface TransactionFiltersProps {
   transactions: Transaction[]
@@ -76,6 +78,53 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
     document.body.removeChild(link)
   }
 
+  // Exporta la lista filtrada a PDF — mismo criterio que el CSV: exporta
+  // lo que el usuario está viendo, no siempre todo el historial.
+  function exportToPDF() {
+    if (visibleTransactions.length === 0) return
+
+    const doc = new jsPDF()
+
+    doc.setFontSize(16)
+    doc.text('UnMango — Movimientos', 14, 18)
+    doc.setFontSize(9)
+    doc.setTextColor(120)
+    doc.text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, 14, 24)
+
+    const totalIncome = visibleTransactions
+      .filter((t) => t.type === 'income')
+      .reduce((acc, t) => acc + Number(t.amount_ars), 0)
+    const totalExpense = visibleTransactions
+      .filter((t) => t.type === 'expense')
+      .reduce((acc, t) => acc + Number(t.amount_ars), 0)
+
+    doc.setFontSize(10)
+    doc.setTextColor(30)
+    doc.text(
+      `Ingresos: $ ${totalIncome.toLocaleString('es-AR')}   |   Gastos: $ ${totalExpense.toLocaleString('es-AR')}   |   Balance: $ ${(totalIncome - totalExpense).toLocaleString('es-AR')}`,
+      14,
+      31
+    )
+
+    autoTable(doc, {
+      startY: 36,
+      head: [['Fecha', 'Tipo', 'Descripción', 'Categoría', 'Medio de Pago', 'Monto (ARS)']],
+      body: visibleTransactions.map((t) => [
+        new Date(t.created_at!).toLocaleDateString('es-AR'),
+        t.type === 'income' ? 'Ingreso' : 'Gasto',
+        t.description,
+        t.categories ? t.categories.name : 'Sin Categoría',
+        `${t.payment_method}${t.wallet_provider ? ` (${t.wallet_provider})` : ''}`,
+        `$ ${Number(t.amount_ars).toLocaleString('es-AR')}`,
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [30, 27, 75] },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+    })
+
+    doc.save(`UnMango_Movimientos_${new Date().toISOString().slice(0, 10)}.pdf`)
+  }
+
   const selectStyle = "px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 !text-gray-900 dark:!text-gray-100 font-semibold text-xs outline-none focus:ring-2 focus:ring-amber-500/50"
 
   return (
@@ -121,13 +170,21 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
         </select>
       </div>
 
-      {/* Botón Exportar CSV */}
-      <button
-        onClick={exportToCSV}
-        className="w-full sm:w-auto bg-gray-900 hover:bg-black text-white font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-      >
-        <Download size={14} /> Exportar CSV
-      </button>
+      {/* Botones Exportar */}
+      <div className="flex gap-2 w-full sm:w-auto">
+        <button
+          onClick={exportToCSV}
+          className="flex-1 sm:flex-none bg-gray-900 hover:bg-black text-white font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+        >
+          <Download size={14} /> CSV
+        </button>
+        <button
+          onClick={exportToPDF}
+          className="flex-1 sm:flex-none bg-rose-600 hover:bg-rose-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+        >
+          <FileText size={14} /> PDF
+        </button>
+      </div>
     </div>
   )
 }

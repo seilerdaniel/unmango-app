@@ -598,5 +598,51 @@ directo), `npx eslint .` (misma línea base pre-existente de siempre,
 nada nuevo), `npx vitest run` (**23 archivos, 97 tests**, todos
 pasando).
 
+## ✅ Retomando las 6 ideas pendientes — primera tanda (3 de 6)
+
+Sin necesitar que el usuario cree ninguna cuenta externa:
+
+- [x] **Exportar a PDF** (completa la idea #8) — `TransactionFilters.tsx`
+  ahora tiene un botón "PDF" junto al de "CSV", usando `jspdf` +
+  `jspdf-autotable`. Exporta la misma lista filtrada que ve el usuario
+  (mismo criterio que el CSV), con un resumen de ingresos/gastos/balance
+  arriba de la tabla. Test nuevo: verifica que el PDF respeta el filtro
+  aplicado (mockeando `jspdf`/`jspdf-autotable` con `vi.mock`, ya que no
+  se puede espiar un export default de un módulo ESM directamente).
+
+- [x] **Ingreso por voz / lenguaje natural** (idea #16) —
+  `src/lib/naturalLanguageExpense.ts`: parser basado en reglas/regex
+  (no un modelo de IA) que reconoce el ejemplo de la idea original
+  ("Gasté 8500 en coto con tarjeta") y variantes: monto (tolera formato
+  argentino de miles/decimales), descripción, ingreso vs. gasto, y una
+  pista de medio de pago. `VoiceExpenseInput.tsx`: botón flotante que usa
+  la Web Speech API del navegador (gratis, sin API externa) para
+  transcribir, o el usuario puede escribir la frase a mano si el
+  navegador no la soporta (Safari, Firefox de escritorio) — en ambos
+  casos, **nunca se guarda directo**: siempre se muestra una
+  confirmación editable antes de guardar, porque el reconocimiento de
+  voz puede equivocarse. 8 tests sobre el parser.
+
+- [x] **Escaneo de QR de facturas AFIP** (idea #17, con un giro más
+  viable que "escanear el ticket") — `src/lib/afipQr.ts`: las facturas
+  electrónicas argentinas (AFIP) traen un QR que codifica una URL con un
+  JSON en base64, y ese JSON **ya incluye el importe exacto** — así que
+  no hace falta OCR (mucho menos confiable que leer un ticket con la
+  cámara). `QrInvoiceScanner.tsx`: usa la cámara del dispositivo +
+  `jsqr` para detectar el QR en vivo, decodifica el monto, y pide
+  confirmar descripción/categoría antes de guardar. 5 tests sobre el
+  parser del QR.
+
+Los 3 quedaron conectados como botones flotantes apilados (calculadora
+ARS/USD, calculadora normal, voz, QR — cada uno con su propio color/
+ícono para distinguirse).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+reordenar una función en `QrInvoiceScanner` que se usaba antes de
+declararse), `npx eslint .` (misma línea base pre-existente, nada
+nuevo), `npx vitest run` (**25 archivos, 111 tests**, todos pasando).
+
+Quedan **3 ideas**: simulador de brecha cambiaria, PWA, bot de Telegram.
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._
