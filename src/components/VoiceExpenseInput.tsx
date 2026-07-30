@@ -31,12 +31,13 @@ function getSpeechRecognition(): (new () => MinimalSpeechRecognition) | null {
 }
 
 interface VoiceExpenseInputProps {
+  isOpen: boolean
+  onClose: () => void
   onTransactionAdded?: () => void
 }
 
-export default function VoiceExpenseInput({ onTransactionAdded }: VoiceExpenseInputProps) {
+export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded }: VoiceExpenseInputProps) {
   const { categories } = useCategories()
-  const [isOpen, setIsOpen] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [rawText, setRawText] = useState('')
   const [supported, setSupported] = useState(true)
@@ -117,7 +118,7 @@ export default function VoiceExpenseInput({ onTransactionAdded }: VoiceExpenseIn
     ])
 
     if (!error) {
-      setIsOpen(false)
+      onClose()
       setRawText('')
       setAmount('')
       setDescription('')
@@ -132,14 +133,6 @@ export default function VoiceExpenseInput({ onTransactionAdded }: VoiceExpenseIn
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        title="Cargar por voz o texto natural"
-        className="fixed bottom-[224px] right-5 z-40 bg-rose-600 hover:bg-rose-700 text-white p-3.5 rounded-full shadow-lg shadow-rose-600/30 transition cursor-pointer"
-      >
-        <Mic size={20} />
-      </button>
-
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-sm p-5 space-y-4">
@@ -148,7 +141,7 @@ export default function VoiceExpenseInput({ onTransactionAdded }: VoiceExpenseIn
                 <Mic size={16} className="text-rose-600" /> Cargar por voz
               </h3>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={onClose}
                 className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"
               >
                 <X size={18} />

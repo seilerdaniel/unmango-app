@@ -23,10 +23,6 @@ import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
 import ImportTransactions from "@/components/ImportTransactions";
 import ZeroSpendStreak from "@/components/ZeroSpendStreak";
-import ArsUsdCalculator from "@/components/ArsUsdCalculator";
-import BasicCalculator from "@/components/BasicCalculator";
-import VoiceExpenseInput from "@/components/VoiceExpenseInput";
-import QrInvoiceScanner from "@/components/QrInvoiceScanner";
 import BackupRestore from "@/components/BackupRestore";
 import BudgetRule502030 from "@/components/BudgetRule502030";
 import MonthEndProjection from "@/components/MonthEndProjection";
@@ -39,6 +35,7 @@ import DollarRatesTable from "@/components/DollarRatesTable";
 import RecentTransactions from "@/components/RecentTransactions";
 import BottomNav, { TabId } from "@/components/nav/BottomNav";
 import SettingsPanel from "@/components/nav/SettingsPanel";
+import SpeedDialFab from "@/components/nav/SpeedDialFab";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   LogOut,
@@ -223,6 +220,15 @@ export default function Home() {
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.push("/login");
+  }
+
+  function handleManualEntry() {
+    setActiveTab("inicio");
+    // Esperamos al próximo tick para que el formulario ya esté
+    // renderizado (venir de otra pestaña) antes de enfocarlo.
+    setTimeout(() => {
+      document.getElementById("transaction-description-input")?.focus();
+    }, 50);
   }
 
   const { totalIncome, totalExpense } = totals;
@@ -550,10 +556,7 @@ export default function Home() {
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
-      <ArsUsdCalculator />
-      <BasicCalculator />
-      <VoiceExpenseInput onTransactionAdded={fetchTransactions} />
-      <QrInvoiceScanner onTransactionAdded={fetchTransactions} />
+      <SpeedDialFab onTransactionAdded={fetchTransactions} onManualEntry={handleManualEntry} />
     </main>
   );
 }

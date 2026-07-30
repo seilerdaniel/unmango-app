@@ -8,12 +8,13 @@ import { parseAfipQrUrl } from '@/lib/afipQr'
 import { QrCode, X, CheckCircle2, CameraOff } from 'lucide-react'
 
 interface QrInvoiceScannerProps {
+  isOpen: boolean
+  onClose: () => void
   onTransactionAdded?: () => void
 }
 
-export default function QrInvoiceScanner({ onTransactionAdded }: QrInvoiceScannerProps) {
+export default function QrInvoiceScanner({ isOpen, onClose, onTransactionAdded }: QrInvoiceScannerProps) {
   const { categories } = useCategories()
-  const [isOpen, setIsOpen] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [scannedAmount, setScannedAmount] = useState<number | null>(null)
   const [description, setDescription] = useState('')
@@ -83,7 +84,7 @@ export default function QrInvoiceScanner({ onTransactionAdded }: QrInvoiceScanne
   }, [isOpen])
 
   function handleClose() {
-    setIsOpen(false)
+    onClose()
     setScannedAmount(null)
     setDescription('')
     setCategoryId('')
@@ -126,14 +127,6 @@ export default function QrInvoiceScanner({ onTransactionAdded }: QrInvoiceScanne
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        title="Escanear factura (QR AFIP)"
-        className="fixed bottom-[288px] right-5 z-40 bg-cyan-600 hover:bg-cyan-700 text-white p-3.5 rounded-full shadow-lg shadow-cyan-600/30 transition cursor-pointer"
-      >
-        <QrCode size={20} />
-      </button>
-
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-sm p-5 space-y-4">

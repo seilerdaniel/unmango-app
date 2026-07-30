@@ -40,8 +40,12 @@ async function fetchBlueRate(): Promise<BlueRate | null> {
   }
 }
 
-export default function ArsUsdCalculator() {
-  const [isOpen, setIsOpen] = useState(false)
+interface ArsUsdCalculatorProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export default function ArsUsdCalculator({ isOpen, onClose }: ArsUsdCalculatorProps) {
   const [blueRate, setBlueRate] = useState<BlueRate | null>(null)
   const [rateInput, setRateInput] = useState('')
   const [loadingRate, setLoadingRate] = useState(false)
@@ -102,15 +106,6 @@ export default function ArsUsdCalculator() {
 
   return (
     <>
-      {/* Botón flotante */}
-      <button
-        onClick={() => setIsOpen(true)}
-        title="Calculadora ARS / USD Blue"
-        className="fixed bottom-[100px] right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white p-3.5 rounded-full shadow-lg shadow-emerald-600/30 transition cursor-pointer"
-      >
-        <Calculator size={20} />
-      </button>
-
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-sm p-5 space-y-4">
@@ -119,7 +114,7 @@ export default function ArsUsdCalculator() {
                 <Calculator size={16} className="text-emerald-600" /> Calculadora ARS / USD Blue
               </h3>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={onClose}
                 className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"
               >
                 <X size={18} />

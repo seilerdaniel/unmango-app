@@ -963,7 +963,7 @@ marcado como error de sintaxis), `npx eslint .` (misma línea base
 pre-existente, nada nuevo), `npx vitest run` (**34 archivos, 166
 tests**, todos pasando).
 
-### 📌 Quedan 3 pasos de este rediseño
+### 📌 Quedan 2 pasos de este rediseño (al momento del Paso 1)
 
 - **Paso 2**: pulir cada pestaña (ej. "Últimos Movimientos" resumido en
   Inicio, tabla Oficial/Blue/MEP en vez de solo Blue en Brecha
@@ -1005,3 +1005,45 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (1 caso nuevo del mismo warning pre-existente, nada
 nuevo grave), `npx vitest run` (**35 archivos, 170 tests**, todos
 pasando).
+
+## ✅ Paso 3: FAB central desplegable
+
+- [x] **`SpeedDialFab.tsx`** (`src/components/nav/`) — reemplaza los 4
+  botones flotantes sueltos (uno por función) por un solo botón `[+]`
+  centrado que, al tocarlo, despliega las 4 opciones hacia arriba:
+  Carga Manual, Calculadora ARS/USD, Escanear QR, Cargar por Voz. Elegir
+  una cierra el menú y dispara esa acción. 4 tests.
+- [x] **3 componentes convertidos a "controlados"** — `ArsUsdCalculator`,
+  `VoiceExpenseInput` y `QrInvoiceScanner` ya no manejan su propio botón
+  flotante ni su propio estado de apertura: ahora reciben `isOpen` +
+  `onClose` como props, y quien decide cuándo abrirlos es el
+  `SpeedDialFab`. La lógica interna de cada uno (parseo de voz, cámara
+  QR, conversión ARS/USD) no cambió, solo cómo se abren/cierran.
+- [x] **"Carga Manual" no duplica el formulario** — en vez de abrir un
+  modal más con una copia de `TransactionForm`, la opción del FAB lleva
+  a la pestaña Inicio (donde el formulario ya está siempre visible) y
+  enfoca el campo de descripción — mismo comportamiento que ya tenía el
+  atajo de teclado "N".
+- [x] **Calculadora normal eliminada** — el documento pide sacarla
+  explícitamente ("Elimina la calculadora flotante estándar e integra
+  soporte de operaciones matemáticas en el input"). Se borró
+  `BasicCalculator.tsx` y su test, pero se **mantuvo**
+  `src/lib/basicCalculator.ts` (la función pura `applyOperator`) porque
+  el paso 4 la va a reutilizar para la matemática inline en el campo de
+  monto — no tenía sentido tirar esa lógica si se va a necesitar de
+  nuevo en el próximo paso.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**35 archivos, 172 tests**, todos pasando — bajó de
+170 a 172 porque se sumaron los 4 tests del FAB pero se sacaron los 2
+del componente de calculadora normal eliminado).
+
+### 📌 Queda 1 paso de este rediseño
+
+- **Paso 4**: piezas nuevas del documento — calculadora matemática
+  inline en el campo de monto (que "2500 + 1300" calcule solo,
+  reutilizando `applyOperator` de `basicCalculator.ts`), carrusel
+  horizontal de billeteras en Inicio, Límite Seguro de Gasto Diario,
+  Simulador Contado vs. Cuotas, división de gastos con recordatorio por
+  WhatsApp.
