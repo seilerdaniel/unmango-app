@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabaseClient'
 import { Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
-import { Target, Plus, Trash2, AlertCircle } from 'lucide-react'
+import { suggestBudgets } from '@/lib/suggestedBudgets'
+import { Target, Plus, Trash2, AlertCircle, Sparkles } from 'lucide-react'
 
 export default function BudgetManager() {
   const { categories } = useCategories()
@@ -14,6 +15,7 @@ export default function BudgetManager() {
   // (get_monthly_category_spend) en vez de sumarlo en el frontend a partir
   // de todas las transacciones cargadas.
   const [spendByCategory, setSpendByCategory] = useState<Record<string, number>>({})
+  const [monthlyIncome, setMonthlyIncome] = useState(0)
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [limitAmount, setLimitAmount] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(true)
@@ -21,6 +23,21 @@ export default function BudgetManager() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+
+  function applySuggestedBudget(categoryId: string, amount: number) {
+    setSelectedCategory(categoryId)
+    setLimitAmount(String(amount))
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function loadMonthlyIncome() {
+    const { data, error } = await supabase.rpc('get_monthly_trend', { p_months: 1 })
+    if (error) {
+      console.error('Error cargando el ingreso mensual para sugerencias:', error)
+      return
+    }
+    setMonthlyIncome(Number(data?.[0]?.total_income) || 0)
+  }
 
   async function loadMonthlySpend() {
     const now = new Date()
@@ -55,6 +72,7 @@ export default function BudgetManager() {
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
           loadMonthlySpend(),
+          loadMonthlyIncome(),
         ])
 
         if (isMounted && budgetsData) setBudgets(budgetsData)
@@ -144,6 +162,9 @@ export default function BudgetManager() {
 
   const getSpentForCategory = (categoryId: string) => spendByCategory[categoryId] || 0
 
+  const categoriesWithoutBudget = categories.filter((c) => !budgets.some((b) => b.category_id === c.id))
+  const suggestedBudgets = suggestBudgets(monthlyIncome, categoriesWithoutBudget)
+
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
@@ -208,9 +229,31 @@ export default function BudgetManager() {
 
       {/* Lista de Presupuestos Activos */}
       {budgets.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-4">
-          No tenés presupuestos asignados para este mes. Seleccioná una categoría para establecer un límite.
-        </p>
+        <div className="space-y-3">
+          <p className="text-xs text-gray-400 text-center">
+            No tenés presupuestos asignados para este mes. Seleccioná una categoría para establecer
+            un límite{suggestedBudgets.length > 0 ? ', o probá una de estas sugerencias' : ''}:
+          </p>
+          {suggestedBudgets.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {suggestedBudgets.map((s) => (
+                <button
+                  key={s.categoryId}
+                  type="button"
+                  onClick={() => applySuggestedBudget(s.categoryId, s.suggestedAmount)}
+                  className="text-left p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer"
+                >
+                  <p className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-amber-500" /> {s.categoryName}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {(s.percentOfIncome * 100).toFixed(0)}% de tu ingreso · {formatAmount(s.suggestedAmount)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-4 pt-2">
           {budgets.map((b) => {

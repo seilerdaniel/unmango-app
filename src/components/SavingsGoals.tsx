@@ -14,7 +14,8 @@ import { Line } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { SavingsGoal } from '@/types'
-import { PiggyBank, Plus, Trash2, Pencil } from 'lucide-react'
+import { SUGGESTED_GOALS } from '@/lib/suggestedGoals'
+import { PiggyBank, Plus, Trash2, Pencil, Sparkles } from 'lucide-react'
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Filler)
 
@@ -67,6 +68,15 @@ export default function SavingsGoals() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+
+  function applySuggestedGoal(suggested: (typeof SUGGESTED_GOALS)[number]) {
+    setName(suggested.name)
+    setTargetAmount(String(suggested.targetAmount))
+    setMonthlyContribution(String(suggested.monthlyContribution))
+    // El usuario todavía tiene que tocar "Crear Meta" — no se crea sola,
+    // así puede ajustar los montos de ejemplo antes de guardar.
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   async function loadGoals() {
     try {
@@ -255,9 +265,30 @@ export default function SavingsGoals() {
 
       {/* Lista de metas */}
       {goals.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-4">
-          Todavía no creaste ninguna meta de ahorro.
-        </p>
+        <div className="space-y-3">
+          <p className="text-xs text-gray-400 text-center">
+            Todavía no creaste ninguna meta de ahorro. Podés arrancar de cero, o usar uno de estos
+            ejemplos como punto de partida (los montos son solo sugerencias — los editás antes de
+            crear la meta):
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {SUGGESTED_GOALS.map((suggested) => (
+              <button
+                key={suggested.name}
+                type="button"
+                onClick={() => applySuggestedGoal(suggested)}
+                className="text-left p-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer"
+              >
+                <p className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                  <Sparkles size={12} style={{ color: suggested.color }} /> {suggested.name}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Objetivo {formatAmount(suggested.targetAmount)} · {formatAmount(suggested.monthlyContribution)}/mes
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
           {goals.map((goal) => {
