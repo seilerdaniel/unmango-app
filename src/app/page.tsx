@@ -45,6 +45,7 @@ import AntExpenses from "@/components/AntExpenses";
 import ShareBalanceCard from "@/components/ShareBalanceCard";
 import SubscriptionPriceAlerts from "@/components/SubscriptionPriceAlerts";
 import InstallmentTracker from "@/components/InstallmentTracker";
+import DebtsManager from "@/components/DebtsManager";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
@@ -368,6 +369,7 @@ export default function Home() {
             <RecurringManager kind="subscription" onTransactionAdded={fetchTransactions} />
             <RecurringManager kind="utility_rent" onTransactionAdded={fetchTransactions} />
             <InstallmentTracker onTransactionAdded={fetchTransactions} />
+            <DebtsManager onTransactionAdded={fetchTransactions} />
             <BudgetManager />
             <SavingsGoals />
           </div>

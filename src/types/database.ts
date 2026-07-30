@@ -358,6 +358,85 @@ export interface Database {
         }
         Relationships: []
       }
+      debts: {
+        Row: {
+          id: string
+          user_id: string
+          description: string
+          counterparty_name: string
+          debt_type: 'debo' | 'me_deben'
+          currency: 'ARS' | 'USD'
+          total_amount: number
+          remaining_amount: number
+          interest_rate: number
+          due_date: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          description: string
+          counterparty_name: string
+          debt_type: 'debo' | 'me_deben'
+          currency?: 'ARS' | 'USD'
+          total_amount: number
+          remaining_amount: number
+          interest_rate?: number
+          due_date?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          description?: string
+          counterparty_name?: string
+          debt_type?: 'debo' | 'me_deben'
+          currency?: 'ARS' | 'USD'
+          total_amount?: number
+          remaining_amount?: number
+          interest_rate?: number
+          due_date?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      debt_payments: {
+        Row: {
+          id: string
+          debt_id: string
+          user_id: string
+          amount: number
+          transaction_id: string | null
+          paid_at: string
+        }
+        Insert: {
+          id?: string
+          debt_id: string
+          user_id: string
+          amount: number
+          transaction_id?: string | null
+          paid_at?: string
+        }
+        Update: {
+          id?: string
+          debt_id?: string
+          user_id?: string
+          amount?: number
+          transaction_id?: string | null
+          paid_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debt_payments_debt_id_fkey"
+            columns: ["debt_id"]
+            referencedRelation: "debts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       net_worth_snapshots: {
         Row: {
           id: string

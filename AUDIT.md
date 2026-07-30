@@ -840,5 +840,25 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
   del bot de Telegram (`getWebhookInfo`, revisar logs de la Edge
   Function) la próxima vez que esté en la computadora.
 
+## ✅ Deudas y Préstamos
+
+- [x] **Nueva sección** — `supabase/debts.sql` (tablas `debts` y
+  `debt_payments`, con RLS). `DebtsManager.tsx`: registrás si "Yo debo"
+  o "Me deben" plata, con quién, monto, moneda, fecha límite opcional,
+  interés opcional, y notas libres (ej. "acordamos pagar en 3 cuotas").
+  Barra de progreso de pago/cobro, aviso si está vencida. El botón
+  "Registrar pago"/"Registrar cobro" actualiza el saldo restante Y
+  genera una transacción real (gasto si pagás una deuda, ingreso si te
+  pagan un préstamo) — mismo patrón que ya usan Suscripciones y Cuotas.
+  Las deudas saldadas se pueden ocultar/mostrar en una sección
+  colapsada aparte. `computeDebtProgress()` y `daysOverdue()` puras,
+  testeadas (8 tests).
+  **⚠️ Acción tuya**: correr `debts.sql`.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (1 caso nuevo del mismo warning pre-existente, nada
+nuevo grave), `npx vitest run` (**30 archivos, 147 tests**, todos
+pasando).
+
 ---
 _Generado en sesión de auditoría con Claude — 28/07/2026._
