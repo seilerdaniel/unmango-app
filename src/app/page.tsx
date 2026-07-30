@@ -35,6 +35,8 @@ import ShareBalanceCard from "@/components/ShareBalanceCard";
 import SubscriptionPriceAlerts from "@/components/SubscriptionPriceAlerts";
 import InstallmentTracker from "@/components/InstallmentTracker";
 import DebtsManager from "@/components/DebtsManager";
+import DollarRatesTable from "@/components/DollarRatesTable";
+import RecentTransactions from "@/components/RecentTransactions";
 import BottomNav, { TabId } from "@/components/nav/BottomNav";
 import SettingsPanel from "@/components/nav/SettingsPanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -332,12 +334,21 @@ export default function Home() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                <p
-                  className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"
-                  title="Suma TODOS tus movimientos, tengan o no una billetera asignada. Por eso puede no coincidir con la suma de tus billeteras (Configuración) — esa solo cuenta lo que asignaste explícitamente a cada una, más su saldo inicial."
-                >
-                  Balance Disponible <Info size={11} className="text-gray-300 dark:text-gray-600" />
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p
+                    className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1"
+                    title="Suma TODOS tus movimientos, tengan o no una billetera asignada. Por eso puede no coincidir con la suma de tus billeteras (Configuración) — esa solo cuenta lo que asignaste explícitamente a cada una, más su saldo inicial."
+                  >
+                    Balance Disponible <Info size={11} className="text-gray-300 dark:text-gray-600" />
+                  </p>
+                  <button
+                    onClick={togglePrivacy}
+                    title={isPrivate ? "Mostrar valores" : "Ocultar valores"}
+                    className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition cursor-pointer shrink-0"
+                  >
+                    {isPrivate ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
                 <h3
                   className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900 dark:text-gray-100" : "text-rose-600"}`}
                 >
@@ -376,9 +387,9 @@ export default function Home() {
             <div className="space-y-6 mt-6">
               <ZeroSpendStreak />
               <MonthEndProjection />
-              <AntExpenses />
               <SubscriptionPriceAlerts />
               <TransactionForm onTransactionAdded={fetchTransactions} />
+              <RecentTransactions transactions={allTransactions} onSeeAll={() => setActiveTab("historial")} />
             </div>
           </>
         )}
@@ -388,6 +399,8 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <FinanceChart income={totalIncome} expense={totalExpense} />
             <TrendChart />
+            <AntExpenses />
+            <DollarRatesTable />
             <ExchangeGapSimulator />
             <BudgetRule502030 />
           </div>

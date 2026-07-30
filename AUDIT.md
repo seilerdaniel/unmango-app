@@ -976,3 +976,32 @@ tests**, todos pasando).
   carrusel horizontal de billeteras en Inicio, Límite Seguro de Gasto
   Diario, Simulador Contado vs. Cuotas, división de gastos con
   recordatorio por WhatsApp.
+
+## ✅ Paso 2: pulir cada pestaña
+
+- [x] **Gastos Hormiga movido de Inicio a Análisis** — el documento
+  original lo pone en la pestaña de Análisis (junto con la Regla
+  50/30/20 y la Tendencia), no en Inicio; en el paso 1 había quedado
+  mal ubicado por apuro.
+- [x] **"Últimos Movimientos" en Inicio** — `RecentTransactions.tsx`:
+  vista resumida de los últimos 5 movimientos (reutiliza los datos que
+  ya se cargan para el historial, no pide nada nuevo a la base), con un
+  link "Ver todo" que te lleva directo a la pestaña Historial.
+- [x] **Tabla Oficial/Blue/MEP en Análisis** — `DollarRatesTable.tsx`:
+  antes solo existía el dato de Blue (usado en la calculadora ARS/USD y
+  en el simulador de Brecha Cambiaria histórica). Ahora se agregó esta
+  tarjeta con las 3 cotizaciones de referencia (Oficial/Blue/MEP,
+  compra y venta) más el % de brecha Blue vs. Oficial, todo desde
+  `dolarapi.com` (mismo proveedor sin API key que ya se usaba).
+  `computeRateGapPercent()` pura, testeada (4 tests) — se verificaron
+  los endpoints reales de la API antes de escribir el código (`GET
+  /v1/dolares` trae todo de una).
+- [x] **Ícono de ojo en la tarjeta de Balance** — antes el toggle de
+  privacidad solo estaba en el header; ahora también hay un ícono
+  directo en la tarjeta de Balance Disponible (mismo `togglePrivacy`,
+  solo más visible/conveniente ahí, tal como pedía el documento).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (1 caso nuevo del mismo warning pre-existente, nada
+nuevo grave), `npx vitest run` (**35 archivos, 170 tests**, todos
+pasando).
