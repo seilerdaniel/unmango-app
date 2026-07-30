@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { Wallet } from '@/types'
+import { evaluateMathExpression } from '@/lib/basicCalculator'
 import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag } from 'lucide-react'
 
 interface TransactionFormProps {
@@ -84,9 +85,18 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       return
     }
 
-    const finalAmountArs = isUsd 
-      ? Number(amountUsd) * Number(exchangeRate) 
-      : Number(amountArs)
+    // Red de seguridad: si el usuario apretó Enter sin salir del campo
+    // (el onBlur que resuelve "2500 + 1300" no llegó a dispararse),
+    // igual evaluamos acá antes de guardar.
+    const finalAmountArs = isUsd
+      ? (evaluateMathExpression(amountUsd) ?? Number(amountUsd)) * Number(exchangeRate)
+      : evaluateMathExpression(amountArs) ?? Number(amountArs)
+
+    if (!Number.isFinite(finalAmountArs) || finalAmountArs <= 0) {
+      alert('El monto ingresado no es válido. Revisá que sea un número o una cuenta como "2500 + 1300".')
+      setLoading(false)
+      return
+    }
 
     const selectedWallet = wallets.find((w) => w.id === walletId)
 
@@ -190,11 +200,22 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
               {isUsd ? 'Monto en USD' : 'Monto en Pesos (ARS)'}
             </label>
             <input
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={isUsd ? amountUsd : amountArs}
               onChange={(e) => isUsd ? setAmountUsd(e.target.value) : setAmountArs(e.target.value)}
-              placeholder="0.00"
+              onBlur={(e) => {
+                // Matemática inline: si escribiste "2500 + 1300", al
+                // salir del campo se reemplaza por el resultado (3800).
+                // Si no es una expresión válida (es un número común, o
+                // texto sin sentido), se deja el valor tal cual.
+                const evaluated = evaluateMathExpression(e.target.value)
+                if (evaluated !== null) {
+                  if (isUsd) setAmountUsd(String(evaluated))
+                  else setAmountArs(String(evaluated))
+                }
+              }}
+              placeholder="0.00 (o 2500 + 1300)"
               required
               className={inputStyle}
             />

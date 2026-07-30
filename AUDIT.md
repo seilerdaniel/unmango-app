@@ -1047,3 +1047,36 @@ del componente de calculadora normal eliminado).
   horizontal de billeteras en Inicio, Límite Seguro de Gasto Diario,
   Simulador Contado vs. Cuotas, división de gastos con recordatorio por
   WhatsApp.
+
+## 🚧 Paso 4 (en progreso) — 3 de 5 piezas nuevas
+
+- [x] **Matemática inline en el campo de monto** — el documento pedía
+  que "2500 + 1300" calcule solo al cargar un movimiento.
+  `evaluateMathExpression()` en `basicCalculator.ts` (reutiliza
+  `applyOperator`, respeta precedencia ×÷ antes que +−, nunca usa
+  `eval()`) — 16 tests. El campo de monto en `TransactionForm` pasó de
+  `type="number"` (que ni siquiera dejaba tipear `+`) a texto con
+  teclado numérico en mobile; evalúa al perder foco, con una red de
+  seguridad al enviar por si se manda con Enter sin salir del campo, y
+  valida que el resultado sea un número válido antes de guardar (ya no
+  hay validación nativa del navegador al no ser `type="number"`).
+- [x] **Carrusel horizontal de billeteras en Inicio** —
+  `WalletCarousel.tsx`: vista de solo lectura (desliza horizontal,
+  `overflow-x-auto` + `snap`), reutiliza la misma consulta de saldos
+  que ya usaba `WalletManager` (`get_wallet_balances`). La gestión
+  completa (crear/editar/eliminar) sigue en Configuración — esto es
+  solo un vistazo rápido en Inicio.
+- [x] **Límite Seguro de Gasto Diario** — `SafeToSpendWidget.tsx`:
+  "Podés gastar hoy hasta $X sin salirte de tu presupuesto".
+  `computeSafeToSpend()` pura (balance disponible menos gastos fijos
+  comprometidos del mes, dividido entre los días que quedan — nunca da
+  negativo) — 4 tests.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+agrupar con paréntesis un `??` mezclado con `||` en
+`WalletCarousel.tsx`, TypeScript no permite mezclarlos sin agrupar),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**36 archivos, 187 tests**, todos pasando).
+
+Quedan 2 piezas del paso 4: Simulador Contado vs. Cuotas
+(anti-inflación) y división de gastos con recordatorio por WhatsApp.
