@@ -5,39 +5,15 @@ import { supabase } from '@/lib/supabaseClient'
 import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
-import { Repeat, Home, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
+import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
 import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
 
 interface RecurringManagerProps {
-  /** "subscription" = Suscripciones (Netflix, Spotify...), "utility_rent" = Servicios y Alquiler (luz, gas, alquiler). Misma mecánica, dos secciones separadas para no mezclarlas. */
-  kind: 'subscription' | 'utility_rent'
   onTransactionAdded?: () => void
 }
 
-const KIND_CONFIG = {
-  subscription: {
-    title: 'Suscripciones y Gastos Fijos',
-    icon: Repeat,
-    accent: 'indigo',
-    emptyMessage: 'No tenés suscripciones o gastos fijos registrados.',
-    namePlaceholder: 'Servicio',
-    nameTitle: 'Ej: Netflix',
-  },
-  utility_rent: {
-    title: 'Servicios y Alquiler',
-    icon: Home,
-    accent: 'teal',
-    emptyMessage: 'No tenés servicios ni alquiler registrados todavía.',
-    namePlaceholder: 'Servicio/Alquiler',
-    nameTitle: 'Ej: Luz, Gas, Alquiler',
-  },
-} as const
-
 // Ventana dentro de la cual avisamos que algo está por vencer.
-// Nota de alcance: esto es un aviso DENTRO de la app (no un email/push).
-// Para las suscripciones ya existe además un recordatorio real por
-// email (ver supabase/functions/send-renewal-reminders/).
 const DUE_SOON_DAYS = 7
 
 const PAYMENT_METHODS = ['Billetera Virtual', 'Efectivo', 'Transferencia', 'Tarjeta de Crédito', 'Tarjeta de Débito']
@@ -50,12 +26,18 @@ const WALLET_TYPES_BY_PAYMENT_METHOD: Record<string, Wallet['type'][]> = {
   'Tarjeta de Débito': ['debit_card'],
 }
 
+const EXPENSE_KIND_LABELS: Record<'subscription' | 'utility_rent', string> = {
+  subscription: 'Suscripción',
+  utility_rent: 'Servicio/Alquiler',
+}
+
 const emptyForm = {
   title: '',
   amount: '',
   billingDay: '',
   billingMonth: '1',
   billingFrequency: 'monthly' as BillingFrequency,
+  expenseKind: 'subscription' as 'subscription' | 'utility_rent',
   categoryId: '',
   currency: 'ARS' as 'ARS' | 'USD',
   paymentMethod: '',
@@ -64,10 +46,15 @@ const emptyForm = {
   taxPercentage: '',
 }
 
-export default function RecurringManager({ kind, onTransactionAdded }: RecurringManagerProps) {
-  const config = KIND_CONFIG[kind]
-  const KindIcon = config.icon
-
+/**
+ * "Pagos Recurrentes / Vencimientos" — unifica lo que antes eran dos
+ * secciones separadas (Suscripciones y Servicios/Alquiler) en una
+ * sola, con un selector de tipo en el formulario y un badge por ítem
+ * para distinguirlos a simple vista. Se mantiene expense_kind en la
+ * base (no se borró el dato, solo se dejó de usar como filtro de qué
+ * sección mostrar).
+ */
+export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
   const { categories } = useCategories()
   const [items, setItems] = useState<RecurringExpense[]>([])
   const [wallets, setWallets] = useState<Wallet[]>([])
@@ -104,14 +91,13 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
             .from('recurring_expenses')
             .select('*, categories(*)')
             .eq('user_id', user.id)
-            .eq('expense_kind', kind)
             .order('billing_day', { ascending: true }),
           loadWallets(),
         ])
 
         if (isMounted && itemsData) setItems(itemsData)
       } catch (err) {
-        console.error(`Error al cargar ${config.title}:`, err)
+        console.error('Error al cargar pagos recurrentes:', err)
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -121,8 +107,7 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
     return () => {
       isMounted = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind])
+  }, [])
 
   const reloadData = async () => {
     try {
@@ -133,12 +118,11 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
         .from('recurring_expenses')
         .select('*, categories(*)')
         .eq('user_id', user.id)
-        .eq('expense_kind', kind)
         .order('billing_day', { ascending: true })
 
       if (itemsData) setItems(itemsData)
     } catch (err) {
-      console.error(`Error recargando ${config.title}:`, err)
+      console.error('Error recargando pagos recurrentes:', err)
     }
   }
 
@@ -155,6 +139,7 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
       billingDay: String(item.billing_day),
       billingMonth: String(item.billing_month ?? 1),
       billingFrequency: item.billing_frequency,
+      expenseKind: item.expense_kind,
       categoryId: item.category_id || '',
       currency: item.currency,
       paymentMethod: item.payment_method || '',
@@ -183,12 +168,12 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
       billing_day: Number(form.billingDay),
       billing_frequency: form.billingFrequency,
       billing_month: form.billingFrequency === 'annual' ? Number(form.billingMonth) : null,
+      expense_kind: form.expenseKind,
       category_id: form.categoryId || null,
       payment_method: form.paymentMethod || null,
       wallet_id: form.walletId || null,
-      membership_type: form.membershipType || null,
+      membership_type: form.expenseKind === 'subscription' ? form.membershipType || null : null,
       tax_percentage: Number(form.taxPercentage) || 0,
-      expense_kind: kind,
     }
 
     const { error } = editingId
@@ -255,7 +240,7 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
       return
     }
 
-    const label = kind === 'subscription' ? 'Suscripción' : 'Servicio/Alquiler'
+    const label = EXPENSE_KIND_LABELS[item.expense_kind]
     const { error } = await supabase.from('transactions').insert([
       {
         user_id: user.id,
@@ -298,7 +283,7 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
-        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando {config.title.toLowerCase()}...</p>
+        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando pagos recurrentes...</p>
       </div>
     )
   }
@@ -307,8 +292,8 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <KindIcon className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{config.title}</h2>
+          <Repeat className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Pagos Recurrentes / Vencimientos</h2>
         </div>
         <div className="text-right">
           <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">Fijo Comprometido /mes</span>
@@ -337,10 +322,19 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
       )}
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+        <select
+          value={form.expenseKind}
+          onChange={(e) => setForm((f) => ({ ...f, expenseKind: e.target.value as 'subscription' | 'utility_rent' }))}
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="subscription">Suscripción</option>
+          <option value="utility_rent">Servicio / Alquiler</option>
+        </select>
+
         <input
           type="text"
-          placeholder={config.namePlaceholder}
-          title={config.nameTitle}
+          placeholder="Nombre"
+          title="Ej: Netflix, Luz, Alquiler"
           value={form.title}
           onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           required
@@ -444,7 +438,7 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
           </select>
         )}
 
-        {kind === 'subscription' && (
+        {form.expenseKind === 'subscription' && (
           <input
             type="text"
             placeholder="Membresía"
@@ -482,7 +476,9 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
       )}
 
       {items.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-4">{config.emptyMessage}</p>
+        <p className="text-xs text-gray-400 text-center py-4">
+          No tenés suscripciones, servicios ni alquiler registrados todavía.
+        </p>
       ) : (
         <div className="space-y-2.5 pt-2">
           {items.map((item) => (
@@ -510,6 +506,15 @@ export default function RecurringManager({ kind, onTransactionAdded }: Recurring
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{item.title}</span>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
+                        item.expense_kind === 'subscription'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                          : 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
+                      }`}
+                    >
+                      {EXPENSE_KIND_LABELS[item.expense_kind]}
+                    </span>
                     {item.categories && (
                       <span
                         className="text-[10px] px-2 py-0.5 rounded-md font-medium text-white"

@@ -65,7 +65,7 @@ describe('RecurringManager — botón Pagar (regresión Fase 0)', () => {
   })
 
   it('inserta la transacción con los campos reales del schema (description, payment_method, is_usd), no title/notes', async () => {
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     const payButton = await screen.findByRole('button', { name: /pagar/i })
     await userEvent.click(payButton)
@@ -107,7 +107,7 @@ describe('RecurringManager — botón Pagar (regresión Fase 0)', () => {
 
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('1300')
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     const payButton = await screen.findByRole('button', { name: /pagar/i })
     await userEvent.click(payButton)
@@ -156,7 +156,7 @@ describe('RecurringManager — aviso de vencimiento próximo (Fase 5)', () => {
       })
     )
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     expect(await screen.findByText(/Vencen pronto/i)).toBeInTheDocument()
   })
@@ -180,7 +180,7 @@ describe('RecurringManager — aviso de vencimiento próximo (Fase 5)', () => {
       })
     )
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     await screen.findByText('Netflix')
     expect(screen.queryByText(/Vencen pronto/i)).not.toBeInTheDocument()
@@ -199,7 +199,7 @@ describe('RecurringManager — editar suscripción existente', () => {
       })
     )
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     const editButton = await screen.findByTitle('Editar')
     await userEvent.click(editButton)
@@ -220,7 +220,7 @@ describe('RecurringManager — editar suscripción existente', () => {
       })
     )
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     const editButton = await screen.findByTitle('Editar')
     await userEvent.click(editButton)
@@ -249,7 +249,7 @@ describe('RecurringManager — editar suscripción existente', () => {
       })
     )
 
-    renderWithProviders(<RecurringManager kind="subscription" />)
+    renderWithProviders(<RecurringManager />)
 
     const editButton = await screen.findByTitle('Editar')
     await userEvent.click(editButton)

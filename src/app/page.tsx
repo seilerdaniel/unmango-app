@@ -367,8 +367,7 @@ export default function Home() {
           <div className="lg:col-span-2 space-y-6">
             <TransactionForm onTransactionAdded={fetchTransactions} />
             <ImportTransactions onImported={fetchTransactions} />
-            <RecurringManager kind="subscription" onTransactionAdded={fetchTransactions} />
-            <RecurringManager kind="utility_rent" onTransactionAdded={fetchTransactions} />
+            <RecurringManager onTransactionAdded={fetchTransactions} />
             <InstallmentTracker onTransactionAdded={fetchTransactions} />
             <DebtsManager onTransactionAdded={fetchTransactions} />
             <BudgetManager />
