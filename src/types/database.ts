@@ -464,6 +464,57 @@ export interface Database {
         }
         Relationships: []
       }
+      google_calendar_tokens: {
+        Row: {
+          id: string
+          user_id: string
+          refresh_token: string
+          calendar_id: string
+          connected_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          refresh_token: string
+          calendar_id?: string
+          connected_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          refresh_token?: string
+          calendar_id?: string
+          connected_at?: string
+        }
+        Relationships: []
+      }
+      google_calendar_events: {
+        Row: {
+          id: string
+          user_id: string
+          source_table: 'recurring_expenses' | 'installment_purchases' | 'debts'
+          source_id: string
+          google_event_id: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          source_table: 'recurring_expenses' | 'installment_purchases' | 'debts'
+          source_id: string
+          google_event_id: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          source_table?: 'recurring_expenses' | 'installment_purchases' | 'debts'
+          source_id?: string
+          google_event_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       telegram_links: {
         Row: {
           id: string

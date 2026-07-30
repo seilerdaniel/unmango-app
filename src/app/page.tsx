@@ -14,6 +14,7 @@ import FinanceChart from "@/components/FinanceChart";
 import TrendChart from "@/components/TrendChart";
 import ExchangeGapSimulator from "@/components/ExchangeGapSimulator";
 import TelegramLink from "@/components/TelegramLink";
+import GoogleCalendarLink from "@/components/GoogleCalendarLink";
 import TransactionFilters from "@/components/TransactionFilters";
 import {
   LogOut,
@@ -383,6 +384,7 @@ export default function Home() {
             <CategoryManager onCategoriesUpdated={fetchTransactions} />
             <BackupRestore />
             <TelegramLink />
+            <GoogleCalendarLink />
           </div>
         </div>
 

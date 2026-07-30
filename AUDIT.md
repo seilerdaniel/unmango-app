@@ -860,5 +860,62 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 nuevo grave), `npx vitest run` (**30 archivos, 147 tests**, todos
 pasando).
 
+**⚠️ 1 SQL nuevo para correr**: `debts.sql`.
+
+## ✅ Google Calendar (OAuth real, decisión explícita del usuario)
+
+El usuario prefirió integración real con Google Calendar por sobre el
+feed `.ics` suscribible que había propuesto — más trabajo de
+configuración (Google Cloud Console + OAuth), pero eventos reales con
+recordatorios nativos de Google Calendar en vez de depender de que el
+calendario refresque un feed cada 12-24hs.
+
+- [x] `supabase/google_calendar_sync.sql` — tabla
+  `google_calendar_tokens` (guarda el refresh_token de Google de cada
+  usuario) y `google_calendar_events` (mapea cada suscripción/servicio
+  con el ID del evento creado en Google, para actualizar en vez de
+  duplicar en cada sincronización — ya preparada con `source_table`
+  aceptando también `'installment_purchases'` y `'debts'` para cuando
+  se sumen esos alcances).
+- [x] `GoogleCalendarLink.tsx` — botón "Conectar Google Calendar"
+  (`signInWithOAuth` con scope `calendar.events` + `access_type=offline`
+  + `prompt=consent`, necesario para que Google devuelva un
+  refresh_token reutilizable). Al volver del login, un listener de
+  `onAuthStateChange` captura `provider_refresh_token` de la sesión y
+  lo guarda — Supabase no lo persiste por su cuenta. Botón "Sincronizar
+  ahora" + "Desconectar".
+- [x] `supabase/functions/sync-google-calendar/` — Edge Function que
+  identifica al usuario por su JWT (a diferencia de
+  `send-renewal-reminders`/`telegram-webhook`, esta SÍ requiere sesión
+  válida, la llama el usuario desde la app), refresca el access_token
+  de Google con el refresh_token guardado, y crea/actualiza un evento
+  de Google Calendar por cada suscripción/servicio activo (día
+  completo, con recordatorios 3 días y 1 día antes). La lógica de
+  "próximo vencimiento" y armado del evento
+  (`calendar-event.ts`) es Deno-portable, sin nada de Deno, para poder
+  testearla con Vitest — 7 tests.
+  **⚠️ Acción tuya**: seguir el README de esa carpeta — habilitar la
+  Calendar API, agregar el scope a la pantalla de consentimiento,
+  configurar `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` como secrets de
+  la función (mismas credenciales que ya tenés en Supabase Auth, pero
+  hay que dárselas también acá), y desplegar con
+  `supabase functions deploy sync-google-calendar` (sin
+  `--no-verify-jwt`, a diferencia de las otras dos funciones).
+
+**Alcance de esta primera versión**: sincroniza Suscripciones y
+Servicios/Alquiler (tienen vencimiento recurrente claro). Cuotas y
+Deudas quedan para una siguiente vuelta — el schema ya las contempla.
+La sincronización es manual (botón), no automática por cron — se
+podría agregar más adelante con una adaptación (esta función valida
+JWT de usuario, un cron no puede invocarla de la misma forma que
+`send-renewal-reminders`).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (1 caso nuevo del mismo warning pre-existente, nada
+nuevo grave), `npx vitest run` (**31 archivos, 154 tests**, todos
+pasando).
+
+**⚠️ 1 SQL nuevo para correr**: `google_calendar_sync.sql`.
+
 ---
-_Generado en sesión de auditoría con Claude — 28/07/2026._
+_Generado en sesión de auditoría con Claude — 29/07/2026._

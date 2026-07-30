@@ -1,0 +1,181 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import { CalendarDays, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
+
+// Scope mínimo necesario: solo crear/editar/borrar eventos, no acceso
+// completo al calendario (que permitiría, por ejemplo, borrarlo
+// entero). accessType=offline + prompt=consent son necesarios para
+// que Google devuelva un refresh_token la primera vez — sin eso, solo
+// se obtiene un access_token que expira en ~1 hora y no sirve para
+// sincronizar después de que el usuario cierra la sesión de Google.
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+
+export default function GoogleCalendarLink() {
+  const [loading, setLoading] = useState(true)
+  const [connected, setConnected] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSyncMessage, setLastSyncMessage] = useState<string | null>(null)
+
+  async function checkConnection() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from('google_calendar_tokens')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (error) throw error
+      setConnected(!!data)
+    } catch (err) {
+      console.error('Error revisando la conexión con Google Calendar:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    checkConnection()
+
+    // Si el usuario vuelve de autenticarse con Google (con el scope de
+    // Calendar), Supabase deja el provider_refresh_token en la sesión.
+    // Lo capturamos acá y lo guardamos nosotros — Supabase no lo
+    // persiste en ningún lado por su cuenta.
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.provider_refresh_token && session.provider_token) {
+        const { error } = await supabase.from('google_calendar_tokens').upsert(
+          {
+            user_id: session.user.id,
+            refresh_token: session.provider_refresh_token,
+          },
+          { onConflict: 'user_id' }
+        )
+        if (!error) {
+          setConnected(true)
+        } else {
+          console.error('Error guardando el refresh_token de Google:', error)
+        }
+      }
+    })
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  async function handleConnect() {
+    setConnecting(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: CALENDAR_SCOPE,
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+        redirectTo: `${window.location.origin}/`,
+      },
+    })
+    if (error) {
+      alert('Error conectando con Google: ' + error.message)
+      setConnecting(false)
+    }
+    // Si no hay error, el navegador redirige a Google — no hace falta
+    // hacer nada más acá.
+  }
+
+  async function handleDisconnect() {
+    if (!confirm('¿Desconectar Google Calendar? Dejamos de crear/actualizar eventos hasta que vuelvas a conectar.')) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { error } = await supabase.from('google_calendar_tokens').delete().eq('user_id', user.id)
+    if (!error) {
+      setConnected(false)
+    } else {
+      alert('Error al desconectar: ' + error.message)
+    }
+  }
+
+  async function handleSyncNow() {
+    setSyncing(true)
+    setLastSyncMessage(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data, error } = await supabase.functions.invoke('sync-google-calendar', {
+        method: 'POST',
+      })
+
+      if (error) throw error
+      setLastSyncMessage(`Sincronizado: ${data?.synced ?? 0} evento(s) actualizados.`)
+    } catch (err) {
+      setLastSyncMessage('Error al sincronizar — revisá que la Edge Function esté desplegada.')
+      console.error('Error sincronizando con Google Calendar:', err)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm text-center">
+        <p className="text-xs font-semibold text-gray-400 animate-pulse">Cargando...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
+      <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+        <CalendarDays size={16} className="text-blue-500" /> Google Calendar
+      </h3>
+
+      {connected ? (
+        <div className="space-y-2.5">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 size={14} /> Conectado — tus suscripciones y servicios/alquiler se
+            sincronizan como eventos con recordatorio.
+          </p>
+
+          <button
+            onClick={handleSyncNow}
+            disabled={syncing}
+            className="w-full flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar ahora'}
+          </button>
+
+          {lastSyncMessage && <p className="text-[11px] text-gray-500 dark:text-gray-400">{lastSyncMessage}</p>}
+
+          <button
+            onClick={handleDisconnect}
+            className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 hover:text-rose-600 cursor-pointer"
+          >
+            <Unlink size={12} /> Desconectar
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Conectá tu Google Calendar para que tus suscripciones y servicios/alquiler
+            aparezcan como eventos con recordatorio automático.
+          </p>
+          <button
+            onClick={handleConnect}
+            disabled={connecting}
+            className="w-full flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 rounded-xl transition cursor-pointer disabled:opacity-50"
+          >
+            <CalendarDays size={13} />
+            {connecting ? 'Conectando...' : 'Conectar Google Calendar'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
