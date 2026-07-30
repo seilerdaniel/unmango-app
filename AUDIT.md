@@ -919,3 +919,60 @@ pasando).
 
 ---
 _Generado en sesión de auditoría con Claude — 29/07/2026._
+
+## 🎨 Rediseño a navegación por pestañas (a partir de brief de Gemini Code)
+
+El usuario compartió un documento de rediseño completo (armado con otra
+IA) y decidió avanzar con la parte más grande primero: reestructurar
+toda la app de una sola página que scrollea a navegación tipo app
+mobile con pestañas. Se está haciendo en 4 pasos; este es el paso 1.
+
+### ✅ Paso 1: Shell de navegación
+
+- [x] **`BottomNav.tsx`** (`src/components/nav/`) — barra inferior fija
+  con 4 pestañas (Inicio, Análisis, Planes, Historial), con un hueco
+  reservado en el medio para el FAB central que se suma en el paso 3
+  (así no hay que reacomodar el layout de nuevo). 3 tests.
+- [x] **`SettingsPanel.tsx`** — overlay a pantalla completa para
+  Configuración, accesible desde un ícono nuevo en el header (⚙️) en
+  vez de ser una sección más mezclada en el medio de la página, como
+  pedía el documento ("mover Ajustes a un ícono en la barra superior").
+- [x] **`page.tsx` reorganizado** en las 4 pestañas:
+  - **Inicio**: tarjetas de Balance/Ingresos/Gastos, Días sin Gastar,
+    Proyección a Fin de Mes, Gastos Hormiga, Alerta de aumento de
+    precio, y el formulario de carga rápida.
+  - **Análisis**: gráfico de torta, Tendencia 6 meses, Brecha
+    Cambiaria, Regla 50/30/20.
+  - **Planes**: Pagos Recurrentes, Cuotas, Deudas y Préstamos,
+    Presupuestos, Metas de Ahorro.
+  - **Historial**: lo que ya existía (filtros + lista), sin cambios.
+  - **Configuración** (no es una pestaña, es el overlay): Importar
+    CSV, Mis Billeteras, Mis Categorías, Copia de Seguridad, Telegram,
+    Google Calendar.
+- [x] Los 4 botones flotantes (calculadora ARS/USD, calculadora normal,
+  voz, QR) se subieron para no quedar tapados por la barra inferior
+  nueva — es un ajuste temporal, el paso 3 los reemplaza por el FAB
+  desplegable central.
+
+Unificar Suscripciones+Servicios/Alquiler en "Pagos Recurrentes" (parte
+del mismo documento) ya se había hecho en la tanda anterior.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — si hubiera
+quedado un tag JSX desbalanceado en la reorganización, esto lo habría
+marcado como error de sintaxis), `npx eslint .` (misma línea base
+pre-existente, nada nuevo), `npx vitest run` (**34 archivos, 166
+tests**, todos pasando).
+
+### 📌 Quedan 3 pasos de este rediseño
+
+- **Paso 2**: pulir cada pestaña (ej. "Últimos Movimientos" resumido en
+  Inicio, tabla Oficial/Blue/MEP en vez de solo Blue en Brecha
+  Cambiaria — hoy solo hay dato de Blue).
+- **Paso 3**: FAB central desplegable que reemplace los 4 botones
+  flotantes sueltos por un solo botón `[+]` con las 4 opciones (Voz,
+  QR, Calculadora ARS/USD, Carga Manual).
+- **Paso 4**: piezas nuevas del documento — calculadora matemática
+  inline en el campo de monto (que "2500 + 1300" calcule solo),
+  carrusel horizontal de billeteras en Inicio, Límite Seguro de Gasto
+  Diario, Simulador Contado vs. Cuotas, división de gastos con
+  recordatorio por WhatsApp.

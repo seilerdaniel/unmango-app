@@ -135,7 +135,7 @@ export default function VoiceExpenseInput({ onTransactionAdded }: VoiceExpenseIn
       <button
         onClick={() => setIsOpen(true)}
         title="Cargar por voz o texto natural"
-        className="fixed bottom-36 right-5 z-40 bg-rose-600 hover:bg-rose-700 text-white p-3.5 rounded-full shadow-lg shadow-rose-600/30 transition cursor-pointer"
+        className="fixed bottom-[224px] right-5 z-40 bg-rose-600 hover:bg-rose-700 text-white p-3.5 rounded-full shadow-lg shadow-rose-600/30 transition cursor-pointer"
       >
         <Mic size={20} />
       </button>

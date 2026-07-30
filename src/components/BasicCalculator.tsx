@@ -76,7 +76,7 @@ export default function BasicCalculator() {
       <button
         onClick={() => setIsOpen(true)}
         title="Calculadora"
-        className="fixed bottom-20 right-5 z-40 bg-slate-700 hover:bg-slate-800 text-white p-3.5 rounded-full shadow-lg shadow-slate-700/30 transition cursor-pointer"
+        className="fixed bottom-[160px] right-5 z-40 bg-slate-700 hover:bg-slate-800 text-white p-3.5 rounded-full shadow-lg shadow-slate-700/30 transition cursor-pointer"
       >
         <CalculatorIcon size={20} />
       </button>

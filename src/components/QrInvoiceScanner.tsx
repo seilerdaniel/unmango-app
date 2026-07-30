@@ -129,7 +129,7 @@ export default function QrInvoiceScanner({ onTransactionAdded }: QrInvoiceScanne
       <button
         onClick={() => setIsOpen(true)}
         title="Escanear factura (QR AFIP)"
-        className="fixed bottom-52 right-5 z-40 bg-cyan-600 hover:bg-cyan-700 text-white p-3.5 rounded-full shadow-lg shadow-cyan-600/30 transition cursor-pointer"
+        className="fixed bottom-[288px] right-5 z-40 bg-cyan-600 hover:bg-cyan-700 text-white p-3.5 rounded-full shadow-lg shadow-cyan-600/30 transition cursor-pointer"
       >
         <QrCode size={20} />
       </button>

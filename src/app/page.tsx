@@ -16,18 +16,6 @@ import ExchangeGapSimulator from "@/components/ExchangeGapSimulator";
 import TelegramLink from "@/components/TelegramLink";
 import GoogleCalendarLink from "@/components/GoogleCalendarLink";
 import TransactionFilters from "@/components/TransactionFilters";
-import {
-  LogOut,
-  ArrowUpRight,
-  ArrowDownRight,
-  Trash2,
-  Eye,
-  EyeOff,
-  Sun,
-  Moon,
-  Circle,
-  Info,
-} from "lucide-react";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
 import RecurringManager from "@/components/RecurringManager";
@@ -47,7 +35,22 @@ import ShareBalanceCard from "@/components/ShareBalanceCard";
 import SubscriptionPriceAlerts from "@/components/SubscriptionPriceAlerts";
 import InstallmentTracker from "@/components/InstallmentTracker";
 import DebtsManager from "@/components/DebtsManager";
+import BottomNav, { TabId } from "@/components/nav/BottomNav";
+import SettingsPanel from "@/components/nav/SettingsPanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import {
+  LogOut,
+  ArrowUpRight,
+  ArrowDownRight,
+  Trash2,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon,
+  Circle,
+  Info,
+  Settings as SettingsIcon,
+} from "lucide-react";
 
 // Cantidad de movimientos que se traen por página. El balance y los totales
 // NO dependen de este número: se calculan del lado del servidor con la
@@ -66,6 +69,8 @@ export default function Home() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>("inicio");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const router = useRouter();
 
   // Consumimos el contexto de privacidad y de tema
@@ -257,6 +262,15 @@ export default function Home() {
               <span><kbd className="px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 font-mono">/</kbd> buscar</span>
             </div>
 
+            {/* Botón Configuración */}
+            <button
+              onClick={() => setSettingsOpen(true)}
+              title="Configuración"
+              className="p-2 sm:px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition shadow-sm flex items-center gap-2 text-xs font-semibold cursor-pointer"
+            >
+              <SettingsIcon size={16} />
+            </button>
+
             {/* Botón Modo Oscuro */}
             <button
               onClick={toggleTheme}
@@ -313,81 +327,85 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Tarjetas de Métricas principales formateadas con formatAmount */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-            <p
-              className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"
-              title="Suma TODOS tus movimientos, tengan o no una billetera asignada. Por eso puede no coincidir con la suma de tus billeteras (abajo) — esa solo cuenta lo que asignaste explícitamente a cada una, más su saldo inicial."
-            >
-              Balance Disponible <Info size={11} className="text-gray-300 dark:text-gray-600" />
-            </p>
-            <h3
-              className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900 dark:text-gray-100" : "text-rose-600"}`}
-            >
-              {formatAmount(balance)}
-            </h3>
-            {totalWalletBalance !== null && (
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-                En billeteras: {isPrivate ? "••••••" : formatAmount(totalWalletBalance)}
-              </p>
-            )}
+        {/* ===== Pestaña Inicio ===== */}
+        {activeTab === "inicio" && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                <p
+                  className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1"
+                  title="Suma TODOS tus movimientos, tengan o no una billetera asignada. Por eso puede no coincidir con la suma de tus billeteras (Configuración) — esa solo cuenta lo que asignaste explícitamente a cada una, más su saldo inicial."
+                >
+                  Balance Disponible <Info size={11} className="text-gray-300 dark:text-gray-600" />
+                </p>
+                <h3
+                  className={`text-2xl font-extrabold ${balance >= 0 ? "text-gray-900 dark:text-gray-100" : "text-rose-600"}`}
+                >
+                  {formatAmount(balance)}
+                </h3>
+                {totalWalletBalance !== null && (
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                    En billeteras: {isPrivate ? "••••••" : formatAmount(totalWalletBalance)}
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <ArrowUpRight size={14} /> Total Ingresos
+                </p>
+                <h3 className="text-2xl font-extrabold text-emerald-600">
+                  {isPrivate
+                    ? formatAmount(totalIncome)
+                    : `+ ${formatAmount(totalIncome)}`}
+                </h3>
+              </div>
+
+              <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <ArrowDownRight size={14} /> Total Gastos
+                </p>
+                <h3 className="text-2xl font-extrabold text-rose-600">
+                  {isPrivate
+                    ? formatAmount(totalExpense)
+                    : `- ${formatAmount(totalExpense)}`}
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-6 mt-6">
+              <ZeroSpendStreak />
+              <MonthEndProjection />
+              <AntExpenses />
+              <SubscriptionPriceAlerts />
+              <TransactionForm onTransactionAdded={fetchTransactions} />
+            </div>
+          </>
+        )}
+
+        {/* ===== Pestaña Análisis ===== */}
+        {activeTab === "analisis" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <FinanceChart income={totalIncome} expense={totalExpense} />
+            <TrendChart />
+            <ExchangeGapSimulator />
+            <BudgetRule502030 />
           </div>
+        )}
 
-          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-            <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-              <ArrowUpRight size={14} /> Total Ingresos
-            </p>
-            <h3 className="text-2xl font-extrabold text-emerald-600">
-              {isPrivate
-                ? formatAmount(totalIncome)
-                : `+ ${formatAmount(totalIncome)}`}
-            </h3>
-          </div>
-
-          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-            <p className="text-xs font-semibold text-rose-500 uppercase tracking-wider mb-1 flex items-center gap-1">
-              <ArrowDownRight size={14} /> Total Gastos
-            </p>
-            <h3 className="text-2xl font-extrabold text-rose-600">
-              {isPrivate
-                ? formatAmount(totalExpense)
-                : `- ${formatAmount(totalExpense)}`}
-            </h3>
-          </div>
-        </div>
-
-        <ZeroSpendStreak />
-        <MonthEndProjection />
-        <AntExpenses />
-        <SubscriptionPriceAlerts />
-
-        {/* Formulario y Lateral (Gráfico + Categorías) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <TransactionForm onTransactionAdded={fetchTransactions} />
-            <ImportTransactions onImported={fetchTransactions} />
+        {/* ===== Pestaña Planes ===== */}
+        {activeTab === "planes" && (
+          <div className="space-y-6">
             <RecurringManager onTransactionAdded={fetchTransactions} />
             <InstallmentTracker onTransactionAdded={fetchTransactions} />
             <DebtsManager onTransactionAdded={fetchTransactions} />
             <BudgetManager />
             <SavingsGoals />
           </div>
+        )}
 
-          <div className="lg:col-span-1 space-y-6">
-            <FinanceChart income={totalIncome} expense={totalExpense} />
-            <TrendChart />
-            <ExchangeGapSimulator />
-            <WalletManager onWalletsUpdated={fetchWalletTotal} />
-            <BudgetRule502030 />
-            <CategoryManager onCategoriesUpdated={fetchTransactions} />
-            <BackupRestore />
-            <TelegramLink />
-            <GoogleCalendarLink />
-          </div>
-        </div>
-
-        {/* Historial de Movimientos y Filtros */}
+        {/* ===== Pestaña Historial ===== */}
+        {activeTab === "historial" && (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -502,7 +520,22 @@ export default function Home() {
             </div>
           )}
         </div>
+        )}
       </div>
+
+      {/* Espacio para que el contenido no quede tapado por el bottom nav fijo */}
+      <div className="h-20" />
+
+      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)}>
+        <ImportTransactions onImported={fetchTransactions} />
+        <WalletManager onWalletsUpdated={fetchWalletTotal} />
+        <CategoryManager onCategoriesUpdated={fetchTransactions} />
+        <BackupRestore />
+        <TelegramLink />
+        <GoogleCalendarLink />
+      </SettingsPanel>
+
+      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
       <ArsUsdCalculator />
       <BasicCalculator />

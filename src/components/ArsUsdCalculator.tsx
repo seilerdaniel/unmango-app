@@ -106,7 +106,7 @@ export default function ArsUsdCalculator() {
       <button
         onClick={() => setIsOpen(true)}
         title="Calculadora ARS / USD Blue"
-        className="fixed bottom-5 right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white p-3.5 rounded-full shadow-lg shadow-emerald-600/30 transition cursor-pointer"
+        className="fixed bottom-[100px] right-5 z-40 bg-emerald-600 hover:bg-emerald-700 text-white p-3.5 rounded-full shadow-lg shadow-emerald-600/30 transition cursor-pointer"
       >
         <Calculator size={20} />
       </button>
