@@ -16,6 +16,8 @@ import ExchangeGapSimulator from "@/components/ExchangeGapSimulator";
 import TelegramLink from "@/components/TelegramLink";
 import GoogleCalendarLink from "@/components/GoogleCalendarLink";
 import WorkSettings from "@/components/WorkSettings";
+import HouseholdLink from "@/components/HouseholdLink";
+import HouseholdExpenses from "@/components/HouseholdExpenses";
 import TransactionFilters from "@/components/TransactionFilters";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -423,6 +425,7 @@ export default function Home() {
         {/* ===== Pestaña Planes ===== */}
         {activeTab === "planes" && (
           <div className="space-y-6">
+            <HouseholdExpenses />
             <RecurringManager onTransactionAdded={fetchTransactions} />
             <InstallmentTracker onTransactionAdded={fetchTransactions} />
             <DebtsManager onTransactionAdded={fetchTransactions} />
@@ -561,6 +564,7 @@ export default function Home() {
         <TelegramLink />
         <GoogleCalendarLink />
         <WorkSettings />
+        <HouseholdLink />
       </SettingsPanel>
 
       <OfflineSyncManager onSynced={fetchTransactions} />

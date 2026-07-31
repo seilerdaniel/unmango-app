@@ -464,6 +464,70 @@ export interface Database {
         }
         Relationships: []
       }
+      household_links: {
+        Row: {
+          id: string
+          user_a_id: string
+          user_b_id: string | null
+          invite_code: string
+          status: 'pending' | 'active'
+          created_at: string
+          linked_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_a_id: string
+          user_b_id?: string | null
+          invite_code: string
+          status?: 'pending' | 'active'
+          created_at?: string
+          linked_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_a_id?: string
+          user_b_id?: string | null
+          invite_code?: string
+          status?: 'pending' | 'active'
+          created_at?: string
+          linked_at?: string | null
+        }
+        Relationships: []
+      }
+      household_expenses: {
+        Row: {
+          id: string
+          household_id: string
+          paid_by_user_id: string
+          description: string
+          amount: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          paid_by_user_id: string
+          description: string
+          amount: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          household_id?: string
+          paid_by_user_id?: string
+          description?: string
+          amount?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_expenses_household_id_fkey"
+            columns: ["household_id"]
+            referencedRelation: "household_links"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       user_work_settings: {
         Row: {
           user_id: string
@@ -581,6 +645,14 @@ export interface Database {
       get_monthly_trend: {
         Args: { p_months: number }
         Returns: { month_start: string; total_income: number; total_expense: number }[]
+      }
+      accept_household_invite: {
+        Args: { p_invite_code: string }
+        Returns: string
+      }
+      get_household_partner_email: {
+        Args: { p_household_id: string }
+        Returns: string
       }
       get_recurring_price_changes: {
         Args: Record<string, never>

@@ -1290,3 +1290,59 @@ explícitamente el insert de sincronización, igual que en
 requeridos a través de un `Record<string, unknown>` genérico),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**41 archivos, 216 tests**, todos pasando).
+
+## ✅ Modo Hogar / Pareja (3ra idea prioritaria, completa)
+
+La más grande de las 3 ideas prioritarias que el usuario marcó como
+"para implementar primero". Vincula dos cuentas de UnMango distintas
+para llevar los gastos comunes de la casa sin mezclarlos con lo
+personal de cada uno.
+
+- [x] **`supabase/household_mode.sql`** — `household_links` (vincula
+  dos `user_id`, con un código de invitación de 8 caracteres sin
+  ambigüedad tipo 0/O/1/I) y `household_expenses` (gastos compartidos,
+  con RLS que solo deja ver/insertar/borrar a quien pertenece a ese
+  hogar). **Aceptar una invitación NO es un UPDATE directo del
+  cliente** — es una función `security definer`
+  (`accept_household_invite`) que solo permite la operación exacta
+  "completar `user_b_id` con tu propio `auth.uid()` en una invitación
+  pendiente que no sea la tuya", en vez de una policy de RLS de UPDATE
+  más difícil de acotar columna por columna. También hay una función
+  `get_household_partner_email` (también `security definer`, porque un
+  usuario común no puede leer `auth.users` de nadie más) para poder
+  mostrar el email de la otra persona sin exponer una consulta directa
+  a esa tabla.
+- [x] **`computeHouseholdBalance()`** (`src/lib/householdBalance.ts`,
+  pura, 5 tests) — cada uno debería haber puesto la mitad del total de
+  gastos de hogar; si pagaste de más, la otra persona te debe la
+  diferencia, si pagaste de menos, se la debés vos.
+- [x] **`generateHouseholdInviteCode()`** (pura, 3 tests) — código de 8
+  caracteres, más largo que el de Telegram (6 dígitos) a propósito: acá
+  se comparte acceso a datos financieros de dos cuentas, conviene que
+  sea menos adivinable.
+- [x] **`HouseholdLink.tsx`** (vive en Configuración, mismo lugar que
+  Telegram/Google Calendar): generar código para invitar, o cargar un
+  código que te pasaron para unirte. Mientras está "pending" (generaste
+  el código pero la otra persona todavía no lo cargó), se puede
+  cancelar. Una vez activo, muestra el email de la otra persona y un
+  botón para desvincular (con confirmación, porque borra los gastos
+  compartidos).
+- [x] **`HouseholdExpenses.tsx`** (vive en Planes, junto a Pagos
+  Recurrentes/Cuotas/Deudas) — **se oculta sola si no hay hogar
+  vinculado**, no aparece una tarjeta vacía confundiendo a quien no usa
+  esto. Registra gastos de hogar (quién pagó se infiere de quién está
+  logueado), muestra el balance ("Fulano te debe $X" / "Le debés a
+  Fulano $X"), y un botón "Marcar como saldado" que borra todo el
+  historial de gastos de hogar para arrancar de cero (pensado para
+  usar después de arreglar cuentas en la vida real — no mueve plata
+  real entre las cuentas, es un cálculo, no una transferencia).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (2 casos nuevos del mismo warning pre-existente, nada
+nuevo grave), `npx vitest run` (**43 archivos, 224 tests**, todos
+pasando).
+
+**⚠️ 1 SQL nuevo para correr**: `household_mode.sql`.
+
+Con esto se completaron las **3 ideas prioritarias** de la nueva
+batería que el usuario compartió.
