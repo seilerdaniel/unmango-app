@@ -1423,3 +1423,42 @@ Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**44 archivos, 231 tests**, todos pasando).
+
+## ✅ Mejoras a Carga por Voz (a pedido del usuario)
+
+Revisando el código a fondo para esta mejora se encontró un **bug real
+no reportado**: el medio de pago se detectaba (`paymentMethodHint` en
+`naturalLanguageExpense.ts`) pero **nunca se usaba** — el insert
+siempre guardaba `payment_method: 'Efectivo'` fijo, sin importar lo que
+la persona dijera ("con tarjeta", "por transferencia", etc.). Se
+corrigió de raíz, con un test que reproduce el bug (falla en la versión
+vieja, pasa en la nueva).
+
+- [x] **Medio de pago corregido** — ahora se usa de verdad
+  `paymentMethodHint`, y además se agregó **selección de billetera**:
+  si hay una sola billetera del tipo correspondiente al medio de pago
+  detectado (ej. una sola tarjeta de crédito), se preselecciona sola;
+  si hay varias, el usuario elige.
+- [x] **Categorización automática** — `src/lib/expenseCategoryGuess.ts`
+  (`guessCategoryName()`, pura, 6 tests): reconoce comercios/rubros
+  comunes de Argentina (Coto/Carrefour/Jumbo → Supermercado, YPF/nafta
+  → Transporte, PedidosYa/Rappi → Restaurantes y Delivery, Netflix/
+  Spotify → Entretenimiento, etc.) y cruza el nombre con las categorías
+  reales que el usuario ya tiene creadas — si no tiene esa categoría,
+  no inventa una, la deja sin categorizar para que la elija a mano.
+- [x] **Transcripción en vivo mientras hablás** — antes había que
+  esperar en silencio hasta que el reconocimiento terminara de
+  procesar todo; ahora se activó `interimResults: true` y se muestra el
+  texto parcial a medida que se va reconociendo, para que quede claro
+  que el micrófono está funcionando.
+- [x] **Mensajes de error reales** — antes cualquier error (sin
+  permiso de micrófono, sin micrófono conectado, sin internet — el
+  reconocimiento de Chrome usa un servicio en la nube, no es 100%
+  local) fallaba en silencio, dejando a la persona sin saber qué pasó.
+  `src/lib/speechErrorMessage.ts` (pura, 5 tests) traduce los códigos
+  de error de la Web Speech API a mensajes en español que dicen qué
+  hacer al respecto.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**47 archivos, 245 tests**, todos pasando).

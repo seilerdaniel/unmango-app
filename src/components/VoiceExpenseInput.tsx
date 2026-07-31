@@ -4,20 +4,29 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { parseNaturalLanguageExpense } from '@/lib/naturalLanguageExpense'
-import { Mic, MicOff, X, CheckCircle2 } from 'lucide-react'
+import { guessCategoryName } from '@/lib/expenseCategoryGuess'
+import { speechErrorMessage } from '@/lib/speechErrorMessage'
+import { Wallet } from '@/types'
+import { Mic, MicOff, X, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 // El navegador tipa esto de forma no estándar todavía (prefijo webkit en
 // Chrome/Edge). Se declara mínimamente lo que se usa, sin depender de
 // @types/dom-speech-recognition para no sumar una dependencia solo por
 // esto.
+interface SpeechResultAlternative {
+  transcript: string
+}
+interface SpeechResult extends Array<SpeechResultAlternative> {
+  isFinal: boolean
+}
 interface MinimalSpeechRecognition extends EventTarget {
   lang: string
   interimResults: boolean
   continuous: boolean
   start: () => void
   stop: () => void
-  onresult: ((event: { results: { transcript: string }[][] } & Event) => void) | null
-  onerror: ((event: Event) => void) | null
+  onresult: ((event: { results: SpeechResult[] } & Event) => void) | null
+  onerror: ((event: { error: string } & Event) => void) | null
   onend: (() => void) | null
 }
 
@@ -30,6 +39,14 @@ function getSpeechRecognition(): (new () => MinimalSpeechRecognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
+const WALLET_TYPES_BY_PAYMENT_METHOD: Record<string, Wallet['type'][]> = {
+  'Billetera Virtual': ['virtual_wallet'],
+  Efectivo: ['cash'],
+  Transferencia: ['bank'],
+  'Tarjeta de Crédito': ['credit_card'],
+  'Tarjeta de Débito': ['debit_card'],
+}
+
 interface VoiceExpenseInputProps {
   isOpen: boolean
   onClose: () => void
@@ -39,18 +56,23 @@ interface VoiceExpenseInputProps {
 export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded }: VoiceExpenseInputProps) {
   const { categories } = useCategories()
   const [isListening, setIsListening] = useState(false)
+  const [interimText, setInterimText] = useState('')
   const [rawText, setRawText] = useState('')
   const [supported, setSupported] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [wallets, setWallets] = useState<Wallet[]>([])
 
   // Campos editables de confirmación — se pre-llenan con lo que se
-  // entendió, pero SIEMPRE hay que confirmar antes de guardar (nunca se
-  // guarda directo desde el reconocimiento de voz, que puede
-  // equivocarse).
+  // entendió (monto, descripción, categoría y medio de pago), pero
+  // SIEMPRE hay que confirmar antes de guardar (nunca se guarda directo
+  // desde el reconocimiento de voz, que puede equivocarse).
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [categoryId, setCategoryId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo')
+  const [walletId, setWalletId] = useState('')
 
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null)
 
@@ -58,30 +80,78 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
     setSupported(getSpeechRecognition() !== null)
   }, [])
 
+  useEffect(() => {
+    if (!isOpen) return
+    async function loadWallets() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('wallets').select('*').eq('user_id', user.id)
+      if (data) setWallets(data)
+    }
+    loadWallets()
+  }, [isOpen])
+
   function handleTranscript(text: string) {
     setRawText(text)
+    setInterimText('')
     const parsed = parseNaturalLanguageExpense(text)
     if (parsed.amount !== null) setAmount(String(parsed.amount))
     if (parsed.description !== null) setDescription(parsed.description)
     setType(parsed.type)
+
+    // Medio de pago: antes se detectaba pero nunca se usaba, siempre
+    // quedaba en "Efectivo" sin importar lo que se dijera. Ahora sí se
+    // aplica, y si hay una billetera del tipo correspondiente (única),
+    // se preselecciona sola.
+    const method = parsed.paymentMethodHint ?? 'Efectivo'
+    setPaymentMethod(method)
+    const matchingTypes = WALLET_TYPES_BY_PAYMENT_METHOD[method]
+    const matchingWallets = matchingTypes ? wallets.filter((w) => matchingTypes.includes(w.type)) : []
+    setWalletId(matchingWallets.length === 1 ? matchingWallets[0].id : '')
+
+    // Categoría: se intenta adivinar por palabras clave del comercio/
+    // rubro (ej. "Coto" -> Supermercado) y se cruza con las categorías
+    // reales que el usuario ya tiene creadas — si no tiene esa
+    // categoría, se deja sin categoría en vez de inventar una.
+    const guessedName = guessCategoryName(text)
+    if (guessedName) {
+      const match = categories.find((c) => c.name.toLowerCase() === guessedName.toLowerCase())
+      if (match) setCategoryId(match.id)
+    }
   }
 
   function startListening() {
     const SpeechRecognitionCtor = getSpeechRecognition()
     if (!SpeechRecognitionCtor) return
 
+    setErrorMessage(null)
     const recognition = new SpeechRecognitionCtor()
     recognition.lang = 'es-AR'
-    recognition.interimResults = false
+    // interimResults=true: se ve el texto en vivo mientras hablás, en
+    // vez de una espera muda hasta que termine de procesar todo.
+    recognition.interimResults = true
     recognition.continuous = false
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? ''
-      handleTranscript(transcript)
-      setIsListening(false)
+      const lastResult = event.results[event.results.length - 1]
+      const transcript = lastResult?.[0]?.transcript ?? ''
+      if (lastResult?.isFinal) {
+        handleTranscript(transcript)
+        setIsListening(false)
+      } else {
+        setInterimText(transcript)
+      }
     }
-    recognition.onerror = () => setIsListening(false)
-    recognition.onend = () => setIsListening(false)
+    recognition.onerror = (event) => {
+      const message = speechErrorMessage(event.error)
+      if (message) setErrorMessage(message)
+      setIsListening(false)
+      setInterimText('')
+    }
+    recognition.onend = () => {
+      setIsListening(false)
+      setInterimText('')
+    }
 
     recognitionRef.current = recognition
     setIsListening(true)
@@ -91,6 +161,17 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
   function stopListening() {
     recognitionRef.current?.stop()
     setIsListening(false)
+  }
+
+  function resetForm() {
+    setRawText('')
+    setInterimText('')
+    setAmount('')
+    setDescription('')
+    setCategoryId('')
+    setPaymentMethod('Efectivo')
+    setWalletId('')
+    setErrorMessage(null)
   }
 
   async function handleSave() {
@@ -109,7 +190,8 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
         description: description.trim(),
         type,
         category_id: categoryId || null,
-        payment_method: 'Efectivo',
+        payment_method: paymentMethod,
+        wallet_id: walletId || null,
         is_usd: false,
         amount_usd: null,
         amount_ars: Number(amount),
@@ -119,10 +201,7 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
 
     if (!error) {
       onClose()
-      setRawText('')
-      setAmount('')
-      setDescription('')
-      setCategoryId('')
+      resetForm()
       if (onTransactionAdded) onTransactionAdded()
     } else {
       alert('Error al guardar el movimiento: ' + error.message)
@@ -130,6 +209,9 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
     }
     setSubmitting(false)
   }
+
+  const relevantWalletTypes = WALLET_TYPES_BY_PAYMENT_METHOD[paymentMethod]
+  const relevantWallets = relevantWalletTypes ? wallets.filter((w) => relevantWalletTypes.includes(w.type)) : []
 
   return (
     <>
@@ -155,6 +237,12 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
               </p>
             )}
 
+            {errorMessage && (
+              <p className="flex items-start gap-1.5 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 rounded-xl p-2.5">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {errorMessage}
+              </p>
+            )}
+
             <div className="flex gap-2">
               <input
                 type="text"
@@ -177,6 +265,12 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
                 </button>
               )}
             </div>
+
+            {isListening && (
+              <p className="text-xs text-gray-400 italic min-h-[1.2em]">
+                {interimText || 'Escuchando...'}
+              </p>
+            )}
 
             {rawText && (
               <div className="p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl space-y-2.5 border border-gray-100 dark:border-gray-800">
@@ -222,6 +316,36 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
                     </option>
                   ))}
                 </select>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => {
+                      setPaymentMethod(e.target.value)
+                      setWalletId('')
+                    }}
+                    className="text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-2 font-semibold text-gray-800 dark:text-gray-200"
+                  >
+                    {Object.keys(WALLET_TYPES_BY_PAYMENT_METHOD).map((method) => (
+                      <option key={method} value={method}>
+                        {method}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={walletId}
+                    onChange={(e) => setWalletId(e.target.value)}
+                    disabled={relevantWallets.length === 0}
+                    className="text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-2 font-semibold text-gray-800 dark:text-gray-200 disabled:opacity-50"
+                  >
+                    <option value="">¿Cuál? (opcional)</option>
+                    {relevantWallets.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <button
                   onClick={handleSave}
