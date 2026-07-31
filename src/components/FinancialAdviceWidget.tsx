@@ -8,7 +8,8 @@ import { detectAntExpenses } from '@/lib/antExpenses'
 import { detectPriceIncreases } from '@/lib/priceIncreases'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
 import { computeSafeToSpend } from '@/lib/safeToSpend'
-import { Lightbulb, AlertTriangle, CheckCircle2, Info, AlertCircle } from 'lucide-react'
+import { Lightbulb, AlertTriangle, CheckCircle2, Info, AlertCircle, ArrowRight } from 'lucide-react'
+import { TabId } from '@/components/nav/BottomNav'
 
 const ANT_THRESHOLD_STORAGE_KEY = 'unmango_ant_expense_threshold'
 const DEFAULT_ANT_THRESHOLD = 3000
@@ -27,7 +28,7 @@ const SEVERITY_STYLES: Record<AdviceItem['severity'], { icon: typeof Lightbulb; 
  * lado, reutilizados acá para que los consejos no contradigan lo que
  * ya se ve en el Score.
  */
-export default function FinancialAdviceWidget() {
+export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab: TabId, sectionId?: string) => void }) {
   const [advice, setAdvice] = useState<AdviceItem[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -145,9 +146,19 @@ export default function FinancialAdviceWidget() {
         {advice.map((item) => {
           const { icon: Icon, className } = SEVERITY_STYLES[item.severity]
           return (
-            <div key={item.id} className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs font-medium ${className}`}>
-              <Icon size={15} className="shrink-0 mt-0.5" />
-              <span>{item.message}</span>
+            <div key={item.id} className={`p-3 rounded-xl border text-xs font-medium space-y-1.5 ${className}`}>
+              <div className="flex items-start gap-2.5">
+                <Icon size={15} className="shrink-0 mt-0.5" />
+                <span>{item.message}</span>
+              </div>
+              {item.action && (
+                <button
+                  onClick={() => onNavigate(item.action!.tab, item.action!.sectionId)}
+                  className="flex items-center gap-1 text-[11px] font-bold hover:underline cursor-pointer pl-[23px]"
+                >
+                  {item.action.label} <ArrowRight size={11} />
+                </button>
+              )}
             </div>
           )
         })}

@@ -59,7 +59,7 @@ export default function AntExpenses() {
   const result = detectAntExpenses(expenses, threshold)
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+    <div id="gastos-hormiga" className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Bug size={16} className="text-amber-500" />

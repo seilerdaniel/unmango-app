@@ -8,6 +8,7 @@ import { useCategories } from '@/context/CategoriesContext'
 import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
 import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
+import { sortRecurringExpenses, filterRecurringByKind, RecurringSortField } from '@/lib/recurringSort'
 
 interface RecurringManagerProps {
   onTransactionAdded?: () => void
@@ -60,6 +61,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const [wallets, setWallets] = useState<Wallet[]>([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<RecurringSortField>('nextDue')
+  const [sortAscending, setSortAscending] = useState(true)
+  const [filterKind, setFilterKind] = useState('all')
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -290,7 +294,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   }
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div id="pagos-recurrentes" ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Repeat className="w-5 h-5 text-indigo-600" />
@@ -481,8 +485,37 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
           No tenés suscripciones, servicios ni alquiler registrados todavía.
         </p>
       ) : (
-        <div className="space-y-2.5 pt-2">
-          {items.map((item) => (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterKind}
+              onChange={(e) => setFilterKind(e.target.value)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="all">Todos los tipos</option>
+              <option value="subscription">Suscripciones</option>
+              <option value="utility_rent">Servicios / Alquiler</option>
+            </select>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as RecurringSortField)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="nextDue">Ordenar por vencimiento</option>
+              <option value="name">Ordenar por nombre</option>
+              <option value="amount">Ordenar por monto</option>
+            </select>
+            <button
+              onClick={() => setSortAscending((v) => !v)}
+              title={sortAscending ? 'Ascendente' : 'Descendente'}
+              className="text-[11px] font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 cursor-pointer"
+            >
+              {sortAscending ? '↑' : '↓'}
+            </button>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            {sortRecurringExpenses(filterRecurringByKind(items, filterKind), sortField, sortAscending).map((item) => (
             <div
               key={item.id}
               className={`p-3 rounded-xl border transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 ${
@@ -598,8 +631,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

@@ -1462,3 +1462,42 @@ vieja, pasa en la nueva).
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**47 archivos, 245 tests**, todos pasando).
+
+## ✅ Consejos accionables + Ordenar/Filtrar en Planes
+
+- [x] **Recomendaciones accionables** — cada consejo del panel de
+  Inicio ahora puede llevar un botón "Crear una Meta de Ahorro →" /
+  "Ver Pagos Recurrentes →" / "Ver detalle en Análisis →" que cambia de
+  pestaña y hace scroll directo a esa sección. `AdviceAction` nuevo en
+  `financialAdvice.ts` (tab + sectionId opcional), mapeado a cada tipo
+  de consejo — los positivos ("vas bien") no llevan acción, no hay nada
+  que "hacer" ahí. Se agregaron `id`s a los contenedores de
+  `SavingsGoals` ("metas-ahorro"), `RecurringManager`
+  ("pagos-recurrentes"), `AntExpenses` ("gastos-hormiga") y
+  `SafeToSpendWidget` ("safe-to-spend") para que el scroll tenga a
+  dónde apuntar. 10 tests (3 nuevos sobre las acciones).
+- [x] **Ordenar/Filtrar en Mis Billeteras** — por nombre, saldo o tipo,
+  ascendente/descendente, más filtro por tipo de billetera.
+  `sortWallets()`/`filterWalletsByType()` puras (7 tests).
+- [x] **Evaluación de las otras 3 secciones — se agregó a las 3**:
+  - **Pagos Recurrentes**: ordenar por vencimiento/nombre/monto, filtrar
+    por Suscripción/Servicio. `sortRecurringExpenses()`/
+    `filterRecurringByKind()` (5 tests).
+  - **Deudas y Préstamos**: ordenar por vencimiento/nombre/monto
+    restante (las sin fecha de vencimiento siempre van al final,
+    ordenando en cualquier sentido), filtrar por Debo/Me deben.
+    `sortDebts()`/`filterDebtsByType()` (6 tests).
+  - **Compras en Cuotas**: ordenar por nombre/monto total. Se evaluó
+    agregar "cuotas restantes" como campo de orden pero hubiera
+    necesitado pasar un mapa extra de pagos desde afuera solo para
+    eso — nombre y monto cubren el caso de uso principal sin esa
+    complejidad. `sortInstallmentPurchases()` (3 tests, genérica para
+    preservar el tipo extendido `PurchaseWithPayments` que usa el
+    componente).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores — hubo que
+hacer `sortInstallmentPurchases` genérica, perdía el campo
+`paidInstallmentNumbers` del tipo extendido que usa
+`InstallmentTracker` al tipar el retorno como el tipo base),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**51 archivos, 269 tests**, todos pasando).

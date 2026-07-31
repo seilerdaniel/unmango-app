@@ -239,6 +239,17 @@ export default function Home() {
     }, 50);
   }
 
+  function handleAdviceNavigate(tab: TabId, sectionId?: string) {
+    setActiveTab(tab);
+    if (sectionId) {
+      // Mismo motivo que handleManualEntry: esperamos a que la pestaña
+      // destino ya esté renderizada antes de buscar el elemento.
+      setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    }
+  }
+
   const { totalIncome, totalExpense } = totals;
   const balance = totalIncome - totalExpense;
 
@@ -400,7 +411,7 @@ export default function Home() {
 
             <div className="space-y-6 mt-6">
               <FinancialHealthScoreWidget />
-              <FinancialAdviceWidget />
+              <FinancialAdviceWidget onNavigate={handleAdviceNavigate} />
               <WalletCarousel />
               <ZeroSpendStreak />
               <SafeToSpendWidget />

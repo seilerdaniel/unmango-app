@@ -2,10 +2,18 @@ import { FinancialHealthResult } from './financialHealthScore'
 
 export type AdviceSeverity = 'success' | 'warning' | 'danger' | 'info'
 
+export interface AdviceAction {
+  label: string
+  tab: 'inicio' | 'analisis' | 'planes' | 'historial'
+  /** id del contenedor al que hacer scroll dentro de esa pestaña, si hace falta. */
+  sectionId?: string
+}
+
 export interface AdviceItem {
   id: string
   severity: AdviceSeverity
   message: string
+  action?: AdviceAction
 }
 
 export interface AdviceInputs {
@@ -35,12 +43,14 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'savings-low',
       severity: 'danger',
       message: 'Estás gastando casi todo lo que ganás (o más). Intentá guardar aunque sea un 5-10% este mes.',
+      action: { label: 'Crear una Meta de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' },
     })
   } else if (savings.score < 60) {
     advice.push({
       id: 'savings-mid',
       severity: 'warning',
       message: 'Tu margen de ahorro es bajo. Revisá si hay algún gasto que puedas recortar para guardar un poco más.',
+      action: { label: 'Ver Metas de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' },
     })
   } else if (savings.score >= 80) {
     advice.push({
@@ -55,12 +65,14 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'debt-low',
       severity: 'danger',
       message: 'Tus cuotas y gastos fijos comprometidos se están comiendo una parte muy grande de tu ingreso. Pensalo dos veces antes de sumar una cuota más.',
+      action: { label: 'Ver Pagos Recurrentes', tab: 'planes', sectionId: 'pagos-recurrentes' },
     })
   } else if (debt.score < 60) {
     advice.push({
       id: 'debt-mid',
       severity: 'warning',
       message: 'Tenés bastante comprometido en cuotas y gastos fijos. Andá con cuidado antes de agregar más compromisos mensuales.',
+      action: { label: 'Ver Pagos Recurrentes', tab: 'planes', sectionId: 'pagos-recurrentes' },
     })
   }
 
@@ -69,12 +81,14 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'emergency-low',
       severity: 'danger',
       message: 'Prácticamente no tenés colchón de emergencia. Un imprevisto (rotura, salud) te puede complicar bastante ahora mismo.',
+      action: { label: 'Crear un Fondo de Emergencia', tab: 'planes', sectionId: 'metas-ahorro' },
     })
   } else if (emergencyFund.score < 60) {
     advice.push({
       id: 'emergency-mid',
       severity: 'warning',
       message: 'Tu fondo de emergencia cubre menos de 3 meses de gastos. Si podés, sumá una Meta de Ahorro para ir agrandándolo.',
+      action: { label: 'Ver Metas de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' },
     })
   } else if (emergencyFund.score >= 90) {
     advice.push({
@@ -89,6 +103,7 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'ant-expenses-low',
       severity: 'warning',
       message: 'Los gastos chicos del día a día (cafés, kiosco, delivery) están pesando bastante en tu mes — revisalos en Análisis, capaz hay margen ahí.',
+      action: { label: 'Ver detalle en Análisis', tab: 'analisis', sectionId: 'gastos-hormiga' },
     })
   }
 
@@ -97,6 +112,7 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'subscription-increase',
       severity: 'info',
       message: 'Alguna de tus suscripciones subió de precio este último tiempo — revisá en Planes si te sigue conviniendo.',
+      action: { label: 'Ver Pagos Recurrentes', tab: 'planes', sectionId: 'pagos-recurrentes' },
     })
   }
 
@@ -105,6 +121,7 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'safe-to-spend-zero',
       severity: 'danger',
       message: 'Con el ritmo actual, ya no te queda margen para gastar este mes sin tocar tus gastos fijos comprometidos.',
+      action: { label: 'Ver en Inicio', tab: 'inicio', sectionId: 'safe-to-spend' },
     })
   }
 

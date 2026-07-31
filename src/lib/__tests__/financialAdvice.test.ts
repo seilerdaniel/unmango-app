@@ -79,4 +79,34 @@ describe('generateFinancialAdvice', () => {
     })
     expect(advice.length).toBeGreaterThanOrEqual(5)
   })
+
+  it('los consejos accionables llevan a Metas de Ahorro en Planes', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({ savings: 10 }),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+    })
+    const item = advice.find((a) => a.id === 'savings-low')
+    expect(item?.action).toEqual({ label: 'Crear una Meta de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' })
+  })
+
+  it('los consejos de gasto hormiga llevan a Análisis', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({ antExpenses: 10 }),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+    })
+    const item = advice.find((a) => a.id === 'ant-expenses-low')
+    expect(item?.action?.tab).toBe('analisis')
+  })
+
+  it('los consejos positivos no tienen accion (no hay nada que "hacer")', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({ savings: 90 }),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+    })
+    const item = advice.find((a) => a.id === 'savings-high')
+    expect(item?.action).toBeUndefined()
+  })
 })

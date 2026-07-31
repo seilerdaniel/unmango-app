@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
+import { sortWallets, filterWalletsByType, WalletSortField } from '@/lib/walletSort'
 import ColorPicker from '@/components/ColorPicker'
 import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard, Pencil, X } from 'lucide-react'
 
@@ -42,6 +43,9 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [initialBalance, setInitialBalance] = useState('')
   const [cardNetwork, setCardNetwork] = useState('Visa')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<WalletSortField>('name')
+  const [sortAscending, setSortAscending] = useState(true)
+  const [filterType, setFilterType] = useState('all')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -270,10 +274,42 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
           Todavía no creaste ninguna billetera. Agregá una para empezar a ver tu saldo por cuenta.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {wallets.map((w) => {
-            const Icon = walletIconFor(w.type)
-            return (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="all">Todos los tipos</option>
+              {WALLET_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as WalletSortField)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="name">Ordenar por nombre</option>
+              <option value="balance">Ordenar por saldo</option>
+              <option value="type">Ordenar por tipo</option>
+            </select>
+            <button
+              onClick={() => setSortAscending((v) => !v)}
+              title={sortAscending ? 'Ascendente' : 'Descendente'}
+              className="text-[11px] font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 cursor-pointer"
+            >
+              {sortAscending ? '↑ A-Z' : '↓ Z-A'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {sortWallets(filterWalletsByType(wallets, filterType), sortField, sortAscending).map((w) => {
+              const Icon = walletIconFor(w.type)
+              return (
               <div
                 key={w.id}
                 className="relative overflow-hidden p-3.5 pl-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:border-gray-200 dark:hover:border-gray-700 transition-colors space-y-2.5"
@@ -331,9 +367,10 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                   </div>
                 </div>
               </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

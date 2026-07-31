@@ -187,7 +187,7 @@ export default function SavingsGoals() {
   }
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div id="metas-ahorro" ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center gap-2">
         <PiggyBank className="w-5 h-5 text-emerald-600" />
         <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Metas de Ahorro</h2>

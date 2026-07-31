@@ -7,6 +7,7 @@ import { usePrivacy } from '@/context/PrivacyContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
 import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
+import { sortInstallmentPurchases, InstallmentSortField } from '@/lib/installmentsSort'
 import { CreditCard, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 
 interface PurchaseWithPayments extends InstallmentPurchase {
@@ -27,6 +28,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [payingId, setPayingId] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<InstallmentSortField>('name')
+  const [sortAscending, setSortAscending] = useState(true)
 
   async function loadPurchases() {
     try {
@@ -270,8 +273,27 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
       {purchases.length === 0 ? (
         <p className="text-xs text-gray-400 text-center py-4">No tenés compras en cuotas registradas.</p>
       ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as InstallmentSortField)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="name">Ordenar por nombre</option>
+              <option value="amount">Ordenar por monto</option>
+            </select>
+            <button
+              onClick={() => setSortAscending((v) => !v)}
+              title={sortAscending ? 'Ascendente' : 'Descendente'}
+              className="text-[11px] font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 cursor-pointer"
+            >
+              {sortAscending ? '↑' : '↓'}
+            </button>
+          </div>
+
         <div className="space-y-3">
-          {purchases.map((purchase) => {
+          {sortInstallmentPurchases(purchases, sortField, sortAscending).map((purchase) => {
             const schedule = computeInstallmentSchedule(
               Number(purchase.total_amount),
               purchase.installments_count,
@@ -332,6 +354,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
             )
           })}
         </div>
+        </>
       )}
     </div>
   )

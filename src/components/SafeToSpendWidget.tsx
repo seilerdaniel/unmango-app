@@ -59,7 +59,7 @@ export default function SafeToSpendWidget() {
   if (loading || safeAmount === null) return null
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+    <div id="safe-to-spend" className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
         <WalletIcon size={16} className="text-emerald-600" />
         <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Podés gastar hoy</h3>

@@ -7,6 +7,7 @@ import { computeDebtProgress, daysOverdue } from '@/lib/debts'
 import { applyTax } from '@/lib/applyTax'
 import { Debt } from '@/types'
 import SplitExpenseTool from '@/components/SplitExpenseTool'
+import { sortDebts, filterDebtsByType, DebtSortField } from '@/lib/debtsSort'
 import { HandCoins, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 const emptyForm = {
@@ -32,6 +33,9 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
   const [submitting, setSubmitting] = useState(false)
   const [payingId, setPayingId] = useState<string | null>(null)
   const [showPaidOff, setShowPaidOff] = useState(false)
+  const [sortField, setSortField] = useState<DebtSortField>('dueDate')
+  const [sortAscending, setSortAscending] = useState(true)
+  const [filterType, setFilterType] = useState('all')
 
   async function loadDebts() {
     try {
@@ -293,8 +297,37 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
       {activeDebts.length === 0 ? (
         <p className="text-xs text-gray-400 text-center py-4">No tenés deudas ni préstamos activos.</p>
       ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="all">Todos</option>
+              <option value="debo">Yo debo</option>
+              <option value="me_deben">Me deben</option>
+            </select>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value as DebtSortField)}
+              className="text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 font-semibold text-gray-600 dark:text-gray-300"
+            >
+              <option value="dueDate">Ordenar por vencimiento</option>
+              <option value="name">Ordenar por nombre</option>
+              <option value="amount">Ordenar por monto</option>
+            </select>
+            <button
+              onClick={() => setSortAscending((v) => !v)}
+              title={sortAscending ? 'Ascendente' : 'Descendente'}
+              className="text-[11px] font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 cursor-pointer"
+            >
+              {sortAscending ? '↑' : '↓'}
+            </button>
+          </div>
+
         <div className="space-y-2.5 pt-2">
-          {activeDebts.map((debt) => {
+          {sortDebts(filterDebtsByType(activeDebts, filterType), sortField, sortAscending).map((debt) => {
             const progress = computeDebtProgress(Number(debt.total_amount), Number(debt.remaining_amount))
             const overdueDays = daysOverdue(debt.due_date)
             const isOverdue = overdueDays !== null && overdueDays > 0
@@ -366,6 +399,7 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
             )
           })}
         </div>
+        </>
       )}
 
       {paidOffDebts.length > 0 && (
