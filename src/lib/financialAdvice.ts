@@ -204,7 +204,7 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       id: 'no-income-registered',
       severity: 'info',
       message: 'Tenés gastos cargados este mes pero ningún ingreso — el Score y el límite de gasto diario van a ser menos precisos hasta que lo cargues.',
-      action: { label: 'Cargar ingreso', tab: 'inicio' },
+      action: { label: 'Cargar ingreso', tab: 'inicio', sectionId: 'transaction-form' },
     })
   }
 

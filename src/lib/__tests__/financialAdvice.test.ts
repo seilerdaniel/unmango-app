@@ -242,7 +242,8 @@ describe('generateFinancialAdvice — 3 reglas "necesitan más trabajo"', () => 
       ...NO_EXTRA_SIGNALS,
       hasExpensesButNoIncome: true,
     })
-    expect(advice.find((a) => a.id === 'no-income-registered')).toBeDefined()
+    const item = advice.find((a) => a.id === 'no-income-registered')
+    expect(item?.action?.sectionId).toBe('transaction-form')
   })
 
   it('avisa si el balance de hogar lleva 30+ días sin saldar', () => {

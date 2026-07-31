@@ -241,13 +241,36 @@ export default function Home() {
     router.push("/login");
   }
 
+  // Los managers de Planes (RecurringManager, SavingsGoals, etc.) cargan
+  // sus datos de forma asíncrona y muestran null mientras tanto — el id
+  // del contenedor recién existe en el DOM una vez que terminan. Un
+  // setTimeout fijo de 50ms no siempre alcanza (depende de la latencia
+  // real de red), y si no encuentra el elemento simplemente no hace
+  // nada, dejando la pantalla donde estaba (que puede ser otra sección
+  // completamente distinta a la que se quería mostrar). Reintenta cada
+  // 100ms hasta encontrarlo, con un límite de 3 segundos.
+  function scrollToElementWhenReady(elementId: string, attemptsLeft = 30) {
+    const el = document.getElementById(elementId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (attemptsLeft > 0) {
+      setTimeout(() => scrollToElementWhenReady(elementId, attemptsLeft - 1), 100);
+    }
+  }
+
   function handleManualEntry() {
     setActiveTab("inicio");
-    // Esperamos al próximo tick para que el formulario ya esté
-    // renderizado (venir de otra pestaña) antes de enfocarlo.
-    setTimeout(() => {
-      document.getElementById("transaction-description-input")?.focus();
-    }, 50);
+    scrollToElementWhenReady("transaction-form");
+    // Además del scroll, enfocamos el campo apenas esté disponible —
+    // mismo mecanismo de reintento.
+    (function focusWhenReady(attemptsLeft = 30) {
+      const input = document.getElementById("transaction-description-input");
+      if (input) {
+        input.focus();
+      } else if (attemptsLeft > 0) {
+        setTimeout(() => focusWhenReady(attemptsLeft - 1), 100);
+      }
+    })();
   }
 
   function handleAdviceNavigate(target: { tab?: TabId; sectionId?: string; openSettings?: boolean }) {
@@ -257,11 +280,7 @@ export default function Home() {
     }
     if (target.tab) setActiveTab(target.tab);
     if (target.sectionId) {
-      // Mismo motivo que handleManualEntry: esperamos a que la pestaña
-      // destino ya esté renderizada antes de buscar el elemento.
-      setTimeout(() => {
-        document.getElementById(target.sectionId!)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 50);
+      scrollToElementWhenReady(target.sectionId);
     }
   }
 

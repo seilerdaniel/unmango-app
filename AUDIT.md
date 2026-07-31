@@ -1614,3 +1614,35 @@ Con esto, **Recomendaciones Financieras cubre las 13 reglas** de la
 lista completa que se armó a partir de la pregunta original del
 usuario ("¿hay alguna feature que me muestre mi situación financiera
 con consejos...?").
+
+## ✅ Fix: navegación de Recomendaciones — 2 bugs reales
+
+El usuario probó la tanda 46 y reportó 3 síntomas, resultaron ser 2
+causas:
+
+- [x] **"Crear una Meta de Ahorro" / "Crear un Fondo de Emergencia"
+  parecían llevar a Pagos Recurrentes** — el `id="metas-ahorro"` estaba
+  bien puesto en el código, pero `SavingsGoals` (como todos los
+  managers de Planes) carga sus datos de forma asíncrona y devuelve
+  `null` mientras tanto — el `id` recién existe en el DOM una vez que
+  termina. El scroll se disparaba con un `setTimeout` fijo de 50ms, que
+  no siempre alcanzaba (depende de la latencia real de red); si no
+  encontraba el elemento, no hacía nada, dejando la pantalla en la
+  parte de arriba de Planes — donde está `RecurringManager` (Pagos
+  Recurrentes), dando la falsa impresión de que "te llevaba ahí" cuando
+  en realidad no se había movido. Se reemplazó por
+  `scrollToElementWhenReady()`: reintenta cada 100ms hasta encontrar el
+  elemento (hasta 3 segundos), en vez de un único intento a ciegas.
+- [x] **"Cargar ingreso" no hacía nada** — el consejo vive en el
+  widget de Inicio, y esa acción solo tenía `tab: 'inicio'` sin
+  `sectionId` — cambiar a la pestaña en la que ya estás parado no
+  produce ningún cambio visible en React (bail-out de estado
+  idéntico), entonces literalmente no pasaba nada al tocarlo. Se le
+  agregó `sectionId: 'transaction-form'` (id nuevo en el contenedor de
+  `TransactionForm`), y de paso `handleManualEntry` (el mismo botón que
+  usa el FAB) se migró al mismo mecanismo de reintento en vez de un
+  `setTimeout` fijo.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**52 archivos, 291 tests**, todos pasando).
