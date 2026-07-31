@@ -298,8 +298,8 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
 
           {dateColumn && descriptionColumn && amountColumn && (
             <>
-              <div className="max-h-56 overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-xl">
-                <table className="w-full text-[11px]">
+              <div className="max-h-56 overflow-y-auto overflow-x-auto border border-gray-100 dark:border-gray-800 rounded-xl">
+                <table className="w-full min-w-[420px] text-[11px]">
                   <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                     <tr>
                       <th className="text-left px-2 py-1.5 font-bold text-gray-500 dark:text-gray-400">Fecha</th>

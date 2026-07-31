@@ -175,7 +175,7 @@ export default function BudgetManager() {
 
   return (
     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Target className="w-5 h-5 text-amber-600" />
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Presupuestos Mensuales</h2>
@@ -279,13 +279,13 @@ export default function BudgetManager() {
 
             return (
               <div key={b.id} className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: b.categories?.color || '#3b82f6' }}
                     />
-                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
                       {b.categories?.name || 'Categoría'}
                     </span>
                     {isExceeded && (

@@ -280,16 +280,16 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
 
             return (
               <div key={purchase.id} className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{purchase.description}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate block">{purchase.description}</span>
                     {purchase.payment_method && (
-                      <span className="text-[10px] text-gray-400 ml-2">{purchase.payment_method}</span>
+                      <span className="text-[10px] text-gray-400">{purchase.payment_method}</span>
                     )}
                   </div>
                   <button
                     onClick={() => handleDeletePurchase(purchase.id)}
-                    className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                    className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer shrink-0"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -306,7 +306,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 flex-wrap gap-2">
                   <span>
                     {paidCount} de {purchase.installments_count} cuotas pagadas —{' '}
                     {isPrivate ? '••••••' : formatAmount(Number(purchase.total_amount))} total
@@ -315,7 +315,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
                     <button
                       onClick={() => handlePayNextInstallment(purchase)}
                       disabled={payingId === purchase.id}
-                      className="bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900 font-bold py-1 px-2.5 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                      className="bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900 font-bold py-1 px-2.5 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-40 shrink-0"
                     >
                       <CheckCircle2 size={12} />
                       {payingId === purchase.id

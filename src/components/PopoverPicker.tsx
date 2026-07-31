@@ -41,7 +41,7 @@ export default function PopoverPicker({ trigger, children, label }: PopoverPicke
 
       {open && (
         <div
-          className="absolute z-30 mt-2 p-2.5 min-w-[224px] max-w-[280px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg"
+          className="absolute z-30 right-0 mt-2 p-2.5 min-w-[224px] max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg"
           onClick={(e) => {
             // Si lo que está adentro es un botón de selección (no el
             // color picker nativo, que necesita quedar abierto), cerramos

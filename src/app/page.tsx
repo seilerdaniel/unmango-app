@@ -450,11 +450,11 @@ export default function Home() {
               {filteredTransactions.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition"
+                  className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                      className={`p-2.5 rounded-xl ${
+                      className={`p-2.5 rounded-xl shrink-0 ${
                         item.type === "income"
                           ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600"
                           : "bg-rose-50 dark:bg-rose-950/40 text-rose-600"
@@ -466,14 +466,14 @@ export default function Home() {
                         <ArrowDownRight size={18} />
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate max-w-[200px] sm:max-w-none">
                           {item.description}
                         </p>
                         {item.categories && (
                           <span
-                            className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0"
                             style={{
                               backgroundColor: `${item.categories.color || '#94a3b8'}18`,
                               color: item.categories.color || '#94a3b8',
@@ -483,15 +483,15 @@ export default function Home() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium flex items-center gap-2 mt-0.5">
-                        <span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="truncate">
                           {item.payment_method}
                           {item.wallet_provider
                             ? ` (${item.wallet_provider})`
                             : ""}
                         </span>
                         {item.is_usd && (
-                          <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                          <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0">
                             USD {isPrivate ? "••••••" : item.amount_usd}
                           </span>
                         )}
@@ -499,7 +499,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 shrink-0">
                     <div className="text-right">
                       {/* Monto de cada transacción con privacidad */}
                       <p

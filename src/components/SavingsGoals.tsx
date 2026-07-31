@@ -314,9 +314,9 @@ export default function SavingsGoals() {
 
             return (
               <div key={goal.id} className="p-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{goal.name}</span>
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate min-w-0">{goal.name}</span>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => handleUpdateCurrentAmount(goal)}
                       className="text-gray-400 hover:text-emerald-600 transition p-1 cursor-pointer"

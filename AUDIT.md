@@ -1080,3 +1080,65 @@ agrupar con paréntesis un `??` mezclado con `||` en
 
 Quedan 2 piezas del paso 4: Simulador Contado vs. Cuotas
 (anti-inflación) y división de gastos con recordatorio por WhatsApp.
+
+## ✅ Auditoría de diseño responsive mobile (análisis estático)
+
+El usuario pidió una revisión completa de que todo entre en pantalla en
+mobile. **Aclaración de método**: no hay acceso de red en este sandbox
+a los dominios que necesita Playwright para bajar un navegador real
+(se intentó `npx playwright install chromium`, falló por la lista de
+dominios permitidos) — así que esto NO es una verificación visual con
+capturas reales, es una revisión sistemática del código (clases de
+Tailwind, patrones de `flex`/`grid`) buscando los patrones que
+típicamente causan desborde horizontal en pantallas de 320-375px.
+Encontró y corrigió **7 problemas reales**:
+
+- [x] **Historial de Movimientos** (`page.tsx`) — la fila de cada
+  transacción no protegía contra descripciones largas: sin `truncate`
+  ni `min-w-0`, un texto largo empujaba el monto y el botón de borrar
+  fuera de la fila. Se separó en un lado izquierdo que se achica y
+  trunca (`min-w-0 flex-1`) y un lado derecho que nunca se aprieta
+  (`shrink-0`) — mismo patrón que ya se usaba bien en
+  `RecentTransactions.tsx`.
+- [x] **`PopoverPicker.tsx`** (selector de color/ícono) — el panel se
+  abría siempre extendiéndose hacia la derecha del botón sin límite
+  relativo a la pantalla; en un trigger ya cercano al borde derecho
+  (como en Mis Categorías), se cortaba. Se alineó a la derecha del
+  trigger (se extiende hacia la izquierda en vez de hacia la derecha) y
+  se limitó el ancho máximo a `calc(100vw - 2rem)`.
+- [x] **Header de "Pagos Recurrentes / Vencimientos"** — título largo +
+  caja de resumen a la derecha en una sola fila sin `flex-wrap`: en
+  320-375px esto se corta directamente. Se agregó `flex-wrap gap-2`
+  (mismo fix aplicado también, de forma preventiva, a los headers de
+  `BudgetManager` y `WalletManager`, que tienen el mismo patrón
+  título+resumen aunque con títulos más cortos y por ende menor riesgo).
+- [x] **Banners "Editando..."** (`RecurringManager`, `WalletManager`) —
+  el nombre de lo que se está editando no truncaba; si es largo,
+  empujaba el botón "Cancelar" fuera de la barra. Se truncó el texto en
+  vez de envolverlo (mejor UX en una barra angosta que reacomodarse).
+- [x] **Tabla de preview de importación CSV** (`ImportTransactions.tsx`)
+  — 4 columnas de datos reales (Fecha/Descripción/Monto/Tipo) sin
+  scroll horizontal; solo tenía scroll vertical. Se agregó
+  `overflow-x-auto` + un ancho mínimo a la tabla, para que scrollee
+  hacia los costados en vez de romper el layout de la página.
+- [x] **Card de cada meta de ahorro y cada presupuesto** — el nombre de
+  la meta/categoría no truncaba contra los botones de acción. Mismo fix
+  que el Historial: truncar + `shrink-0` en los botones.
+- [x] **Card de cada compra en cuotas** — dos problemas: la descripción
+  sin truncar arriba, y la fila de progreso ("X de Y cuotas pagadas —
+  $monto total") + el botón "Pagar cuota N (\$monto)" abajo, ambos con
+  texto dinámico largo, sin `flex-wrap`. Se corrigieron los dos.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**36 archivos, 187 tests**, todos pasando — estos
+cambios son solo de clases CSS/estructura, no tocan lógica, por eso no
+se agregaron tests nuevos).
+
+**Limitación honesta de este trabajo**: sin poder correr un navegador
+real en este sandbox, quedan afuera de esta pasada los problemas que
+solo aparecen con contenido real específico (ej. un nombre de
+categoría particularmente largo con caracteres que no cortan bien) o
+que dependen del renderizado real de fuentes/anchos exactos del
+dispositivo. Si al probarlo en tu celular encontrás algo que se sigue
+cortando, mandame captura como las anteriores y lo reviso puntual.

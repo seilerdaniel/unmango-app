@@ -290,7 +290,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
   return (
     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Repeat className="w-5 h-5 text-indigo-600" />
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Pagos Recurrentes / Vencimientos</h2>
@@ -313,9 +313,9 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       )}
 
       {editingId && (
-        <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 text-xs font-bold px-3.5 py-2 rounded-xl">
-          <span>Editando &quot;{form.title}&quot;</span>
-          <button onClick={resetForm} className="flex items-center gap-1 hover:underline cursor-pointer">
+        <div className="flex items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 text-xs font-bold px-3.5 py-2 rounded-xl">
+          <span className="truncate min-w-0">Editando &quot;{form.title}&quot;</span>
+          <button onClick={resetForm} className="flex items-center gap-1 hover:underline cursor-pointer shrink-0">
             <X size={12} /> Cancelar
           </button>
         </div>
