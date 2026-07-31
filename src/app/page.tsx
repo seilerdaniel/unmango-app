@@ -35,6 +35,7 @@ import DebtsManager from "@/components/DebtsManager";
 import DollarRatesTable from "@/components/DollarRatesTable";
 import RecentTransactions from "@/components/RecentTransactions";
 import WalletCarousel from "@/components/WalletCarousel";
+import FinancialHealthScoreWidget from "@/components/FinancialHealthScoreWidget";
 import SafeToSpendWidget from "@/components/SafeToSpendWidget";
 import BottomNav, { TabId } from "@/components/nav/BottomNav";
 import SettingsPanel from "@/components/nav/SettingsPanel";
@@ -394,6 +395,7 @@ export default function Home() {
             </div>
 
             <div className="space-y-6 mt-6">
+              <FinancialHealthScoreWidget />
               <WalletCarousel />
               <ZeroSpendStreak />
               <SafeToSpendWidget />
