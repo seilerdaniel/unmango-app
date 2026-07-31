@@ -4,7 +4,9 @@ export type AdviceSeverity = 'success' | 'warning' | 'danger' | 'info'
 
 export interface AdviceAction {
   label: string
-  tab: 'inicio' | 'analisis' | 'planes' | 'historial'
+  /** Si la acción es abrir Configuración (ej. crear categorías), no hace falta pestaña — se ignora sectionId en ese caso. */
+  openSettings?: boolean
+  tab?: 'inicio' | 'analisis' | 'planes' | 'historial'
   /** id del contenedor al que hacer scroll dentro de esa pestaña, si hace falta. */
   sectionId?: string
 }
@@ -31,6 +33,12 @@ export interface AdviceInputs {
   brokenStreakDays: number | null
   /** Nombres de metas de ahorro que siguen en $0 después de bastante tiempo creadas. */
   stalledGoalNames: string[]
+  /** true si el usuario todavía no creó ninguna categoría. */
+  hasNoCategories: boolean
+  /** true si hay gastos este mes pero ningún ingreso registrado. */
+  hasExpensesButNoIncome: boolean
+  /** Días desde el gasto de hogar más viejo sin saldar, o null si no aplica (sin hogar vinculado, o balance en 0). */
+  householdUnsettledDays: number | null
 }
 
 /**
@@ -43,7 +51,7 @@ export interface AdviceInputs {
  * testearla sin tocar la base.
  */
 export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
-  const { healthScore, hasSubscriptionPriceIncrease, safeToSpendToday, exceededBudgetCategoryNames, hasHighInterestDebt, largeInstallmentDescription, brokenStreakDays, stalledGoalNames } = inputs
+  const { healthScore, hasSubscriptionPriceIncrease, safeToSpendToday, exceededBudgetCategoryNames, hasHighInterestDebt, largeInstallmentDescription, brokenStreakDays, stalledGoalNames, hasNoCategories, hasExpensesButNoIncome, householdUnsettledDays } = inputs
   const advice: AdviceItem[] = []
 
   const { savings, debt, emergencyFund, antExpenses } = healthScore.pillars
@@ -179,6 +187,33 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       severity: 'info',
       message: `Tu meta "${names}" sigue en $0 desde hace bastante — ¿le sumamos algo este mes?`,
       action: { label: 'Ver Metas de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' },
+    })
+  }
+
+  if (hasNoCategories) {
+    advice.push({
+      id: 'no-categories',
+      severity: 'info',
+      message: 'Todavía no creaste ninguna categoría — con categorías vas a poder ver en qué se te va la plata, no solo cuánto gastás.',
+      action: { label: 'Crear categorías sugeridas', openSettings: true },
+    })
+  }
+
+  if (hasExpensesButNoIncome) {
+    advice.push({
+      id: 'no-income-registered',
+      severity: 'info',
+      message: 'Tenés gastos cargados este mes pero ningún ingreso — el Score y el límite de gasto diario van a ser menos precisos hasta que lo cargues.',
+      action: { label: 'Cargar ingreso', tab: 'inicio' },
+    })
+  }
+
+  if (householdUnsettledDays !== null && householdUnsettledDays >= 30) {
+    advice.push({
+      id: 'household-unsettled',
+      severity: 'info',
+      message: `Tenés gastos de hogar sin saldar desde hace ${householdUnsettledDays} días — puede ser buen momento para arreglar cuentas.`,
+      action: { label: 'Ver Gastos de Hogar', tab: 'planes', sectionId: 'gastos-hogar' },
     })
   }
 

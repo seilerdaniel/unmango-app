@@ -10,6 +10,7 @@ import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
 import { computeSafeToSpend } from '@/lib/safeToSpend'
 import { computeStreakBreak } from '@/lib/zeroSpendStats'
 import { isGoalStalled } from '@/lib/savingsGoalStall'
+import { computeHouseholdBalance } from '@/lib/householdBalance'
 import { Lightbulb, AlertTriangle, CheckCircle2, Info, AlertCircle, ArrowRight } from 'lucide-react'
 import { TabId } from '@/components/nav/BottomNav'
 
@@ -30,7 +31,11 @@ const SEVERITY_STYLES: Record<AdviceItem['severity'], { icon: typeof Lightbulb; 
  * lado, reutilizados acá para que los consejos no contradigan lo que
  * ya se ve en el Score.
  */
-export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab: TabId, sectionId?: string) => void }) {
+export default function FinancialAdviceWidget({
+  onNavigate,
+}: {
+  onNavigate: (target: { tab?: TabId; sectionId?: string; openSettings?: boolean }) => void
+}) {
   const [advice, setAdvice] = useState<AdviceItem[] | null>(null)
   const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -58,6 +63,7 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
           categorySpendResult,
           debtsResult,
           goalsResult,
+          categoriesResult,
         ] = await Promise.all([
           supabase.rpc('get_monthly_trend', { p_months: 1 }),
           supabase
@@ -78,6 +84,7 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
           supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
           supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', user.id),
           supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', user.id),
+          supabase.from('categories').select('id').eq('user_id', user.id),
         ])
 
         const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
@@ -152,6 +159,46 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
           .filter((g) => isGoalStalled(Number(g.current_amount), g.created_at, now))
           .map((g) => g.name)
 
+        // Sin categorías creadas.
+        const hasNoCategories = (categoriesResult.data ?? []).length === 0
+
+        // Gastos este mes pero ningún ingreso registrado.
+        const hasExpensesButNoIncome = monthlyIncome === 0 && monthlyExpense > 0
+
+        // Balance de Hogar sin saldar hace tiempo — consulta aparte
+        // porque primero hace falta saber el household_id (no se puede
+        // resolver en el mismo Promise.all de arriba).
+        let householdUnsettledDays: number | null = null
+        const { data: householdLink } = await supabase
+          .from('household_links')
+          .select('id')
+          .eq('status', 'active')
+          .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+          .maybeSingle()
+
+        if (householdLink) {
+          const { data: householdExpenses } = await supabase
+            .from('household_expenses')
+            .select('amount, paid_by_user_id, created_at')
+            .eq('household_id', householdLink.id)
+            .order('created_at', { ascending: true })
+
+          if (householdExpenses && householdExpenses.length > 0) {
+            const totalPaidByMe = householdExpenses
+              .filter((e) => e.paid_by_user_id === user.id)
+              .reduce((acc, e) => acc + Number(e.amount), 0)
+            const totalPaidByPartner = householdExpenses
+              .filter((e) => e.paid_by_user_id !== user.id)
+              .reduce((acc, e) => acc + Number(e.amount), 0)
+            const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
+
+            if (householdBalance.netBalanceForMe !== 0) {
+              const oldestExpenseDate = new Date(householdExpenses[0].created_at)
+              householdUnsettledDays = Math.floor((now.getTime() - oldestExpenseDate.getTime()) / (1000 * 60 * 60 * 24))
+            }
+          }
+        }
+
         setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense))
         setAdvice(
           generateFinancialAdvice({
@@ -163,6 +210,9 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
             largeInstallmentDescription,
             brokenStreakDays,
             stalledGoalNames,
+            hasNoCategories,
+            hasExpensesButNoIncome,
+            householdUnsettledDays,
           })
         )
       } catch (err) {
@@ -222,7 +272,7 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
               </div>
               {item.action && (
                 <button
-                  onClick={() => onNavigate(item.action!.tab, item.action!.sectionId)}
+                  onClick={() => onNavigate(item.action!)}
                   className="flex items-center gap-1 text-[11px] font-bold hover:underline cursor-pointer pl-[23px]"
                 >
                   {item.action.label} <ArrowRight size={11} />

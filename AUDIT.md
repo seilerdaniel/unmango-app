@@ -1579,3 +1579,38 @@ hacer scroll. 7 tests nuevos sobre las 5 reglas (17 en total en
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**52 archivos, 287 tests**, todos pasando).
+
+## ✅ Últimas 3 recomendaciones ("necesitan un poco más de trabajo")
+
+Con esto se completó toda la lista sugerida en el brainstorm anterior.
+
+- [x] **Sin categorías creadas** — si el usuario no tiene ninguna
+  categoría, sugiere crear las sugeridas. Esta es la primera acción
+  que **no** apunta a una pestaña, sino a **abrir Configuración**
+  directamente (las categorías viven ahí) — `AdviceAction` se extendió
+  con `openSettings?: boolean` y `tab` pasó a ser opcional;
+  `handleAdviceNavigate` en `page.tsx` ahora entiende ambos casos.
+- [x] **Sin ingreso registrado este mes** (aunque sí haya gastos) —
+  avisa que el Score y el límite de gasto diario van a ser menos
+  precisos hasta que se cargue. Acción → Inicio (donde vive el
+  formulario de carga rápida).
+- [x] **Balance de Hogar sin saldar hace tiempo** — si hay un hogar
+  vinculado con gastos compartidos y el balance no está en $0, avisa
+  cuando el gasto más viejo sin saldar lleva 30+ días. Reutiliza
+  `computeHouseholdBalance()` ya existente. Como el `household_id`
+  hace falta conocerlo antes de poder consultar sus gastos, esta es la
+  única parte del widget que hace una consulta **secuencial** (primero
+  busca el hogar activo, después sus gastos) en vez de ir toda junta en
+  el `Promise.all` de arriba. Se agregó el `id="gastos-hogar"` que
+  faltaba en `HouseholdExpenses.tsx`.
+
+4 tests nuevos (21 en total en `financialAdvice.test.ts`).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**52 archivos, 291 tests**, todos pasando).
+
+Con esto, **Recomendaciones Financieras cubre las 13 reglas** de la
+lista completa que se armó a partir de la pregunta original del
+usuario ("¿hay alguna feature que me muestre mi situación financiera
+con consejos...?").

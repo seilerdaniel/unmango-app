@@ -117,7 +117,7 @@ export default function HouseholdExpenses() {
   const balance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div id="gastos-hogar" className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <Home className="text-rose-500" size={20} /> Gastos de Hogar

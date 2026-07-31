@@ -22,6 +22,9 @@ const NO_EXTRA_SIGNALS = {
   largeInstallmentDescription: null as string | null,
   brokenStreakDays: null as number | null,
   stalledGoalNames: [] as string[],
+  hasNoCategories: false,
+  hasExpensesButNoIncome: false,
+  householdUnsettledDays: null as number | null,
 }
 
 describe('generateFinancialAdvice', () => {
@@ -214,5 +217,54 @@ describe('generateFinancialAdvice — 5 reglas nuevas', () => {
     const item = advice.find((a) => a.id === 'stalled-goal')
     expect(item?.message).toContain('Fondo de Emergencia')
     expect(item?.action?.sectionId).toBe('metas-ahorro')
+  })
+})
+
+describe('generateFinancialAdvice — 3 reglas "necesitan más trabajo"', () => {
+  it('avisa si no hay ninguna categoría creada, con acción de abrir Configuración', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      hasNoCategories: true,
+    })
+    const item = advice.find((a) => a.id === 'no-categories')
+    expect(item?.action?.openSettings).toBe(true)
+    expect(item?.action?.tab).toBeUndefined()
+  })
+
+  it('avisa si hay gastos pero ningún ingreso registrado', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      hasExpensesButNoIncome: true,
+    })
+    expect(advice.find((a) => a.id === 'no-income-registered')).toBeDefined()
+  })
+
+  it('avisa si el balance de hogar lleva 30+ días sin saldar', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      householdUnsettledDays: 45,
+    })
+    const item = advice.find((a) => a.id === 'household-unsettled')
+    expect(item?.message).toContain('45')
+  })
+
+  it('no avisa del balance de hogar si lleva menos de 30 días', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      householdUnsettledDays: 10,
+    })
+    expect(advice.find((a) => a.id === 'household-unsettled')).toBeUndefined()
   })
 })

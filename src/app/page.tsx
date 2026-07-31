@@ -250,13 +250,17 @@ export default function Home() {
     }, 50);
   }
 
-  function handleAdviceNavigate(tab: TabId, sectionId?: string) {
-    setActiveTab(tab);
-    if (sectionId) {
+  function handleAdviceNavigate(target: { tab?: TabId; sectionId?: string; openSettings?: boolean }) {
+    if (target.openSettings) {
+      setSettingsOpen(true);
+      return;
+    }
+    if (target.tab) setActiveTab(target.tab);
+    if (target.sectionId) {
       // Mismo motivo que handleManualEntry: esperamos a que la pestaña
       // destino ya esté renderizada antes de buscar el elemento.
       setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById(target.sectionId!)?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 50);
     }
   }
