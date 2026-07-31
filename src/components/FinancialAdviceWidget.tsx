@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { computeFinancialHealthScore } from '@/lib/financialHealthScore'
+import { computeFinancialHealthScore, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { generateFinancialAdvice, AdviceItem } from '@/lib/financialAdvice'
 import { detectAntExpenses } from '@/lib/antExpenses'
 import { detectPriceIncreases } from '@/lib/priceIncreases'
@@ -30,6 +30,7 @@ const SEVERITY_STYLES: Record<AdviceItem['severity'], { icon: typeof Lightbulb; 
  */
 export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab: TabId, sectionId?: string) => void }) {
   const [advice, setAdvice] = useState<AdviceItem[] | null>(null)
+  const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
         const safeToSpendToday =
           monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedARSDaily, daysRemaining) : null
 
+        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense, emergencyFundBalance))
         setAdvice(
           generateFinancialAdvice({
             healthScore,
@@ -121,6 +123,21 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
   }, [])
 
   if (loading || !advice) return null
+
+  if (noData) {
+    return (
+      <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-2">
+          <Lightbulb size={16} className="text-amber-500" /> Recomendaciones
+        </h3>
+        <p className="text-xs text-gray-400">
+          Todavía no hay nada cargado este mes, así que no hay mucho para recomendar todavía —
+          cargá tu primer ingreso o gasto y las recomendaciones se arman solas a partir de tus
+          números reales.
+        </p>
+      </div>
+    )
+  }
 
   if (advice.length === 0) {
     return (

@@ -1501,3 +1501,36 @@ hacer `sortInstallmentPurchases` genérica, perdía el campo
 `InstallmentTracker` al tipar el retorno como el tipo base),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**51 archivos, 269 tests**, todos pasando).
+
+## ✅ Fix: Un Mango Score y Recomendaciones no se actualizaban solos
+
+Bug real reportado por el usuario (probado con una cuenta sin datos
+cargados). Dos problemas distintos, ambos corregidos:
+
+- [x] **No se refrescaban al cambiar datos en otro lado** — los dos
+  widgets consultan sus datos una sola vez al montar
+  (`useEffect(() => {...}, [])`). Los cambios hechos en Planes ya se
+  reflejaban solos (esa pestaña se desmonta/remonta al cambiar de
+  pestaña, así que vuelve a consultar), pero **Configuración es un
+  overlay que no desmonta Inicio de atrás** — agregar o editar una
+  billetera ahí no se reflejaba hasta refrescar la página entera. Se
+  agregó un contador `dataVersion` en `page.tsx` que se bombea en
+  `fetchWalletTotal()` (ya lo llama `fetchTransactions()` internamente,
+  cubriendo Carga Manual y "Pagar" en los managers) y al cerrar
+  Configuración — se lo pasa como `key` a ambos widgets, forzando que
+  se remonten (y por lo tanto vuelvan a consultar) cuando cambia algo
+  relevante.
+- [x] **Con cero datos, mostraban números/alertas engañosos** — con
+  todo en 0, la fórmula del Score daba 25/100 (no 0, por cómo se
+  calcula el pilar de gasto hormiga cuando no hay ingreso), y
+  Recomendaciones directamente mostraba **3 alertas de "peligro"**
+  (ahorro, deuda y fondo de emergencia en 0) — exactamente lo que el
+  usuario reportó como confuso. `hasNoFinancialData()` nueva en
+  `financialHealthScore.ts` (pura, 3 tests): si no hay ingreso, gasto
+  ni saldo en billeteras, ambos widgets ahora muestran un mensaje de
+  onboarding ("cargá tu primer movimiento...") en vez de un número o
+  alertas que no tienen sentido todavía.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**51 archivos, 272 tests**, todos pasando).

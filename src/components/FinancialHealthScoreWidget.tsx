@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { computeFinancialHealthScore, FinancialHealthResult } from '@/lib/financialHealthScore'
+import { computeFinancialHealthScore, FinancialHealthResult, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { detectAntExpenses } from '@/lib/antExpenses'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
 import { Gauge } from 'lucide-react'
@@ -28,6 +28,7 @@ function scoreRingColor(score: number): string {
 
 export default function FinancialHealthScoreWidget() {
   const [result, setResult] = useState<FinancialHealthResult | null>(null)
+  const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export default function FinancialHealthScoreWidget() {
           threshold
         )
 
+        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense, emergencyFundBalance))
         setResult(
           computeFinancialHealthScore({
             monthlyIncome,
@@ -98,6 +100,20 @@ export default function FinancialHealthScoreWidget() {
   }, [])
 
   if (loading || !result) return null
+
+  if (noData) {
+    return (
+      <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+        <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-2">
+          <Gauge size={16} className="text-amber-500" /> Un Mango Score
+        </h3>
+        <p className="text-xs text-gray-400">
+          Todavía no tenés movimientos cargados este mes — cargá tu primer ingreso o gasto y acá
+          vas a ver tu puntaje.
+        </p>
+      </div>
+    )
+  }
 
   const circumference = 2 * Math.PI * 40
   const offset = circumference - (result.totalScore / 100) * circumference

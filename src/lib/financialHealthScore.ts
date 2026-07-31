@@ -29,6 +29,18 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * true si la persona todavía no cargó ningún dato real (ni ingresos,
+ * ni gastos, ni nada en billeteras) — en ese caso el score numérico
+ * (25/100 por cómo da la fórmula con todo en 0) puede confundir más de
+ * lo que ayuda, mejor mostrar un estado vacío explícito en vez de un
+ * número que parece decir "tenés mal la economía" cuando en realidad
+ * es "no hay nada cargado todavía".
+ */
+export function hasNoFinancialData(monthlyIncome: number, monthlyExpense: number, emergencyFundBalance: number): boolean {
+  return monthlyIncome === 0 && monthlyExpense === 0 && emergencyFundBalance === 0
+}
+
+/**
  * "Un Mango Score": puntaje de 0 a 100 basado en 4 pilares (25% cada
  * uno). No es un puntaje crediticio ni un dictamen financiero — es una
  * forma simple y visual de ver la salud financiera del mes, pensada

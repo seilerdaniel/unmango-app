@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeFinancialHealthScore } from '../financialHealthScore'
+import { computeFinancialHealthScore, hasNoFinancialData } from '../financialHealthScore'
 
 describe('computeFinancialHealthScore', () => {
   it('da un score alto para una situación financiera sana', () => {
@@ -74,5 +74,19 @@ describe('computeFinancialHealthScore', () => {
         4
     )
     expect(result.totalScore).toBe(avg)
+  })
+})
+
+describe('hasNoFinancialData', () => {
+  it('es true si no hay ingreso, gasto ni saldo en billeteras', () => {
+    expect(hasNoFinancialData(0, 0, 0)).toBe(true)
+  })
+
+  it('es false si hay aunque sea un ingreso cargado', () => {
+    expect(hasNoFinancialData(500000, 0, 0)).toBe(false)
+  })
+
+  it('es false si hay aunque sea saldo en billeteras', () => {
+    expect(hasNoFinancialData(0, 0, 1000)).toBe(false)
   })
 })

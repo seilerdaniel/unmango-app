@@ -78,6 +78,16 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("inicio");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Contador que fuerza a Un Mango Score y Recomendaciones a
+  // refrescarse: esos dos widgets consultan sus datos una sola vez al
+  // montar. Como Inicio se desmonta/remonta solo al cambiar de pestaña
+  // (los cambios hechos en Planes ya se reflejan solos al volver), el
+  // hueco real es Configuración — es un overlay que NO desmonta Inicio
+  // de atrás, así que agregar/editar una billetera ahí no se reflejaba
+  // hasta refrescar la página entera. Se bombea en fetchTransactions()
+  // (cubre Carga Manual y "Pagar" en los managers) y al cerrar
+  // Configuración (cubre billeteras y cualquier otro cambio ahí).
+  const [dataVersion, setDataVersion] = useState(0);
   const router = useRouter();
 
   // Consumimos el contexto de privacidad y de tema
@@ -116,6 +126,7 @@ export default function Home() {
   // billeteras solo cuenta lo que se asignó explícitamente + el saldo
   // inicial de cada una.
   async function fetchWalletTotal() {
+    setDataVersion((v) => v + 1);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -410,8 +421,8 @@ export default function Home() {
             </div>
 
             <div className="space-y-6 mt-6">
-              <FinancialHealthScoreWidget />
-              <FinancialAdviceWidget onNavigate={handleAdviceNavigate} />
+              <FinancialHealthScoreWidget key={`score-${dataVersion}`} />
+              <FinancialAdviceWidget key={`advice-${dataVersion}`} onNavigate={handleAdviceNavigate} />
               <WalletCarousel />
               <ZeroSpendStreak />
               <SafeToSpendWidget />
@@ -569,7 +580,13 @@ export default function Home() {
       {/* Espacio para que el contenido no quede tapado por el bottom nav fijo */}
       <div className="h-20" />
 
-      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)}>
+      <SettingsPanel
+        isOpen={settingsOpen}
+        onClose={() => {
+          setSettingsOpen(false);
+          setDataVersion((v) => v + 1);
+        }}
+      >
         <ImportTransactions onImported={fetchTransactions} />
         <WalletManager onWalletsUpdated={fetchWalletTotal} />
         <CategoryManager onCategoriesUpdated={fetchTransactions} />
