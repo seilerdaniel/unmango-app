@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { ReactNode } from 'react'
 
@@ -16,6 +17,21 @@ interface SettingsPanelProps {
  * no una pestaña más del bottom nav.
  */
 export default function SettingsPanel({ isOpen, onClose, children }: SettingsPanelProps) {
+  // Sin esto, mientras el panel está abierto quedan DOS barras de
+  // scroll visibles: la del body de atrás (que sigue siendo
+  // scrolleable aunque esté tapado por el overlay) y la propia del
+  // panel. Bloqueamos el body mientras está abierto, y lo restauramos
+  // al cerrar.
+  useEffect(() => {
+    if (isOpen) {
+      const previousOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = previousOverflow
+      }
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (

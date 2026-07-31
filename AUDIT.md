@@ -1373,3 +1373,53 @@ pero no traducía eso a consejos en texto. Se construyó ese hueco:
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**44 archivos, 231 tests**, todos pasando).
+
+## ✅ 4 correcciones a partir de capturas del usuario
+
+- [x] **Categorías sugeridas se creaban duplicadas** — bug real
+  confirmado en las capturas (14 de las 15 categorías sugeridas
+  aparecían dos veces). Causa: `setLoadingSuggested(true)` deshabilita
+  el botón recién cuando React re-renderiza, que no es inmediato — en
+  un doble-tap en mobile (`touchend` + `click` disparando casi juntos)
+  podían arrancar dos ejecuciones de `handleAddSuggested` antes de que
+  el `disabled` surtiera efecto en el DOM, y las dos partían de la
+  misma lista de "categorías ya existentes" (ninguna todavía insertada
+  por la otra). Se agregó un guard sincrónico con `useRef` — no
+  depende de un re-render, frena la segunda ejecución al toque.
+- [x] **Doble barra de scroll en Configuración** — el panel
+  (`SettingsPanel.tsx`) es `fixed inset-0 overflow-y-auto`, pero el
+  `<body>` de atrás seguía siendo scrolleable aunque estuviera tapado
+  por el overlay, mostrando sus dos barras al mismo tiempo. Se bloquea
+  `document.body.style.overflow` mientras el panel está abierto, y se
+  restaura al cerrar.
+- [x] **FAB con las opciones apiladas verticalmente** — el usuario pidió
+  que rodeen el botón central en vez de alinearse en columna, con
+  animación. Rediseñado en `SpeedDialFab.tsx`: las 4 opciones ahora se
+  abren en abanico sobre un arco semicircular arriba del `[+]`
+  (calculado con trigonometría — ángulos de 160° a 20°, radio 92px),
+  con una animación de escala + traslado escalonada por índice (40ms de
+  delay entre cada una). El botón central también rota entre el ícono
+  `+` y `X` con una transición cruzada. Las opciones ahora quedan
+  siempre montadas en el DOM (antes se montaban/desmontaban de golpe
+  con `dialOpen && (...)`, lo que hacía que el cierre fuera instantáneo
+  sin transición) — se ocultan con `opacity-0 pointer-events-none` +
+  `aria-hidden`, así también el cierre anima. Tests actualizados para
+  reflejar esto (antes chequeaban "no está en el DOM", ahora chequean
+  `aria-hidden`).
+- [x] **Tarjetas de billeteras: editar y eliminar separados** —
+  confirmado en la captura: la fila tenía 3 hijos
+  (`monto`, `botón editar`, `botón eliminar`) con `justify-between`,
+  que reparte el espacio POR IGUAL entre cada par de hijos consecutivos
+  — por eso "Editar" quedaba a mitad de camino en vez de al lado de
+  "Eliminar". Se agruparon los dos botones en su propio contenedor
+  (`flex gap-0.5`), dejando `justify-between` con solo 2 grupos (monto
+  a la izquierda, botones juntos a la derecha). De paso, algunas mejoras
+  visuales pedidas ("alguna recomendación"): una franja de color a la
+  izquierda de la card con la identidad de cada billetera (antes solo
+  el ícono tenía color), targets táctiles más grandes en los botones
+  (`p-1.5` en vez de `p-1`, con fondo de color al hacer hover para mejor
+  feedback), y un hover sutil en toda la card.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**44 archivos, 231 tests**, todos pasando).

@@ -13,19 +13,19 @@ function renderFab(onManualEntry = vi.fn()) {
 }
 
 describe('SpeedDialFab', () => {
-  it('el menú desplegable arranca cerrado (no se ven las 4 opciones)', () => {
+  it('el menú desplegable arranca cerrado (las opciones están ocultas con aria-hidden)', () => {
     renderFab()
-    expect(screen.queryByTitle('Cargar por Voz')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Cargar por Voz')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('al tocar el botón central se despliegan las 4 opciones', async () => {
     renderFab()
     await userEvent.click(screen.getByTitle('Agregar'))
 
-    expect(screen.getByTitle('Carga Manual')).toBeInTheDocument()
-    expect(screen.getByTitle('Calculadora ARS/USD')).toBeInTheDocument()
-    expect(screen.getByTitle('Escanear QR')).toBeInTheDocument()
-    expect(screen.getByTitle('Cargar por Voz')).toBeInTheDocument()
+    expect(screen.getByTitle('Carga Manual')).toHaveAttribute('aria-hidden', 'false')
+    expect(screen.getByTitle('Calculadora ARS/USD')).toHaveAttribute('aria-hidden', 'false')
+    expect(screen.getByTitle('Escanear QR')).toHaveAttribute('aria-hidden', 'false')
+    expect(screen.getByTitle('Cargar por Voz')).toHaveAttribute('aria-hidden', 'false')
   })
 
   it('elegir "Carga Manual" llama a onManualEntry y cierra el menú', async () => {
@@ -36,7 +36,7 @@ describe('SpeedDialFab', () => {
     await userEvent.click(screen.getByTitle('Carga Manual'))
 
     expect(onManualEntry).toHaveBeenCalledTimes(1)
-    expect(screen.queryByTitle('Cargar por Voz')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Cargar por Voz')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('elegir "Calculadora ARS/USD" abre el modal de la calculadora', async () => {

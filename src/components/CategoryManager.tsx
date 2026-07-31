@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, createElement } from 'react'
+import { useState, useRef, createElement } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import ColorPicker from '@/components/ColorPicker'
@@ -21,6 +21,13 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
   const [icon, setIcon] = useState('tag')
   const [submitting, setSubmitting] = useState(false)
   const [loadingSuggested, setLoadingSuggested] = useState(false)
+  // Guard sincrónico además del estado: setLoadingSuggested(true) no
+  // deshabilita el botón en el DOM hasta que React re-renderiza, que no
+  // es inmediato. En un doble-tap en mobile (touchend + click
+  // disparando casi juntos) pueden arrancar dos ejecuciones de
+  // handleAddSuggested antes de que el disabled del botón surta efecto
+  // — este ref sí frena la segunda al toque, sin esperar un render.
+  const addingSuggestedRef = useRef(false)
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault()
@@ -64,38 +71,41 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
   }
 
   async function handleAddSuggested() {
+    if (addingSuggestedRef.current) return
+    addingSuggestedRef.current = true
     setLoadingSuggested(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // No duplicamos las que ya existen (comparando por nombre, sin
+      // importar mayúsculas/minúsculas).
+      const existingNames = new Set(categories.map((c) => c.name.trim().toLowerCase()))
+      const toInsert = SUGGESTED_CATEGORIES.filter((c) => !existingNames.has(c.name.toLowerCase())).map((c) => ({
+        user_id: user.id,
+        name: c.name,
+        color: c.color,
+        icon: c.icon,
+      }))
+
+      if (toInsert.length === 0) {
+        alert('Ya tenés todas las categorías sugeridas cargadas.')
+        return
+      }
+
+      const { error } = await supabase.from('categories').insert(toInsert)
+      if (!error) {
+        await refreshCategories()
+        if (onCategoriesUpdated) onCategoriesUpdated()
+      } else {
+        alert('Error al cargar las categorías sugeridas: ' + error.message)
+        console.error('Error cargando categorías sugeridas:', error)
+      }
+    } finally {
+      addingSuggestedRef.current = false
       setLoadingSuggested(false)
-      return
     }
-
-    // No duplicamos las que ya existen (comparando por nombre, sin
-    // importar mayúsculas/minúsculas).
-    const existingNames = new Set(categories.map((c) => c.name.trim().toLowerCase()))
-    const toInsert = SUGGESTED_CATEGORIES.filter((c) => !existingNames.has(c.name.toLowerCase())).map((c) => ({
-      user_id: user.id,
-      name: c.name,
-      color: c.color,
-      icon: c.icon,
-    }))
-
-    if (toInsert.length === 0) {
-      alert('Ya tenés todas las categorías sugeridas cargadas.')
-      setLoadingSuggested(false)
-      return
-    }
-
-    const { error } = await supabase.from('categories').insert(toInsert)
-    if (!error) {
-      await refreshCategories()
-      if (onCategoriesUpdated) onCategoriesUpdated()
-    } else {
-      alert('Error al cargar las categorías sugeridas: ' + error.message)
-      console.error('Error cargando categorías sugeridas:', error)
-    }
-    setLoadingSuggested(false)
   }
 
   return (

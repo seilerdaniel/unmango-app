@@ -276,8 +276,13 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
             return (
               <div
                 key={w.id}
-                className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 space-y-2.5"
+                className="relative overflow-hidden p-3.5 pl-4 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/40 hover:bg-gray-100/70 dark:hover:bg-gray-800/70 hover:border-gray-200 dark:hover:border-gray-700 transition-colors space-y-2.5"
               >
+                {/* Franja de color a la izquierda con la identidad de la
+                    billetera — antes solo el ícono tenía color, esto la
+                    hace reconocible de un vistazo incluso en la lista. */}
+                <span className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: w.color || '#6366f1' }} />
+
                 <div className="flex items-center gap-3">
                   <div
                     className="p-2 rounded-xl shrink-0"
@@ -297,27 +302,33 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                 </div>
 
                 {/* Saldo en su propia línea, alineado bajo el nombre — así
-                    nunca se aprieta contra el nombre en cards angostas. */}
+                    nunca se aprieta contra el nombre en cards angostas.
+                    Los dos botones van agrupados juntos a la derecha (antes
+                    "justify-between" con 3 hijos los separaba con espacio
+                    equivalente entre cada uno, dejando "Editar" a mitad de
+                    camino en vez de al lado de "Eliminar"). */}
                 <div className="flex items-center justify-between pl-[44px]">
                   <span
                     className={`text-sm font-extrabold ${w.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-rose-600'}`}
                   >
                     {isPrivate ? '••••••' : formatAmount(w.balance)}
                   </span>
-                  <button
-                    onClick={() => startEditing(w)}
-                    className="text-gray-400 hover:text-indigo-600 transition p-1 cursor-pointer"
-                    title="Editar billetera"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteWallet(w.id)}
-                    className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
-                    title="Eliminar billetera"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => startEditing(w)}
+                      className="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition rounded-lg p-1.5 cursor-pointer"
+                      title="Editar billetera"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteWallet(w.id)}
+                      className="text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition rounded-lg p-1.5 cursor-pointer"
+                      title="Eliminar billetera"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )
