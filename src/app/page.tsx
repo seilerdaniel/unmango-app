@@ -40,6 +40,7 @@ import SafeToSpendWidget from "@/components/SafeToSpendWidget";
 import BottomNav, { TabId } from "@/components/nav/BottomNav";
 import SettingsPanel from "@/components/nav/SettingsPanel";
 import SpeedDialFab from "@/components/nav/SpeedDialFab";
+import OfflineSyncManager from "@/components/OfflineSyncManager";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   LogOut,
@@ -561,6 +562,8 @@ export default function Home() {
         <GoogleCalendarLink />
         <WorkSettings />
       </SettingsPanel>
+
+      <OfflineSyncManager onSynced={fetchTransactions} />
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 

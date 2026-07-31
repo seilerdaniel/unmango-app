@@ -1238,3 +1238,55 @@ Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (misma
 línea base pre-existente, nada nuevo — de hecho 2 archivos salieron de
 la lista de warnings pre-existentes), `npx vitest run` (**40 archivos,
 210 tests**, todos pasando, sin errores de fondo esta vez).
+
+## ✅ Arquitectura Offline-First (adaptada a Supabase, MVP)
+
+El usuario compartió un documento con el concepto completo (Service
+Worker + IndexedDB + cola de pendientes + sincronización automática),
+pero escrito para un backend REST propio (`/api/transacciones`,
+`/api/transacciones/sync-batch`) que **no existe en este proyecto** —
+acá se llama a Supabase directo desde el cliente, sin backend propio.
+Se adaptó el concepto (no se copió el código tal cual) a la
+arquitectura real:
+
+- [x] **Service Worker**: ya existía desde la Fase de PWA
+  (`public/sw.js`, network-first con fallback a cache) — cubre la parte
+  de "la app carga instantáneo sin internet y se puede instalar", no
+  hizo falta rehacerlo.
+- [x] **Cola de pendientes** — `src/lib/offlineQueueLogic.ts`:
+  `addToQueue()`/`removeFromQueue()` puras (6 tests) sobre un array, sin
+  tocar storage. `src/lib/offlineQueue.ts`: wrapper de I/O sobre
+  `localStorage` (se usa localStorage en vez de IndexedDB — el volumen
+  de datos de esto es chico, no justifica esa complejidad extra).
+- [x] **`OfflineSyncManager.tsx`**: montado una vez en `page.tsx`, sin
+  UI visible salvo cuando hay algo que mostrar. Escucha los eventos
+  `online`/`offline` del navegador (como pedía el documento) y, al
+  recuperar conexión, sincroniza automáticamente todo lo que había
+  quedado pendiente, insertándolo de verdad en Supabase (en vez de un
+  endpoint `/sync-batch` que no existe acá). Muestra un banner arriba
+  de todo: ámbar mientras estás offline, azul mientras sincroniza, gris
+  si quedó algo sin sincronizar por algún error real (no de conexión).
+- [x] **`TransactionForm.tsx`**: si `navigator.onLine` es `false` antes
+  de intentar guardar, ni intenta pegarle a Supabase — va directo a la
+  cola. Si el insert falla y en ese momento ya no hay conexión (se
+  cortó a mitad de camino), también se encola en vez de mostrar un
+  error que asuste al usuario; si falla por otro motivo (dato
+  inválido, etc.) sí se muestra el error real, sin ocultarlo.
+
+**Alcance de este MVP — importante ser honesto**: por ahora **solo
+`TransactionForm` (Carga Manual) tiene esto integrado** — es el caso de
+uso más común (cargar un gasto en el momento, sin señal). Las demás
+pantallas (Suscripciones, Cuotas, Deudas, Metas, etc.) todavía
+requieren conexión para guardar; extenderles el mismo patrón es
+mecánico (mismo `enqueueOfflineTransaction`-style helper, adaptado a
+cada tabla) pero no se hizo en esta pasada por alcance/tiempo. Tampoco
+hay lectura offline de datos ya guardados (ver el historial sin
+conexión) — el Service Worker cachea el *shell* de la app, no los datos
+de Supabase.
+
+Verificado: `npx tsc --noEmit` (0 errores — hubo que tipar
+explícitamente el insert de sincronización, igual que en
+`BackupRestore.tsx`, porque TypeScript no puede verificar los campos
+requeridos a través de un `Record<string, unknown>` genérico),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**41 archivos, 216 tests**, todos pasando).

@@ -6,6 +6,7 @@ import { useCategories } from '@/context/CategoriesContext'
 import { Wallet } from '@/types'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
 import { computeHoursOfWork } from '@/lib/hoursOfWork'
+import { enqueueOfflineTransaction } from '@/lib/offlineQueue'
 import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag, Clock } from 'lucide-react'
 
 interface TransactionFormProps {
@@ -120,24 +121,49 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
 
     const selectedWallet = wallets.find((w) => w.id === walletId)
 
-    const { error } = await supabase.from('transactions').insert([
-      {
-        user_id: user.id,
-        description,
-        type,
-        category_id: categoryId || null,
-        wallet_id: walletId || null,
-        payment_method: paymentMethod,
-        wallet_provider: selectedWallet?.name ?? null,
-        is_usd: isUsd,
-        amount_usd: isUsd ? Number(amountUsd) : null,
-        amount_ars: finalAmountArs,
-        exchange_rate: isUsd ? Number(exchangeRate) : null,
-      },
-    ])
+    const payload = {
+      user_id: user.id,
+      description,
+      type,
+      category_id: categoryId || null,
+      wallet_id: walletId || null,
+      payment_method: paymentMethod,
+      wallet_provider: selectedWallet?.name ?? null,
+      is_usd: isUsd,
+      amount_usd: isUsd ? Number(amountUsd) : null,
+      amount_ars: finalAmountArs,
+      exchange_rate: isUsd ? Number(exchangeRate) : null,
+    }
+
+    // Si ya sabemos que no hay conexión, ni intentamos pegarle a
+    // Supabase — directo a la cola offline.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      enqueueOfflineTransaction(payload)
+      alert('Sin conexión: guardado en tu celular. Se va a sincronizar solo cuando vuelvas a tener internet.')
+      setDescription('')
+      setAmountArs('')
+      setAmountUsd('')
+      onTransactionAdded()
+      setLoading(false)
+      return
+    }
+
+    const { error } = await supabase.from('transactions').insert([payload])
 
     if (error) {
-      alert('Error al guardar el movimiento: ' + error.message)
+      // Si el error vino porque la conexión se cortó justo en el medio
+      // del pedido (no un error de datos inválidos), lo guardamos
+      // offline en vez de mostrar un error que asuste al usuario.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineTransaction(payload)
+        alert('Se cortó la conexión: guardado en tu celular, se sincroniza solo.')
+        setDescription('')
+        setAmountArs('')
+        setAmountUsd('')
+        onTransactionAdded()
+      } else {
+        alert('Error al guardar el movimiento: ' + error.message)
+      }
     } else {
       setDescription('')
       setAmountArs('')
