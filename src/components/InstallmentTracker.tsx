@@ -6,6 +6,7 @@ import { useCategories } from '@/context/CategoriesContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
+import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
 import { CreditCard, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 
 interface PurchaseWithPayments extends InstallmentPurchase {
@@ -192,6 +193,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
         <CreditCard className="text-violet-600" size={20} /> Compras en Cuotas
       </h2>
+
+      <InstallmentsVsCashSimulator />
 
       <form onSubmit={handleAddPurchase} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input

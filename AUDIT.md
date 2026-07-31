@@ -1081,6 +1081,42 @@ agrupar con paréntesis un `??` mezclado con `||` en
 Quedan 2 piezas del paso 4: Simulador Contado vs. Cuotas
 (anti-inflación) y división de gastos con recordatorio por WhatsApp.
 
+## ✅ Paso 4 (completo) — últimas 2 piezas
+
+- [x] **Simulador Contado vs. Cuotas** — `InstallmentsVsCashSimulator.tsx`
+  (botón dentro de Cuotas, en Planes). `compareInstallmentsVsCash()`
+  pura: descuenta cada cuota futura a valor presente según la
+  inflación mensual que el usuario estima, y compara esa suma contra el
+  precio de contado — si el valor presente financiado es menor,
+  conviene financiar; si es mayor, conviene contado. Aclara
+  explícitamente que no es asesoramiento financiero, es una cuenta
+  simple con una tasa estimada por el usuario. 4 tests.
+- [x] **Dividir Gasto + WhatsApp** — `SplitExpenseTool.tsx` (botón
+  dentro de Deudas y Préstamos, en Planes). Divide un monto entre N
+  personas, y si cargás el nombre de la otra persona, además **crea una
+  deuda "me deben"** en Deudas y Préstamos por su parte (se integra con
+  la sección que ya existía, no es un cálculo aislado que se pierde).
+  Botón "Enviar por WhatsApp" arma un link `wa.me` con el mensaje
+  precargado (monto + alias bancario opcional) — si no hay teléfono
+  cargado, abre el selector de contacto de WhatsApp para elegir a quién
+  mandárselo. `computeSplitShare()`, `buildSplitExpenseMessage()`,
+  `buildWhatsAppLink()` puras, testeadas (9 tests).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**38 archivos, 200 tests**, todos pasando).
+
+## 🎉 Rediseño completo (4/4 pasos)
+
+Con esto se terminaron los 4 pasos del rediseño basado en el brief que
+el usuario compartió: navegación por pestañas (Inicio/Análisis/Planes/
+Historial + Configuración como overlay), pulido de cada pestaña, FAB
+central desplegable, y las 5 piezas nuevas (matemática inline,
+carrusel de billeteras, Límite Seguro de Gasto Diario, Simulador
+Contado vs. Cuotas, Dividir Gastos + WhatsApp). Quedó además una
+auditoría completa de responsive mobile con 7 problemas reales
+corregidos.
+
 ## ✅ Auditoría de diseño responsive mobile (análisis estático)
 
 El usuario pidió una revisión completa de que todo entre en pantalla en

@@ -6,6 +6,7 @@ import { usePrivacy } from '@/context/PrivacyContext'
 import { computeDebtProgress, daysOverdue } from '@/lib/debts'
 import { applyTax } from '@/lib/applyTax'
 import { Debt } from '@/types'
+import SplitExpenseTool from '@/components/SplitExpenseTool'
 import { HandCoins, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 const emptyForm = {
@@ -206,6 +207,8 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
           </div>
         </div>
       </div>
+
+      <SplitExpenseTool onDebtCreated={loadDebts} />
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
