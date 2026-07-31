@@ -464,6 +464,27 @@ export interface Database {
         }
         Relationships: []
       }
+      user_work_settings: {
+        Row: {
+          user_id: string
+          monthly_income: number
+          monthly_work_hours: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          monthly_income: number
+          monthly_work_hours?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          monthly_income?: number
+          monthly_work_hours?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_calendar_tokens: {
         Row: {
           id: string

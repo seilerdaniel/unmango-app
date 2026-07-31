@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { Wallet } from '@/types'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
-import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag } from 'lucide-react'
+import { computeHoursOfWork } from '@/lib/hoursOfWork'
+import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag, Clock } from 'lucide-react'
 
 interface TransactionFormProps {
   onTransactionAdded: () => void
@@ -35,6 +36,11 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [exchangeRate, setExchangeRate] = useState('1200')
   const [loading, setLoading] = useState(false)
 
+  // "Costo en Horas de Trabajo" — se carga una sola vez si el usuario
+  // configuró su ingreso/horas en Configuración. Si no lo configuró,
+  // workSettings queda null y el hint simplemente no se muestra.
+  const [workSettings, setWorkSettings] = useState<{ monthlyIncome: number; monthlyWorkHours: number } | null>(null)
+
   async function loadWallets() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -48,6 +54,20 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
 
   useEffect(() => {
     loadWallets()
+
+    async function loadWorkSettings() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('user_work_settings')
+        .select('monthly_income, monthly_work_hours')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (data) {
+        setWorkSettings({ monthlyIncome: Number(data.monthly_income), monthlyWorkHours: Number(data.monthly_work_hours) })
+      }
+    }
+    loadWorkSettings()
   }, [])
 
   async function handleQuickAddWallet() {
@@ -219,6 +239,18 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
               required
               className={inputStyle}
             />
+            {workSettings && type === 'expense' && !isUsd && (() => {
+              const parsedAmount = evaluateMathExpression(amountArs) ?? Number(amountArs)
+              const hoursResult = computeHoursOfWork(parsedAmount, workSettings.monthlyIncome, workSettings.monthlyWorkHours)
+              if (!hoursResult) return null
+              return (
+                <p className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                  <Clock size={10} />
+                  Esto te cuesta {hoursResult.hours.toFixed(1)}h de trabajo (
+                  {hoursResult.workDays.toFixed(1)} jornadas)
+                </p>
+              )
+            })()}
           </div>
 
           <div className="flex items-end">

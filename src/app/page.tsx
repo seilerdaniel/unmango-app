@@ -15,6 +15,7 @@ import TrendChart from "@/components/TrendChart";
 import ExchangeGapSimulator from "@/components/ExchangeGapSimulator";
 import TelegramLink from "@/components/TelegramLink";
 import GoogleCalendarLink from "@/components/GoogleCalendarLink";
+import WorkSettings from "@/components/WorkSettings";
 import TransactionFilters from "@/components/TransactionFilters";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -556,6 +557,7 @@ export default function Home() {
         <BackupRestore />
         <TelegramLink />
         <GoogleCalendarLink />
+        <WorkSettings />
       </SettingsPanel>
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
