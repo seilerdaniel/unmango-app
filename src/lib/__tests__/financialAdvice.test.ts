@@ -15,12 +15,22 @@ function buildScore(overrides: Partial<Record<'savings' | 'debt' | 'emergencyFun
   }
 }
 
+
+const NO_EXTRA_SIGNALS = {
+  exceededBudgetCategoryNames: [] as string[],
+  hasHighInterestDebt: false,
+  largeInstallmentDescription: null as string | null,
+  brokenStreakDays: null as number | null,
+  stalledGoalNames: [] as string[],
+}
+
 describe('generateFinancialAdvice', () => {
   it('no genera consejos de un pilar si está en un rango saludable intermedio', () => {
     const advice = generateFinancialAdvice({
       healthScore: buildScore({ debt: 70 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.find((a) => a.id.startsWith('debt-'))).toBeUndefined()
   })
@@ -30,6 +40,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ savings: 10 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     const item = advice.find((a) => a.id === 'savings-low')
     expect(item?.severity).toBe('danger')
@@ -40,6 +51,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ savings: 90 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.find((a) => a.id === 'savings-high')?.severity).toBe('success')
   })
@@ -49,6 +61,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({}),
       hasSubscriptionPriceIncrease: true,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.find((a) => a.id === 'subscription-increase')).toBeDefined()
   })
@@ -58,6 +71,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({}),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 0,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.find((a) => a.id === 'safe-to-spend-zero')?.severity).toBe('danger')
   })
@@ -67,6 +81,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({}),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: null,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.find((a) => a.id === 'safe-to-spend-zero')).toBeUndefined()
   })
@@ -76,6 +91,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ savings: 10, debt: 10, emergencyFund: 5, antExpenses: 20 }),
       hasSubscriptionPriceIncrease: true,
       safeToSpendToday: 0,
+      ...NO_EXTRA_SIGNALS,
     })
     expect(advice.length).toBeGreaterThanOrEqual(5)
   })
@@ -85,6 +101,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ savings: 10 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     const item = advice.find((a) => a.id === 'savings-low')
     expect(item?.action).toEqual({ label: 'Crear una Meta de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' })
@@ -95,6 +112,7 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ antExpenses: 10 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     const item = advice.find((a) => a.id === 'ant-expenses-low')
     expect(item?.action?.tab).toBe('analisis')
@@ -105,8 +123,96 @@ describe('generateFinancialAdvice', () => {
       healthScore: buildScore({ savings: 90 }),
       hasSubscriptionPriceIncrease: false,
       safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
     })
     const item = advice.find((a) => a.id === 'savings-high')
     expect(item?.action).toBeUndefined()
+  })
+})
+
+describe('generateFinancialAdvice — 5 reglas nuevas', () => {
+  it('avisa si hay presupuestos excedidos', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      exceededBudgetCategoryNames: ['Supermercado'],
+    })
+    const item = advice.find((a) => a.id === 'budget-exceeded')
+    expect(item?.message).toContain('Supermercado')
+    expect(item?.action?.tab).toBe('planes')
+  })
+
+  it('menciona cuántos presupuestos más hay si son varios', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      exceededBudgetCategoryNames: ['Supermercado', 'Transporte', 'Salud'],
+    })
+    const item = advice.find((a) => a.id === 'budget-exceeded')
+    expect(item?.message).toContain('y 1 más')
+  })
+
+  it('avisa si hay una deuda con interés alto', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      hasHighInterestDebt: true,
+    })
+    expect(advice.find((a) => a.id === 'high-interest-debt')).toBeDefined()
+  })
+
+  it('avisa si una cuota pesa mucho sobre el ingreso', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      largeInstallmentDescription: 'Heladera',
+    })
+    const item = advice.find((a) => a.id === 'large-installment')
+    expect(item?.message).toContain('Heladera')
+  })
+
+  it('da un mensaje motivacional (info) si se rompió una racha larga', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      brokenStreakDays: 5,
+    })
+    const item = advice.find((a) => a.id === 'streak-broken')
+    expect(item?.severity).toBe('info')
+    expect(item?.message).toContain('5')
+  })
+
+  it('no avisa de una racha rota si fue muy corta (menos de 3 días)', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      brokenStreakDays: 1,
+    })
+    expect(advice.find((a) => a.id === 'streak-broken')).toBeUndefined()
+  })
+
+  it('avisa si hay una meta de ahorro estancada', () => {
+    const advice = generateFinancialAdvice({
+      healthScore: buildScore({}),
+      hasSubscriptionPriceIncrease: false,
+      safeToSpendToday: 5000,
+      ...NO_EXTRA_SIGNALS,
+      stalledGoalNames: ['Fondo de Emergencia'],
+    })
+    const item = advice.find((a) => a.id === 'stalled-goal')
+    expect(item?.message).toContain('Fondo de Emergencia')
+    expect(item?.action?.sectionId).toBe('metas-ahorro')
   })
 })

@@ -21,6 +21,16 @@ export interface AdviceInputs {
   hasSubscriptionPriceIncrease: boolean
   /** Cuánto podés gastar hoy sin comprometer tus gastos fijos (Límite Seguro de Gasto Diario). null si no hay datos suficientes para calcularlo. */
   safeToSpendToday: number | null
+  /** Nombres de categorías cuyo presupuesto ya se superó este mes. */
+  exceededBudgetCategoryNames: string[]
+  /** true si hay alguna deuda activa ("debo") con interés > 0. */
+  hasHighInterestDebt: boolean
+  /** Descripción de una compra en cuotas cuya cuota mensual pesa mucho sobre el ingreso, o null si ninguna. */
+  largeInstallmentDescription: string | null
+  /** Días de racha sin gastos que se cortaron hoy, o null si no aplica. */
+  brokenStreakDays: number | null
+  /** Nombres de metas de ahorro que siguen en $0 después de bastante tiempo creadas. */
+  stalledGoalNames: string[]
 }
 
 /**
@@ -33,7 +43,7 @@ export interface AdviceInputs {
  * testearla sin tocar la base.
  */
 export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
-  const { healthScore, hasSubscriptionPriceIncrease, safeToSpendToday } = inputs
+  const { healthScore, hasSubscriptionPriceIncrease, safeToSpendToday, exceededBudgetCategoryNames, hasHighInterestDebt, largeInstallmentDescription, brokenStreakDays, stalledGoalNames } = inputs
   const advice: AdviceItem[] = []
 
   const { savings, debt, emergencyFund, antExpenses } = healthScore.pillars
@@ -122,6 +132,53 @@ export function generateFinancialAdvice(inputs: AdviceInputs): AdviceItem[] {
       severity: 'danger',
       message: 'Con el ritmo actual, ya no te queda margen para gastar este mes sin tocar tus gastos fijos comprometidos.',
       action: { label: 'Ver en Inicio', tab: 'inicio', sectionId: 'safe-to-spend' },
+    })
+  }
+
+  if (exceededBudgetCategoryNames.length > 0) {
+    const names = exceededBudgetCategoryNames.slice(0, 2).join(' y ')
+    const extra = exceededBudgetCategoryNames.length > 2 ? ` (y ${exceededBudgetCategoryNames.length - 2} más)` : ''
+    advice.push({
+      id: 'budget-exceeded',
+      severity: 'warning',
+      message: `Superaste el presupuesto de ${names}${extra} este mes.`,
+      action: { label: 'Ver Presupuestos', tab: 'planes', sectionId: 'presupuestos' },
+    })
+  }
+
+  if (hasHighInterestDebt) {
+    advice.push({
+      id: 'high-interest-debt',
+      severity: 'warning',
+      message: 'Tenés una deuda con interés — priorizarla antes que ahorrar suele convenir más (el interés que pagás normalmente es mayor a lo que rendiría guardar esa plata).',
+      action: { label: 'Ver Deudas y Préstamos', tab: 'planes', sectionId: 'deudas-prestamos' },
+    })
+  }
+
+  if (largeInstallmentDescription) {
+    advice.push({
+      id: 'large-installment',
+      severity: 'warning',
+      message: `La cuota de "${largeInstallmentDescription}" pesa bastante sobre tu ingreso mensual.`,
+      action: { label: 'Ver Cuotas', tab: 'planes', sectionId: 'cuotas' },
+    })
+  }
+
+  if (brokenStreakDays !== null && brokenStreakDays >= 3) {
+    advice.push({
+      id: 'streak-broken',
+      severity: 'info',
+      message: `Veías ${brokenStreakDays} días seguidos sin gastos y hoy se cortó — no pasa nada, a retomarla.`,
+    })
+  }
+
+  if (stalledGoalNames.length > 0) {
+    const names = stalledGoalNames.slice(0, 2).join(' y ')
+    advice.push({
+      id: 'stalled-goal',
+      severity: 'info',
+      message: `Tu meta "${names}" sigue en $0 desde hace bastante — ¿le sumamos algo este mes?`,
+      action: { label: 'Ver Metas de Ahorro', tab: 'planes', sectionId: 'metas-ahorro' },
     })
   }
 

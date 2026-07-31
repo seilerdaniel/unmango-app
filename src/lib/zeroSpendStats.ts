@@ -46,3 +46,25 @@ export function computeZeroSpendStats(
     currentStreak,
   }
 }
+
+/**
+ * Si HOY hubo un gasto (se "rompió" la racha de días sin gastar),
+ * devuelve cuántos días consecutivos sin gastar había antes de hoy.
+ * Devuelve null si hoy no hubo gasto (no se rompió nada) o si no había
+ * ninguna racha previa que romper (0 días antes de hoy). Pensado para
+ * un mensaje motivacional tipo "veías 5 días sin gastos y hoy se
+ * cortó" — no para alarmar, solo para dar ánimo de retomarla.
+ */
+export function computeStreakBreak(expenseDayNumbers: number[], today: Date = new Date()): number | null {
+  const todayDayOfMonth = today.getDate()
+  const expenseDaysSet = new Set(expenseDayNumbers)
+
+  if (!expenseDaysSet.has(todayDayOfMonth)) return null
+
+  let streakBeforeToday = 0
+  for (let day = todayDayOfMonth - 1; day >= 1; day--) {
+    if (expenseDaysSet.has(day)) break
+    streakBeforeToday++
+  }
+  return streakBeforeToday > 0 ? streakBeforeToday : null
+}

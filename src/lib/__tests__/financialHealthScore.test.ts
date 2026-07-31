@@ -78,15 +78,22 @@ describe('computeFinancialHealthScore', () => {
 })
 
 describe('hasNoFinancialData', () => {
-  it('es true si no hay ingreso, gasto ni saldo en billeteras', () => {
-    expect(hasNoFinancialData(0, 0, 0)).toBe(true)
+  it('es true si no hay ingreso ni gasto este mes', () => {
+    expect(hasNoFinancialData(0, 0)).toBe(true)
   })
 
   it('es false si hay aunque sea un ingreso cargado', () => {
-    expect(hasNoFinancialData(500000, 0, 0)).toBe(false)
+    expect(hasNoFinancialData(500000, 0)).toBe(false)
   })
 
-  it('es false si hay aunque sea saldo en billeteras', () => {
-    expect(hasNoFinancialData(0, 0, 1000)).toBe(false)
+  it('es false si hay aunque sea un gasto cargado', () => {
+    expect(hasNoFinancialData(0, 15000)).toBe(false)
+  })
+
+  it('es true aunque haya saldo en billeteras, si no hay movimientos este mes (el saldo no cuenta acá a propósito)', () => {
+    // No se le pasa el saldo de billeteras a la función a propósito —
+    // alguien puede tener plata guardada de antes sin haber cargado
+    // ingresos/gastos todavía este mes.
+    expect(hasNoFinancialData(0, 0)).toBe(true)
   })
 })

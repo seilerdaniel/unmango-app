@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeZeroSpendStats } from '../zeroSpendStats'
+import { computeZeroSpendStats, computeStreakBreak } from '../zeroSpendStats'
 
 describe('computeZeroSpendStats', () => {
   it('cuenta todos los días como "cero gasto" si no hubo ningún gasto', () => {
@@ -36,5 +36,23 @@ describe('computeZeroSpendStats', () => {
     const stats = computeZeroSpendStats([1], today)
     expect(stats.zeroSpendDays).toBe(2) // días 2 y 3
     expect(stats.currentStreak).toBe(2)
+  })
+})
+
+describe('computeStreakBreak', () => {
+  it('devuelve la racha previa si hoy hubo gasto y venía una racha', () => {
+    // Hoy es el día 10, hubo gasto el 10. Días 6,7,8,9 sin gasto (4 seguidos antes de hoy).
+    const today = new Date(2026, 6, 10)
+    expect(computeStreakBreak([10], today)).toBe(9) // del 1 al 9 sin gasto (9 días)
+  })
+
+  it('devuelve null si hoy no hubo gasto (no se rompió nada)', () => {
+    const today = new Date(2026, 6, 10)
+    expect(computeStreakBreak([5], today)).toBeNull()
+  })
+
+  it('devuelve null si no había ninguna racha antes de hoy (gasto también ayer)', () => {
+    const today = new Date(2026, 6, 10)
+    expect(computeStreakBreak([9, 10], today)).toBeNull()
   })
 })

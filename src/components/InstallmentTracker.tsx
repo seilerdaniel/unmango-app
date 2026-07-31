@@ -192,7 +192,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div id="cuotas" className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
         <CreditCard className="text-violet-600" size={20} /> Compras en Cuotas
       </h2>

@@ -80,7 +80,7 @@ export default function FinancialHealthScoreWidget() {
           threshold
         )
 
-        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense, emergencyFundBalance))
+        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense))
         setResult(
           computeFinancialHealthScore({
             monthlyIncome,

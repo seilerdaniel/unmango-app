@@ -1534,3 +1534,48 @@ cargados). Dos problemas distintos, ambos corregidos:
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**51 archivos, 272 tests**, todos pasando).
+
+## ✅ Fix del fix: hasNoFinancialData todavía fallaba con billeteras con saldo
+
+El usuario probó la tanda anterior y seguía viendo 25/100 y las 3
+alertas de peligro. Causa: `hasNoFinancialData()` exigía que ingreso,
+gasto Y saldo en billeteras fueran los tres 0 — pero el usuario tenía
+saldo en billeteras de pruebas anteriores de la sesión (`Brubank`,
+etc.), así que la condición nunca se cumplía aunque no hubiera ningún
+movimiento cargado ESTE MES. Se sacó el saldo de billeteras de la
+condición — ahora solo mira ingreso y gasto del mes (que es lo que
+determina si los pilares de Ahorro/Deuda/Fondo de Emergencia tienen
+sentido calculados o no, con o sin plata guardada de antes). 4 tests
+actualizados/nuevos.
+
+## ✅ 5 recomendaciones nuevas ("fáciles de sumar ya")
+
+- [x] **Presupuesto excedido** — cruza el límite de cada categoría
+  (`budgets`) con lo gastado ese mes (`get_monthly_category_spend`,
+  misma función que ya usa `BudgetManager`). Menciona hasta 2 nombres y
+  "y N más" si hay más. Acción → Planes, Presupuestos.
+- [x] **Deuda con interés alto** — cualquier deuda "Yo debo" activa con
+  `interest_rate > 0`. Acción → Planes, Deudas y Préstamos.
+- [x] **Cuota grande** — la primera compra en cuotas cuya cuota mensual
+  (`total_amount / installments_count`) supere el 20% del ingreso
+  mensual. Si no hay ingreso registrado, no se evalúa (no hay
+  "grande respecto a qué"). Acción → Planes, Cuotas.
+- [x] **Racha de gasto rota** — `computeStreakBreak()` nueva en
+  `zeroSpendStats.ts` (3 tests): si hoy hubo gasto y había una racha de
+  3+ días sin gastos antes, mensaje motivacional (severidad `info`, sin
+  acción — no hay nada que "hacer", solo ánimo).
+- [x] **Meta de ahorro estancada** — `isGoalStalled()` nueva en
+  `savingsGoalStall.ts` (4 tests): sigue en $0 después de 60+ días de
+  creada. No hay una columna de "último aporte" en `savings_goals` (no
+  se trackea historial de aportes) — se usa `created_at` como
+  aproximación razonable. Acción → Planes, Metas de Ahorro.
+
+Se agregaron los `id`s que faltaban (`presupuestos`, `deudas-prestamos`,
+`cuotas`) a los contenedores de `BudgetManager`, `DebtsManager` e
+`InstallmentTracker` para que las acciones nuevas tengan a dónde
+hacer scroll. 7 tests nuevos sobre las 5 reglas (17 en total en
+`financialAdvice.test.ts`).
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**52 archivos, 287 tests**, todos pasando).

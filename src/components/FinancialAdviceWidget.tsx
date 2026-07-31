@@ -8,6 +8,8 @@ import { detectAntExpenses } from '@/lib/antExpenses'
 import { detectPriceIncreases } from '@/lib/priceIncreases'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
 import { computeSafeToSpend } from '@/lib/safeToSpend'
+import { computeStreakBreak } from '@/lib/zeroSpendStats'
+import { isGoalStalled } from '@/lib/savingsGoalStall'
 import { Lightbulb, AlertTriangle, CheckCircle2, Info, AlertCircle, ArrowRight } from 'lucide-react'
 import { TabId } from '@/components/nav/BottomNav'
 
@@ -45,24 +47,38 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
         const daysRemaining = daysInMonth - dayOfMonth + 1
 
-        const [trendResult, expensesResult, recurringResult, installmentsResult, walletsResult, priceChangesResult] =
-          await Promise.all([
-            supabase.rpc('get_monthly_trend', { p_months: 1 }),
-            supabase
-              .from('transactions')
-              .select('amount_ars')
-              .eq('user_id', user.id)
-              .eq('type', 'expense')
-              .gte('created_at', monthStart),
-            supabase
-              .from('recurring_expenses')
-              .select('amount, currency, billing_frequency')
-              .eq('user_id', user.id)
-              .eq('is_active', true),
-            supabase.from('installment_purchases').select('total_amount, installments_count'),
-            supabase.rpc('get_wallet_balances'),
-            supabase.rpc('get_recurring_price_changes'),
-          ])
+        const [
+          trendResult,
+          expensesResult,
+          recurringResult,
+          installmentsResult,
+          walletsResult,
+          priceChangesResult,
+          budgetsResult,
+          categorySpendResult,
+          debtsResult,
+          goalsResult,
+        ] = await Promise.all([
+          supabase.rpc('get_monthly_trend', { p_months: 1 }),
+          supabase
+            .from('transactions')
+            .select('amount_ars, created_at')
+            .eq('user_id', user.id)
+            .eq('type', 'expense')
+            .gte('created_at', monthStart),
+          supabase
+            .from('recurring_expenses')
+            .select('amount, currency, billing_frequency')
+            .eq('user_id', user.id)
+            .eq('is_active', true),
+          supabase.from('installment_purchases').select('description, total_amount, installments_count'),
+          supabase.rpc('get_wallet_balances'),
+          supabase.rpc('get_recurring_price_changes'),
+          supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', user.id),
+          supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
+          supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', user.id),
+          supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', user.id),
+        ])
 
         const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
         const monthlyExpense = Number(trendResult.data?.[0]?.total_expense) || 0
@@ -105,12 +121,48 @@ export default function FinancialAdviceWidget({ onNavigate }: { onNavigate: (tab
         const safeToSpendToday =
           monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedARSDaily, daysRemaining) : null
 
-        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense, emergencyFundBalance))
+        // Presupuesto excedido: cruzamos el límite de cada categoría con
+        // lo gastado ese mes (misma función que ya usa BudgetManager).
+        const spendByCategory = new Map((categorySpendResult.data ?? []).map((row) => [row.category_id, Number(row.spent)]))
+        const exceededBudgetCategoryNames = (budgetsResult.data ?? [])
+          .filter((b) => (spendByCategory.get(b.category_id) ?? 0) > Number(b.monthly_limit))
+          .map((b) => (b.categories as { name: string } | null)?.name)
+          .filter((name): name is string => !!name)
+
+        // Deuda con interés: cualquier deuda "debo" activa con interés > 0.
+        const hasHighInterestDebt = (debtsResult.data ?? []).some(
+          (d) => d.debt_type === 'debo' && Number(d.remaining_amount) > 0 && Number(d.interest_rate) > 0
+        )
+
+        // Cuota grande: la primera compra cuya cuota mensual supere el
+        // 20% del ingreso mensual (si no hay ingreso registrado, no se
+        // puede evaluar "grande respecto a qué", se omite el aviso).
+        const largeInstallment =
+          monthlyIncome > 0
+            ? (installmentsResult.data ?? []).find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)
+            : undefined
+        const largeInstallmentDescription = largeInstallment?.description ?? null
+
+        // Racha de gastos rota: mismo criterio que ZeroSpendStreak.tsx.
+        const expenseDayNumbers = (expensesResult.data ?? []).map((t) => new Date(t.created_at as string).getDate())
+        const brokenStreakDays = computeStreakBreak(expenseDayNumbers, now)
+
+        // Metas de ahorro estancadas.
+        const stalledGoalNames = (goalsResult.data ?? [])
+          .filter((g) => isGoalStalled(Number(g.current_amount), g.created_at, now))
+          .map((g) => g.name)
+
+        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense))
         setAdvice(
           generateFinancialAdvice({
             healthScore,
             hasSubscriptionPriceIncrease,
             safeToSpendToday,
+            exceededBudgetCategoryNames,
+            hasHighInterestDebt,
+            largeInstallmentDescription,
+            brokenStreakDays,
+            stalledGoalNames,
           })
         )
       } catch (err) {

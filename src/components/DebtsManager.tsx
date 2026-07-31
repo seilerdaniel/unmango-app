@@ -194,7 +194,7 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
     .reduce((acc, d) => acc + applyTax(Number(d.remaining_amount), d.interest_rate), 0)
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div id="deudas-prestamos" className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <HandCoins className="w-5 h-5 text-amber-600" />
