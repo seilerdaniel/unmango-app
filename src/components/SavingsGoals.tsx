@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Chart as ChartJS,
   LineElement,
@@ -68,6 +68,7 @@ export default function SavingsGoals() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const containerRef = useRef<HTMLDivElement>(null)
 
   function applySuggestedGoal(suggested: (typeof SUGGESTED_GOALS)[number]) {
     setName(suggested.name)
@@ -75,7 +76,7 @@ export default function SavingsGoals() {
     setMonthlyContribution(String(suggested.monthlyContribution))
     // El usuario todavía tiene que tocar "Crear Meta" — no se crea sola,
     // así puede ajustar los montos de ejemplo antes de guardar.
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function loadGoals() {
@@ -186,7 +187,7 @@ export default function SavingsGoals() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center gap-2">
         <PiggyBank className="w-5 h-5 text-emerald-600" />
         <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Metas de Ahorro</h2>

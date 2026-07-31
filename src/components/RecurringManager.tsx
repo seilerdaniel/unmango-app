@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
@@ -66,6 +66,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const [impactingId, setImpactingId] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const containerRef = useRef<HTMLDivElement>(null)
 
   async function loadWallets() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -147,7 +148,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       membershipType: item.membership_type || '',
       taxPercentage: item.tax_percentage ? String(item.tax_percentage) : '',
     })
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (typeof window !== 'undefined') containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -289,7 +290,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Repeat className="w-5 h-5 text-indigo-600" />

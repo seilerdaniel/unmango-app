@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
@@ -23,11 +23,15 @@ export default function BudgetManager() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const containerRef = useRef<HTMLDivElement>(null)
 
   function applySuggestedBudget(categoryId: string, amount: number) {
     setSelectedCategory(categoryId)
     setLimitAmount(String(amount))
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Desplaza solo hasta esta tarjeta (no hasta arriba de toda la
+    // página, que en pestañas con varias tarjetas apiladas se siente
+    // como si te mandara al principio de todo).
+    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function loadMonthlyIncome() {
@@ -174,7 +178,7 @@ export default function BudgetManager() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Target className="w-5 h-5 text-amber-600" />

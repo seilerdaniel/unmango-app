@@ -1178,3 +1178,63 @@ categoría particularmente largo con caracteres que no cortan bien) o
 que dependen del renderizado real de fuentes/anchos exactos del
 dispositivo. Si al probarlo en tu celular encontrás algo que se sigue
 cortando, mandame captura como las anteriores y lo reviso puntual.
+
+## ✅ Nueva batería de ideas — Top 3 prioritarias del usuario
+
+El usuario compartió un documento con 14 ideas nuevas organizadas en 4
+categorías, con un resumen explícito de "Top 3 para implementar
+primero". Se implementaron en ese orden:
+
+- [x] **Costo en Horas de Trabajo** — `supabase/user_work_settings.sql`
+  (ingreso mensual + horas trabajadas por mes, con RLS).
+  `computeHoursOfWork()` pura (4 tests): calcula el valor hora y
+  traduce cualquier monto a horas + jornadas de 8hs equivalentes.
+  `WorkSettings.tsx` en Configuración para cargarlo una sola vez (es
+  opcional — si no está configurado, el hint simplemente no aparece).
+  En `TransactionForm`, debajo del campo de monto, se muestra en vivo
+  "Esto te cuesta X.Xh de trabajo (X.X jornadas)" para gastos en ARS —
+  reevalúa también si el campo tiene una expresión matemática como
+  "2500 + 1300".
+
+- [x] **Un Mango Score** — `computeFinancialHealthScore()` pura (6
+  tests): puntaje de 0 a 100 con 4 pilares al 25% cada uno (Ahorro,
+  Deuda, Fondo de Emergencia, Gasto Hormiga). `FinancialHealthScoreWidget.tsx`
+  en Inicio: anillo de progreso SVG con el score total + una barra por
+  pilar. Aclara explícitamente que no es un puntaje crediticio ni un
+  consejo financiero.
+
+- [ ] **Modo Hogar/Pareja** — la más grande de las 3, todavía sin
+  empezar. Requiere vincular dos cuentas de UnMango distintas y
+  calcular un balance compartido entre usuarios — queda para una
+  próxima tanda dedicada.
+
+Verificado en este sandbox (ambas piezas): `npx tsc --noEmit` (0
+errores), `npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**40 archivos, 210 tests**, todos pasando).
+
+## ✅ Fix: "cargar cualquier dato nuevo me manda al principio de la página"
+
+Bug real reportado por el usuario. Causa: 4 componentes
+(`WalletManager`, `RecurringManager`, `SavingsGoals`, `BudgetManager`)
+usaban `window.scrollTo({ top: 0 })` al **editar** un ítem existente (o
+al aplicar una meta/presupuesto sugerido) — eso desplaza **toda la
+ventana** hasta el borde superior absoluto de la página, no solo hasta
+el principio de esa tarjeta. En pestañas con varias tarjetas apiladas
+(como Planes), esto se sentía como "me mandó al principio de todo".
+
+Se reemplazó por `scrollIntoView({ block: 'start' })` sobre un `ref` al
+contenedor raíz de cada componente — ahora desplaza solo lo necesario
+para que esa tarjeta puntual quede visible, sin saltar por encima de
+todo lo demás.
+
+De paso se encontró que `Element.prototype.scrollIntoView` no existe
+en absoluto en jsdom (a diferencia de `window.scrollTo`, que existe
+pero solo tira un warning) — los tests que editan un ítem tiraban un
+error de fondo aunque las aserciones pasaran igual. Se agregó un mock
+mínimo en `vitest.setup.ts` (es una API estándar bien soportada en
+navegadores reales, esto es solo una limitación del entorno de test).
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (misma
+línea base pre-existente, nada nuevo — de hecho 2 archivos salieron de
+la lista de warnings pre-existentes), `npx vitest run` (**40 archivos,
+210 tests**, todos pasando, sin errores de fondo esta vez).

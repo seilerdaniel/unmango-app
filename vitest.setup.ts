@@ -16,3 +16,13 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
       dispatchEvent: () => false,
     }) as unknown as MediaQueryList
 }
+
+// jsdom no implementa Element.prototype.scrollIntoView en absoluto (a
+// diferencia de window.scrollTo, que existe pero solo tira un warning
+// de "not implemented"). Varios componentes lo usan para desplazar
+// hasta su propia tarjeta al editar un ítem — en navegadores reales es
+// una API estándar bien soportada, esto es solo para que los tests no
+// exploten al no encontrar la función.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}

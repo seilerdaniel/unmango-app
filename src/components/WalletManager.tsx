@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
@@ -47,6 +47,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const containerRef = useRef<HTMLDivElement>(null)
 
   async function loadWallets() {
     try {
@@ -102,7 +103,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     setColor(w.color || '#6366f1')
     setInitialBalance(String(w.initial_balance ?? ''))
     setCardNetwork(w.card_network || 'Visa')
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (typeof window !== 'undefined') containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -167,7 +168,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
+    <div ref={containerRef} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <WalletIcon className="w-5 h-5 text-indigo-600" />
