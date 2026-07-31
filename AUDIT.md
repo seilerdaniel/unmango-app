@@ -1346,3 +1346,30 @@ pasando).
 
 Con esto se completaron las **3 ideas prioritarias** de la nueva
 batería que el usuario compartió.
+
+## ✅ Recomendaciones Financieras (a partir de una pregunta del usuario)
+
+El usuario preguntó si había alguna feature que mostrara la situación
+financiera con consejos según gastos/ingresos/suscripciones/etc. La
+respuesta era "a medias" — el Un Mango Score ya mostraba los números,
+pero no traducía eso a consejos en texto. Se construyó ese hueco:
+
+- [x] **`generateFinancialAdvice()`** (`src/lib/financialAdvice.ts`,
+  pura, 7 tests) — motor de consejos basado en reglas (no IA) sobre los
+  mismos 4 pilares del Un Mango Score, para que los consejos nunca
+  contradigan lo que ya se ve ahí. Cada pilar solo genera un consejo si
+  está fuera de un rango saludable (no satura con 4 consejos genéricos
+  cuando todo está bien) — incluye avisos positivos también cuando algo
+  va muy bien, no solo alertas. Suma dos señales más: si alguna
+  suscripción subió de precio (reutiliza `detectPriceIncreases()`, ya
+  existente) y si el Límite Seguro de Gasto Diario ya llegó a 0
+  (reutiliza `computeSafeToSpend()`, ya existente).
+- [x] **`FinancialAdviceWidget.tsx`** — en Inicio, justo debajo del Un
+  Mango Score. Si no hay ninguna alerta puntual, lo dice explícitamente
+  ("tus números están en un rango razonable") en vez de no mostrar
+  nada, para que quede claro que sí se revisó. Aclara que son consejos
+  basados en reglas simples, no asesoramiento financiero profesional.
+
+Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
+`npx eslint .` (misma línea base pre-existente, nada nuevo),
+`npx vitest run` (**44 archivos, 231 tests**, todos pasando).
