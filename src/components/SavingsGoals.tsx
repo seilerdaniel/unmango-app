@@ -17,6 +17,7 @@ import { useUser } from '@/context/UserContext'
 import { useToast } from '@/context/ToastContext'
 import { SavingsGoal } from '@/types'
 import { SUGGESTED_GOALS } from '@/lib/suggestedGoals'
+import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 import { PiggyBank, Plus, Trash2, Pencil, Sparkles } from 'lucide-react'
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Filler)
@@ -25,6 +26,8 @@ ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip,
 // meta (o tarda una eternidad), dejamos de simular en vez de colgar el
 // navegador.
 const MAX_MONTHS_SIMULATED = 600
+
+const OFFLINE_TOAST = 'Sin conexión: guardado en tu celular. Se sincroniza solo cuando vuelvas a tener internet.'
 
 /**
  * Simula mes a mes el crecimiento del ahorro (valor futuro de una
@@ -118,18 +121,30 @@ export default function SavingsGoals() {
     setSubmitting(true)
 
     if (user) {
-      const { error } = await supabase.from('savings_goals').insert([
-        {
-          user_id: user.id,
-          name: name.trim(),
-          target_amount: Number(targetAmount),
-          current_amount: Number(currentAmount) || 0,
-          monthly_contribution: Number(monthlyContribution) || 0,
-          // El usuario carga la tasa en % (ej. "1" = 1% mensual);
-          // guardamos el decimal.
-          monthly_interest_rate: (Number(monthlyInterestPercent) || 0) / 100,
-        },
-      ])
+      const payload = {
+        user_id: user.id,
+        name: name.trim(),
+        target_amount: Number(targetAmount),
+        current_amount: Number(currentAmount) || 0,
+        monthly_contribution: Number(monthlyContribution) || 0,
+        // El usuario carga la tasa en % (ej. "1" = 1% mensual);
+        // guardamos el decimal.
+        monthly_interest_rate: (Number(monthlyInterestPercent) || 0) / 100,
+      }
+
+      if (isOffline()) {
+        enqueueOfflineMutation('savings_goals', 'insert', payload)
+        toast.info(OFFLINE_TOAST)
+        setName('')
+        setTargetAmount('')
+        setCurrentAmount('')
+        setMonthlyContribution('')
+        setMonthlyInterestPercent('')
+        setSubmitting(false)
+        return
+      }
+
+      const { error } = await supabase.from('savings_goals').insert([payload])
 
       if (!error) {
         setName('')
@@ -138,6 +153,14 @@ export default function SavingsGoals() {
         setMonthlyContribution('')
         setMonthlyInterestPercent('')
         await loadGoals()
+      } else if (isOffline()) {
+        enqueueOfflineMutation('savings_goals', 'insert', payload)
+        toast.info(OFFLINE_TOAST)
+        setName('')
+        setTargetAmount('')
+        setCurrentAmount('')
+        setMonthlyContribution('')
+        setMonthlyInterestPercent('')
       } else {
         toast.error('Error al crear la meta: ' + error.message)
         console.error('Error creando meta de ahorro:', error)
@@ -158,6 +181,13 @@ export default function SavingsGoals() {
       return
     }
 
+    if (isOffline()) {
+      enqueueOfflineMutation('savings_goals', 'update', { id: goal.id, current_amount: newAmount })
+      setGoals((prev) => prev.map((g) => (g.id === goal.id ? { ...g, current_amount: newAmount } : g)))
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase
       .from('savings_goals')
       .update({ current_amount: newAmount })
@@ -165,6 +195,10 @@ export default function SavingsGoals() {
 
     if (!error) {
       await loadGoals()
+    } else if (isOffline()) {
+      enqueueOfflineMutation('savings_goals', 'update', { id: goal.id, current_amount: newAmount })
+      setGoals((prev) => prev.map((g) => (g.id === goal.id ? { ...g, current_amount: newAmount } : g)))
+      toast.info(OFFLINE_TOAST)
     } else {
       toast.error('Error al actualizar la meta: ' + error.message)
       console.error('Error actualizando meta de ahorro:', error)
@@ -179,9 +213,21 @@ export default function SavingsGoals() {
       variant: 'danger',
     })
     if (!ok) return
+
+    if (isOffline()) {
+      enqueueOfflineMutation('savings_goals', 'delete', { id })
+      setGoals((prev) => prev.filter((g) => g.id !== id))
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase.from('savings_goals').delete().eq('id', id)
     if (!error) {
       setGoals((prev) => prev.filter((g) => g.id !== id))
+    } else if (isOffline()) {
+      enqueueOfflineMutation('savings_goals', 'delete', { id })
+      setGoals((prev) => prev.filter((g) => g.id !== id))
+      toast.info(OFFLINE_TOAST)
     } else {
       toast.error('Error al eliminar la meta: ' + error.message)
       console.error('Error eliminando meta de ahorro:', error)

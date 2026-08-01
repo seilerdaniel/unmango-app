@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RecurringManager from '../RecurringManager'
@@ -7,6 +7,7 @@ import { PrivacyProvider } from '@/context/PrivacyContext'
 import { WalletsProvider } from '@/context/WalletsContext'
 import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
+import { loadPendingQueue } from '@/lib/offlineQueue'
 
 // El mock tiene que existir antes de que se evalúe vi.mock (que Vitest
 // "hoistea" al principio del archivo), por eso se crea con vi.hoisted en
@@ -265,5 +266,68 @@ describe('RecurringManager — editar suscripción existente', () => {
 
     expect(screen.queryByText(/Editando/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^agregar$/i })).toBeInTheDocument()
+  })
+})
+
+describe('RecurringManager — modo offline (Tanda 3)', () => {
+  afterEach(() => {
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    localStorage.clear()
+  })
+
+  it('crear una suscripción sin conexión la guarda en la cola y muestra el toast, sin llamar a insert', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: { data: [], error: null },
+        },
+      })
+    )
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+    renderWithProviders(<RecurringManager />)
+
+    await userEvent.type(await screen.findByPlaceholderText('Nombre'), 'Netflix')
+    await userEvent.type(screen.getByPlaceholderText('Monto'), '5000')
+    await userEvent.type(screen.getByPlaceholderText('Día'), '10')
+    await userEvent.click(screen.getByRole('button', { name: /^agregar$/i }))
+
+    expect(await screen.findByText(/Sin conexión: guardado en tu celular/i)).toBeInTheDocument()
+
+    const queue = loadPendingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0]).toMatchObject({ entity: 'recurring_expenses', operation: 'insert' })
+    expect(queue[0].payload).toMatchObject({ title: 'Netflix', amount: 5000 })
+  })
+
+  it('eliminar una suscripción sin conexión encola un delete y la saca de la lista', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          categories: { data: [], error: null },
+          recurring_expenses: { data: [RECURRING_ITEM_ARS], error: null },
+        },
+      })
+    )
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+    renderWithProviders(<RecurringManager />)
+    await screen.findByText('Netflix')
+
+    await userEvent.click(screen.getByTitle('Eliminar'))
+
+    expect(await screen.findByText(/Sin conexión: guardado en tu celular/i)).toBeInTheDocument()
+
+    const queue = loadPendingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0]).toMatchObject({
+      entity: 'recurring_expenses',
+      operation: 'delete',
+      payload: { id: 'rec-1' },
+    })
+    expect(screen.queryByText('Netflix')).not.toBeInTheDocument()
   })
 })

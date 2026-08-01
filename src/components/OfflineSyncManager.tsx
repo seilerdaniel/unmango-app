@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
-import type { Database } from '@/types/database'
 import { loadPendingQueue, dequeueSynced, countPending } from '@/lib/offlineQueue'
+import { applyPendingOperation } from '@/lib/offlineSync'
 import { WifiOff, RefreshCw, CloudOff } from 'lucide-react'
 
 interface OfflineSyncManagerProps {
@@ -35,12 +35,11 @@ export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps
 
     const syncedIds: string[] = []
     for (const item of queue) {
-      const insertRow = { ...item.payload, user_id: user.id } as Database['public']['Tables']['transactions']['Insert']
-      const { error } = await supabase.from('transactions').insert([insertRow])
+      const { error } = await applyPendingOperation(supabase, item, user.id)
       if (!error) {
         syncedIds.push(item.idLocal)
       } else {
-        console.error('Error sincronizando movimiento pendiente:', error)
+        console.error('Error sincronizando operación pendiente:', error)
         // Si falla por otro motivo que no sea conexión (ej. un dato
         // inválido), lo dejamos en la cola para no perderlo — mejor
         // que quede pendiente a que desaparezca sin haberse guardado.
@@ -99,11 +98,11 @@ export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps
         </>
       ) : syncing ? (
         <>
-          <RefreshCw size={14} className="animate-spin" /> Sincronizando {pendingCount || ''} movimiento(s)...
+          <RefreshCw size={14} className="animate-spin" /> Sincronizando {pendingCount || ''} cambio(s)...
         </>
       ) : (
         <>
-          <CloudOff size={14} /> {pendingCount} movimiento(s) sin sincronizar
+          <CloudOff size={14} /> {pendingCount} cambio(s) sin sincronizar
         </>
       )}
     </div>

@@ -2175,3 +2175,78 @@ el usuario esperaba pero no existían.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**60 archivos, 388 tests**,
 todos pasando — 356 previos + 32 nuevos), `npm run build` (OK).
+
+## Modo Offline extendido a Suscripciones, Cuotas, Deudas y Metas (Tanda 3)
+
+**Contexto**: la app ya tenía modo offline solo para la Carga Manual de
+movimientos (cola en `localStorage`, banner de "sin conexión" y
+sincronización automática al volver el internet). Los formularios de los
+otros 4 módulos (pagos recurrentes, compras en cuotas, deudas, metas de
+ahorro) no detectaban la falta de conexión: fallaban con un toast de
+error. Esta tanda generaliza la cola para que **cualquier** alta /
+modificación / eliminación de esos módulos se guarde localmente y se
+sincronice sola.
+
+**Hallazgos de la inspección**:
+- **No hay IndexedDB**: el flujo offline usa `localStorage` (key
+  `unmango_pending_sync`) por decisión consciente de las tandas previas —
+  es una cola chica de operaciones de un usuario, no un dataset grande.
+  La lógica pura vive en `offlineQueueLogic.ts` (testeada) y el wrapper
+  de I/O en `offlineQueue.ts`.
+- La cola solo soportaba **insert de transacciones**: cada item era
+  `{ idLocal, createdAt, payload }` y el sync manager hacía un
+  `insert` hardcodeado a `transactions`.
+- Los 4 módulos usan exactamente las tablas `recurring_expenses`,
+  `installment_purchases`, `debts` y `savings_goals` (todas con RLS
+  `auth.uid()`), con operaciones insert/update/delete.
+
+**Cambios**:
+- [x] **`offlineQueueLogic.ts`**: el item de la cola ahora es
+  `PendingOperation { idLocal, createdAt, entity, operation, payload }`,
+  con `OfflineEntity` (`transactions | recurring_expenses |
+  installment_purchases | debts | savings_goals`) y `OfflineOperation`
+  (`insert | update | delete`). `addToQueue` sigue aceptando la firma
+  vieja (defaults a transactions/insert) para no romper los call sites.
+  `normalizePendingOperation` migra items guardados en una sesión offline
+  anterior (sin entity/operation) a `transactions/insert`.
+- [x] **`offlineQueue.ts`**: `enqueueOfflineMutation(entity, operation,
+  payload)` genérico; `enqueueOfflineTransaction` queda como alias de
+  `transactions/insert` (sin tocar `TransactionForm`); nuevo `isOffline()`.
+  `loadPendingQueue` normaliza items viejos al leerlos.
+- [x] **`offlineSync.ts`** (nuevo, testeable): `applyPendingOperation` —
+  insert (agrega `user_id`, la base asigna el id), update (`payload.id`
+  con `.eq('id', id)`), delete (`.delete().eq('id', id)`). Guarda de
+  seguridad: update/delete sin `id` se rechazan **sin tocar la base** y
+  quedan en la cola (un `.delete()` sin id podría borrar todo).
+- [x] **`OfflineSyncManager.tsx`**: `flushQueue` ahora despacha cada
+  operación con `applyPendingOperation`. No cambió el disparo: al arrancar
+  online con cola pendiente y en el listener de `online`. El banner pasa
+  de "movimiento(s)" a "cambio(s)" porque ya no son solo transacciones.
+- [x] **Formularios offline** (mismo patrón que `TransactionForm`: si
+  `isOffline()` se encola y se muestra toast; si el insert/update/delete
+  online falla y quedamos sin conexión a mitad de pedido, también se
+  encola):
+  - `RecurringManager`: alta, edición, toggle activo/inactivo y
+    eliminación → `recurring_expenses`.
+  - `InstallmentTracker`: alta y eliminación → `installment_purchases`.
+  - `DebtsManager`: alta y eliminación → `debts`.
+  - `SavingsGoals`: alta, actualizar monto ahorrado y eliminación →
+    `savings_goals`.
+- [x] **Tests** (25 nuevos, 413 totales): `offlineQueueLogic.test.ts`
+  ampliado (entity/operation + migración, 11 tests), `offlineQueue.test.ts`
+  nuevo (persistencia localStorage + `isOffline`, 9 tests),
+  `offlineSync.test.ts` nuevo (dispatch insert/update/delete, guardas sin
+  id, error propagado, 8 tests) y tests de componente offline para
+  RecurringManager (insert + delete, 2) y SavingsGoals (insert, 1) que
+  verifican toast + encolado real en localStorage sin llamar a Supabase.
+- [ ] **Fuera de scope (consciente)**: los flujos de **pago** que escriben
+  en más de una tabla (Pagar una suscripción/cuota y Registrar
+  pago/cobro de una deuda) siguen online-only: registran transacción +
+  `installment_payments`/`debt_payments`, y el id de la transacción
+  todavía no existe offline — replicarlos bien requiere reescritura de
+  ids temporales en la cola (tanda futura). En offline esas acciones
+  muestran el toast de error normal.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 413 tests**,
+todos pasando — 388 previos + 25 nuevos), `npm run build` (OK).

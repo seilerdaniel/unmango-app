@@ -10,11 +10,14 @@ import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
 import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
 import { sortInstallmentPurchases, InstallmentSortField } from '@/lib/installmentsSort'
+import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 import { CreditCard, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 
 interface PurchaseWithPayments extends InstallmentPurchase {
   paidInstallmentNumbers: number[]
 }
+
+const OFFLINE_TOAST = 'Sin conexión: guardado en tu celular. Se sincroniza solo cuando vuelvas a tener internet.'
 
 export default function InstallmentTracker({ onTransactionAdded }: { onTransactionAdded?: () => void }) {
   const { user } = useUser()
@@ -88,17 +91,30 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     setSubmitting(true)
 
     if (user) {
-      const { error } = await supabase.from('installment_purchases').insert([
-        {
-          user_id: user.id,
-          description: description.trim(),
-          total_amount: Number(totalAmount),
-          installments_count: Number(installmentsCount),
-          category_id: categoryId || null,
-          payment_method: paymentMethod || null,
-          notes: notes.trim() || null,
-        },
-      ])
+      const payload = {
+        user_id: user.id,
+        description: description.trim(),
+        total_amount: Number(totalAmount),
+        installments_count: Number(installmentsCount),
+        category_id: categoryId || null,
+        payment_method: paymentMethod || null,
+        notes: notes.trim() || null,
+      }
+
+      if (isOffline()) {
+        enqueueOfflineMutation('installment_purchases', 'insert', payload)
+        toast.info(OFFLINE_TOAST)
+        setDescription('')
+        setTotalAmount('')
+        setInstallmentsCount('')
+        setCategoryId('')
+        setPaymentMethod('')
+        setNotes('')
+        setSubmitting(false)
+        return
+      }
+
+      const { error } = await supabase.from('installment_purchases').insert([payload])
 
       if (!error) {
         setDescription('')
@@ -108,6 +124,15 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         setPaymentMethod('')
         setNotes('')
         await loadPurchases()
+      } else if (isOffline()) {
+        enqueueOfflineMutation('installment_purchases', 'insert', payload)
+        toast.info(OFFLINE_TOAST)
+        setDescription('')
+        setTotalAmount('')
+        setInstallmentsCount('')
+        setCategoryId('')
+        setPaymentMethod('')
+        setNotes('')
       } else {
         toast.error('Error al crear la compra en cuotas: ' + error.message)
         console.error('Error creando compra en cuotas:', error)
@@ -125,9 +150,20 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     })
     if (!ok) return
 
+    if (isOffline()) {
+      enqueueOfflineMutation('installment_purchases', 'delete', { id })
+      setPurchases((prev) => prev.filter((p) => p.id !== id))
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase.from('installment_purchases').delete().eq('id', id)
     if (!error) {
       setPurchases((prev) => prev.filter((p) => p.id !== id))
+    } else if (isOffline()) {
+      enqueueOfflineMutation('installment_purchases', 'delete', { id })
+      setPurchases((prev) => prev.filter((p) => p.id !== id))
+      toast.info(OFFLINE_TOAST)
     } else {
       toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando compra en cuotas:', error)

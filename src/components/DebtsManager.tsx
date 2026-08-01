@@ -10,6 +10,7 @@ import { applyTax } from '@/lib/applyTax'
 import { Debt } from '@/types'
 import SplitExpenseTool from '@/components/SplitExpenseTool'
 import { sortDebts, filterDebtsByType, DebtSortField } from '@/lib/debtsSort'
+import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 import { HandCoins, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 const emptyForm = {
@@ -26,6 +27,8 @@ const emptyForm = {
 interface DebtsManagerProps {
   onTransactionAdded?: () => void
 }
+
+const OFFLINE_TOAST = 'Sin conexión: guardado en tu celular. Se sincroniza solo cuando vuelvas a tener internet.'
 
 export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) {
   const { user } = useUser()
@@ -77,24 +80,36 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
       return
     }
 
-    const { error } = await supabase.from('debts').insert([
-      {
-        user_id: user.id,
-        description: form.description.trim(),
-        counterparty_name: form.counterpartyName.trim(),
-        debt_type: form.debtType,
-        currency: form.currency,
-        total_amount: Number(form.totalAmount),
-        remaining_amount: Number(form.totalAmount),
-        interest_rate: Number(form.interestRate) || 0,
-        due_date: form.dueDate || null,
-        notes: form.notes.trim() || null,
-      },
-    ])
+    const payload = {
+      user_id: user.id,
+      description: form.description.trim(),
+      counterparty_name: form.counterpartyName.trim(),
+      debt_type: form.debtType,
+      currency: form.currency,
+      total_amount: Number(form.totalAmount),
+      remaining_amount: Number(form.totalAmount),
+      interest_rate: Number(form.interestRate) || 0,
+      due_date: form.dueDate || null,
+      notes: form.notes.trim() || null,
+    }
+
+    if (isOffline()) {
+      enqueueOfflineMutation('debts', 'insert', payload)
+      toast.info(OFFLINE_TOAST)
+      setForm(emptyForm)
+      setSubmitting(false)
+      return
+    }
+
+    const { error } = await supabase.from('debts').insert([payload])
 
     if (!error) {
       setForm(emptyForm)
       await loadDebts()
+    } else if (isOffline()) {
+      enqueueOfflineMutation('debts', 'insert', payload)
+      toast.info(OFFLINE_TOAST)
+      setForm(emptyForm)
     } else {
       toast.error('Error al crear la deuda: ' + error.message)
       console.error('Error creando deuda:', error)
@@ -111,9 +126,20 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
     })
     if (!confirmed) return
 
+    if (isOffline()) {
+      enqueueOfflineMutation('debts', 'delete', { id })
+      setDebts((prev) => prev.filter((d) => d.id !== id))
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase.from('debts').delete().eq('id', id)
     if (!error) {
       setDebts((prev) => prev.filter((d) => d.id !== id))
+    } else if (isOffline()) {
+      enqueueOfflineMutation('debts', 'delete', { id })
+      setDebts((prev) => prev.filter((d) => d.id !== id))
+      toast.info(OFFLINE_TOAST)
     } else {
       toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando deuda:', error)

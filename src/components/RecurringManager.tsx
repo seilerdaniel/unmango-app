@@ -12,6 +12,7 @@ import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pen
 import { applyTax } from '@/lib/applyTax'
 import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
 import { sortRecurringExpenses, filterRecurringByKind, RecurringSortField } from '@/lib/recurringSort'
+import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 
 interface RecurringManagerProps {
   onTransactionAdded?: () => void
@@ -19,6 +20,9 @@ interface RecurringManagerProps {
 
 // Ventana dentro de la cual avisamos que algo está por vencer.
 const DUE_SOON_DAYS = 7
+
+// Toast que muestran todas las acciones offline de este módulo.
+const OFFLINE_TOAST = 'Sin conexión: guardado en tu celular. Se sincroniza solo cuando vuelvas a tener internet.'
 
 const PAYMENT_METHODS = ['Billetera Virtual', 'Efectivo', 'Transferencia', 'Tarjeta de Crédito', 'Tarjeta de Débito']
 
@@ -170,6 +174,21 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       tax_percentage: Number(form.taxPercentage) || 0,
     }
 
+    // Sin conexión: ni intentamos pegarle a Supabase — la operación va a
+    // la cola offline (update lleva el id real de la fila) y se aplica
+    // sola cuando vuelva internet.
+    if (isOffline()) {
+      enqueueOfflineMutation(
+        'recurring_expenses',
+        editingId ? 'update' : 'insert',
+        editingId ? { ...payload, id: editingId } : { ...payload, user_id: user.id, is_active: true }
+      )
+      toast.info(OFFLINE_TOAST)
+      resetForm()
+      setSubmitting(false)
+      return
+    }
+
     const { error } = editingId
       ? await supabase.from('recurring_expenses').update(payload).eq('id', editingId)
       : await supabase.from('recurring_expenses').insert([{ ...payload, user_id: user.id, is_active: true }])
@@ -177,6 +196,15 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     if (!error) {
       resetForm()
       await reloadData()
+    } else if (isOffline()) {
+      // Se cortó la conexión justo en el medio del pedido.
+      enqueueOfflineMutation(
+        'recurring_expenses',
+        editingId ? 'update' : 'insert',
+        editingId ? { ...payload, id: editingId } : { ...payload, user_id: user.id, is_active: true }
+      )
+      toast.info(OFFLINE_TOAST)
+      resetForm()
     } else {
       toast.error(`Error al ${editingId ? 'editar' : 'agregar'}: ` + error.message)
       console.error(`Error ${editingId ? 'editando' : 'agregando'}:`, error)
@@ -189,8 +217,19 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     const newStatus = !item.is_active
     setItems((prev) => prev.map((r) => (r.id === item.id ? { ...r, is_active: newStatus } : r)))
 
+    if (isOffline()) {
+      enqueueOfflineMutation('recurring_expenses', 'update', { id: item.id, is_active: newStatus })
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase.from('recurring_expenses').update({ is_active: newStatus }).eq('id', item.id)
     if (error) {
+      if (isOffline()) {
+        enqueueOfflineMutation('recurring_expenses', 'update', { id: item.id, is_active: newStatus })
+        toast.info(OFFLINE_TOAST)
+        return
+      }
       toast.error('Error al actualizar: ' + error.message)
       console.error('Error actualizando estado:', error)
       await reloadData()
@@ -198,10 +237,23 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   }
 
   const handleDelete = async (id: string) => {
+    if (isOffline()) {
+      enqueueOfflineMutation('recurring_expenses', 'delete', { id })
+      setItems((prev) => prev.filter((r) => r.id !== id))
+      if (editingId === id) resetForm()
+      toast.info(OFFLINE_TOAST)
+      return
+    }
+
     const { error } = await supabase.from('recurring_expenses').delete().eq('id', id)
     if (!error) {
       setItems((prev) => prev.filter((r) => r.id !== id))
       if (editingId === id) resetForm()
+    } else if (isOffline()) {
+      enqueueOfflineMutation('recurring_expenses', 'delete', { id })
+      setItems((prev) => prev.filter((r) => r.id !== id))
+      if (editingId === id) resetForm()
+      toast.info(OFFLINE_TOAST)
     } else {
       toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando:', error)
