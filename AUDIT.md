@@ -2101,3 +2101,77 @@ externa — la API es pequeña, no justifica una dependencia nueva.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**59 archivos, 356 tests**,
 todos pasando — 340 previos + 16 nuevos), `npm run build` (OK).
+
+## Bot de Telegram — Troubleshooting, comandos y script helper (Tanda 2)
+
+**Contexto**: el bot corre como Edge Function de Supabase
+(`supabase/functions/telegram-webhook/index.ts`, `verify_jwt = false`). Recibe
+los updates de Telegram vía webhook, vincula la cuenta con un código de 6
+dígitos y registra gastos en texto libre. Se revisó el módulo completo
+(endpoint, parser, secrets, tests) y se le agregaron comandos de consulta que
+el usuario esperaba pero no existían.
+
+**Hallazgos de la inspección**:
+- **Ubicación**: no hay endpoint en `src/app/api` — el webhook es una Edge
+  Function de Supabase. Parser testable en `message-parser.ts`, secrets
+  documentados en `.env.example` y en el README de la función.
+- **Secrets necesarios**: `TELEGRAM_BOT_TOKEN` y `TELEGRAM_WEBHOOK_SECRET`
+  (se setean con `supabase secrets set`). El webhook se autentica con el
+  header `X-Telegram-Bot-Api-Secret-Token` (válido solo si setWebhook se
+  configuró con el mismo `secret_token`).
+- **Bug latente #1**: `sendTelegramMessage` no validaba la respuesta de
+  Telegram (`res.ok`) → con un token inválido o un webhook mal configurado el
+  bot respondía "Listo ✅" al usuario igual, aunque el mensaje nunca se
+  entregara.
+- **Bug latente #2**: no existían los comandos `/saldo`, `/gastado`,
+  `/safetospend`, `/ayuda`, y `/start` sin código caía en "No entendí".
+- **Incompatibilidad con la arquitectura**: las RPCs de balance/trend del
+  frontend (`get_wallet_balances`, `get_monthly_trend`, `get_transaction_totals`)
+  son `security invoker` y filtran por `auth.uid()` — inutilizables desde el
+  bot, que corre con la service role key (no hay sesión de usuario). El bot
+  ahora consulta las tablas directo por `user_id`.
+
+**Cambios**:
+- [x] **`scripts/telegram-webhook.mjs`** (nuevo): script helper sin
+  dependencias que usa la Bot API de Telegram para `getWebhookInfo` (`info`),
+  `setWebhook` (`set`, con `secret_token` opcional — si no se pasa, genera uno
+  nuevo con `crypto.randomBytes` y sugiere setearlo en Supabase con el mismo
+  valor) y `deleteWebhook` (`unset`). Lee el token de la env var
+  `TELEGRAM_BOT_TOKEN`. Documentado en el README de la función (Opción A).
+- [x] **`message-parser.ts`**: agrega `kind: 'command'` (saldo/gastado/
+  safetospend/ayuda/start, con `/help` como alias de `/ayuda`) y
+  `kind: 'unknown_command'` (un `/foo` desconocido ahora muestra ayuda en vez
+  de "No entendí"). `/start <6dígitos>` sigue resolviendo como código de vínculo.
+- [x] **`reply-builder.ts`** (nuevo): lógica pura y testable de respuestas —
+  `formatArs` (miles con punto, decimales con coma, prefijo `$`),
+  `monthlyEquivalentAmount`, `getDaysRemainingInMonth`, `computeSafeToSpend`
+  (misma fórmula que `src/lib/safeToSpend.ts`, replicada porque el bot corre
+  en Deno) y los textos de todas las respuestas (éxito/error/vínculo/ayuda).
+- [x] **`index.ts`**: maneja los 4 comandos (consultan Supabase por `user_id`,
+  no por `auth.uid()`); `sendTelegramMessage` ahora valida `res.ok` y loguea
+  el error; los mensajes de error del bot son consistentes y no filtran
+  detalles internos. `/safetospend` suma los compromisos igual que
+  `SafeToSpendWidget` (fijos ARS prorrateados + presupuestos + metas + cuotas).
+- [x] **Tests** (32 nuevos, 40 totales en el módulo): `message-parser.test.ts`
+  extendido con comandos/unknown_command (15 tests) y `reply-builder.test.ts`
+  nuevo (25 tests: formato ARS, prorrateo anual, días restantes, safe-to-spend
+  verde/ajustado/sobregastado/sin división por cero, y todos los textos).
+- [x] **README de la función**: documenta los comandos nuevos, el script
+  helper (Opción A con PowerShell) y conserva el flujo curl (Opción B).
+- [ ] **Acción tuya para dejarlo en producción**: si todavía no configuraste
+  el bot, seguí el README de la función — creá el bot con BotFather, seteá
+  los dos secrets con `supabase secrets set`, desplegá con
+  `supabase functions deploy telegram-webhook --no-verify-jwt`, y corré
+  `node scripts/telegram-webhook.mjs info` (estado) y
+  `node scripts/telegram-webhook.mjs set --url https://<PROJECT_REF>.supabase.co/functions/v1/telegram-webhook`
+  para configurar el webhook. El script también muestra el último error
+  reportado por Telegram (`last_error_message`), que es la forma más rápida
+  de diagnosticar por qué el bot no responde.
+- [ ] **Fuera de scope (consciente)**: mensajes de voz a Telegram (Telegram
+  manda `voice` como update de tipo `message.voice`, el parser solo mira
+  `text`). Registrarlos requeriría transcribir audio; queda para una tanda
+  futura.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**60 archivos, 388 tests**,
+todos pasando — 356 previos + 32 nuevos), `npm run build` (OK).

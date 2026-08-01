@@ -10,12 +10,25 @@
 // archivo del frontend. Si cambiás la lógica de parseo en un lado,
 // replicá el cambio en el otro.
 
+export type TelegramCommand = 'saldo' | 'gastado' | 'safetospend' | 'ayuda' | 'start'
+
 export type ParsedTelegramMessage =
   | { kind: 'link_code'; code: string }
   | { kind: 'expense'; amount: number; description: string }
+  | { kind: 'command'; command: TelegramCommand }
+  | { kind: 'unknown_command'; command: string }
   | { kind: 'unrecognized' }
 
 const LINK_CODE_PATTERN = /^\/start\s+(\d{6})$|^(\d{6})$/
+
+const KNOWN_COMMANDS: Record<string, TelegramCommand> = {
+  saldo: 'saldo',
+  gastado: 'gastado',
+  safetospend: 'safetospend',
+  ayuda: 'ayuda',
+  help: 'ayuda',
+  start: 'start',
+}
 
 function extractAmount(text: string): number | null {
   const match = text.match(/(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/)
@@ -51,12 +64,29 @@ function extractDescription(text: string, amount: number | null): string {
 }
 
 /**
- * Interpreta un mensaje entrante del bot: puede ser un código de
- * vinculación (6 dígitos, con o sin "/start" adelante) o un gasto en
- * texto libre tipo "Gasto 4500 café".
+ * Interpreta un mensaje entrante del bot: puede ser un comando
+ * (/saldo, /gastado, /safetospend, /ayuda), un código de vinculación
+ * (6 dígitos, con o sin "/start" adelante) o un gasto en texto libre
+ * tipo "Gasto 4500 café".
  */
 export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   const trimmed = text.trim()
+
+  if (trimmed.startsWith('/')) {
+    const linkMatch = trimmed.match(/^\/start\s+(\d{6})$/)
+    if (linkMatch) {
+      return { kind: 'link_code', code: linkMatch[1] }
+    }
+
+    const commandMatch = trimmed.match(/^\/([a-z_]+)/i)
+    if (commandMatch) {
+      const known = KNOWN_COMMANDS[commandMatch[1].toLowerCase()]
+      if (known) {
+        return { kind: 'command', command: known }
+      }
+      return { kind: 'unknown_command', command: commandMatch[1].toLowerCase() }
+    }
+  }
 
   const linkMatch = trimmed.match(LINK_CODE_PATTERN)
   if (linkMatch) {

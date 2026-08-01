@@ -1,17 +1,17 @@
 // Edge Function: telegram-webhook
 //
 // Qué hace: recibe los mensajes que le llegan al bot de Telegram
-// (webhook configurado con setWebhook, ver README.md). Dos casos:
+// (webhook configurado con setWebhook, ver README.md). Casos:
 //
-// 1. El mensaje es un código de vinculación de 6 dígitos (con o sin
-//    "/start" adelante) -> busca ese código en telegram_links y
-//    completa el telegram_chat_id, dejando esa cuenta de Telegram
-//    vinculada a un usuario de UnMango.
-// 2. Cualquier otro mensaje con un monto reconocible (ej. "Gasto 4500
-//    café") -> si el chat_id ya está vinculado, inserta una
-//    transacción de gasto para ese usuario.
+// 1. Comandos (/saldo, /gastado, /safetospend, /ayuda) — si el chat ya
+//    está vinculado, consulta los datos del usuario y responde.
+// 2. Código de vinculación de 6 dígitos (con o sin "/start" adelante) —
+//    busca ese código en telegram_links y completa el telegram_chat_id.
+// 3. Cualquier otro mensaje con un monto reconocible (ej. "Gasto 4500
+//    café") — si el chat_id ya está vinculado, inserta una transacción
+//    de gasto para ese usuario.
 //
-// En ambos casos, responde al usuario por Telegram confirmando qué se
+// En todos los casos responde al usuario por Telegram confirmando qué se
 // hizo (o el error), para que no quede la duda de si funcionó.
 //
 // Variables de entorno necesarias (ver README.md para el paso a paso):
@@ -27,6 +27,23 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { parseTelegramMessage } from './message-parser.ts'
+import {
+  buildExpenseConfirmedReply,
+  buildExpenseErrorReply,
+  buildGastadoReply,
+  buildHelpReply,
+  buildLinkErrorReply,
+  buildLinkInvalidReply,
+  buildLinkSuccessReply,
+  buildNotLinkedReply,
+  buildSafeToSpendReply,
+  buildSaldoReply,
+  buildUnknownCommandReply,
+  buildUnrecognizedReply,
+  computeSafeToSpend,
+  getDaysRemainingInMonth,
+  monthlyEquivalentAmount,
+} from './reply-builder.ts'
 
 interface TelegramUpdate {
   message?: {
@@ -35,12 +52,124 @@ interface TelegramUpdate {
   }
 }
 
-async function sendTelegramMessage(botToken: string, chatId: number, text: string) {
-  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  })
+async function sendTelegramMessage(botToken: string, chatId: number, text: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`Telegram respondió ${res.status} al enviar el mensaje: ${body}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Error de red al enviar mensaje a Telegram:', err)
+    return false
+  }
+}
+
+interface FinancialSummary {
+  totalBalance: number
+  monthlyExpense: number
+  monthlyIncome: number
+  walletCount: number
+}
+
+// El bot usa la service role key (no hay sesión de usuario en un
+// webhook), así que consulta las tablas directo por user_id en vez de
+// las RPCs del frontend (que filtran por auth.uid()).
+async function fetchFinancialSummary(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<FinancialSummary> {
+  const today = new Date()
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).getTime()
+
+  const [walletsResult, transactionsResult] = await Promise.all([
+    supabase.from('wallets').select('initial_balance').eq('user_id', userId),
+    supabase
+      .from('transactions')
+      .select('amount_ars, type, created_at')
+      .eq('user_id', userId),
+  ])
+
+  if (walletsResult.error || transactionsResult.error) {
+    throw walletsResult.error || transactionsResult.error
+  }
+
+  const initial = (walletsResult.data ?? []).reduce((acc, w) => acc + (Number(w.initial_balance) || 0), 0)
+  const transactions = transactionsResult.data ?? []
+
+  let totalIncome = 0
+  let totalExpense = 0
+  let monthlyExpense = 0
+  let monthlyIncome = 0
+
+  for (const t of transactions) {
+    const amount = Number(t.amount_ars) || 0
+    if (t.type === 'income') {
+      totalIncome += amount
+      if (t.created_at && new Date(t.created_at).getTime() >= monthStart) monthlyIncome += amount
+    } else {
+      totalExpense += amount
+      if (t.created_at && new Date(t.created_at).getTime() >= monthStart) monthlyExpense += amount
+    }
+  }
+
+  return {
+    totalBalance: initial + totalIncome - totalExpense,
+    monthlyExpense,
+    monthlyIncome,
+    walletCount: walletsResult.data?.length ?? 0,
+  }
+}
+
+interface SafeToSpendData {
+  monthlyFixedCommitments: number
+  budgetedAllocations: number
+  savingsContributions: number
+  installmentCommitments: number
+}
+
+async function fetchSafeToSpendData(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<SafeToSpendData> {
+  const [recurring, budgets, goals, installments] = await Promise.all([
+    supabase
+      .from('recurring_expenses')
+      .select('amount, currency, billing_frequency')
+      .eq('user_id', userId)
+      .eq('is_active', true),
+    supabase.from('budgets').select('monthly_limit').eq('user_id', userId),
+    supabase.from('savings_goals').select('monthly_contribution').eq('user_id', userId),
+    supabase
+      .from('installment_purchases')
+      .select('total_amount, installments_count')
+      .eq('user_id', userId),
+  ])
+
+  for (const r of [recurring, budgets, goals, installments]) {
+    if (r.error) throw r.error
+  }
+
+  return {
+    // Mismo criterio que "Fijo Comprometido": solo ARS, prorrateando las
+    // anuales a su equivalente mensual.
+    monthlyFixedCommitments: (recurring.data ?? []).reduce(
+      (acc, r) => acc + (r.currency === 'ARS' ? monthlyEquivalentAmount(Number(r.amount), r.billing_frequency) : 0),
+      0
+    ),
+    budgetedAllocations: (budgets.data ?? []).reduce((acc, b) => acc + (Number(b.monthly_limit) || 0), 0),
+    savingsContributions: (goals.data ?? []).reduce((acc, g) => acc + (Number(g.monthly_contribution) || 0), 0),
+    installmentCommitments: (installments.data ?? []).reduce(
+      (acc, p) => acc + (p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0),
+      0
+    ),
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -85,6 +214,52 @@ Deno.serve(async (req: Request) => {
   }
 
   const parsed = parseTelegramMessage(text)
+  const reply = async (msg: string) => sendTelegramMessage(botToken, chatId, msg)
+
+  if (parsed.kind === 'command') {
+    if (parsed.command === 'ayuda' || parsed.command === 'start') {
+      await reply(buildHelpReply())
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    }
+
+    // Los comandos de consulta requieren que el chat esté vinculado.
+    const { data: link, error: findError } = await supabaseAdmin
+      .from('telegram_links')
+      .select('user_id')
+      .eq('telegram_chat_id', chatId)
+      .maybeSingle()
+
+    if (findError || !link) {
+      await reply(buildNotLinkedReply())
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    }
+
+    try {
+      if (parsed.command === 'saldo') {
+        const summary = await fetchFinancialSummary(supabaseAdmin, link.user_id)
+        await reply(buildSaldoReply(summary.totalBalance, summary.walletCount))
+      } else if (parsed.command === 'gastado') {
+        const summary = await fetchFinancialSummary(supabaseAdmin, link.user_id)
+        await reply(buildGastadoReply(summary.monthlyExpense, summary.monthlyIncome))
+      } else if (parsed.command === 'safetospend') {
+        const [summary, data] = await Promise.all([
+          fetchFinancialSummary(supabaseAdmin, link.user_id),
+          fetchSafeToSpendData(supabaseAdmin, link.user_id),
+        ])
+        const result = computeSafeToSpend({
+          totalBalance: summary.totalBalance,
+          ...data,
+          monthlyIncome: summary.monthlyIncome,
+          daysRemaining: getDaysRemainingInMonth(new Date()),
+        })
+        await reply(buildSafeToSpendReply(result, summary.totalBalance))
+      }
+    } catch (err) {
+      console.error('Error consultando datos para el bot:', err)
+      await reply('Hubo un error consultando tus datos. Probá de nuevo en un rato.')
+    }
+    return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+  }
 
   if (parsed.kind === 'link_code') {
     const { data: linkRow, error: linkError } = await supabaseAdmin
@@ -94,7 +269,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (linkError || !linkRow) {
-      await sendTelegramMessage(botToken, chatId, 'Ese código no es válido. Generá uno nuevo desde la app (Configuración → Vincular Telegram).')
+      await reply(buildLinkInvalidReply())
       return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
     }
 
@@ -105,23 +280,20 @@ Deno.serve(async (req: Request) => {
 
     if (updateError) {
       console.error('Error vinculando chat_id:', updateError)
-      await sendTelegramMessage(botToken, chatId, 'Hubo un error vinculando tu cuenta. Probá de nuevo en un rato.')
+      await reply(buildLinkErrorReply())
     } else {
-      await sendTelegramMessage(
-        botToken,
-        chatId,
-        '¡Listo! Tu Telegram ya está vinculado a UnMango. A partir de ahora, mandame mensajes tipo "Gasto 4500 café" y los registro automáticamente.'
-      )
+      await reply(buildLinkSuccessReply())
     }
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
+  if (parsed.kind === 'unknown_command') {
+    await reply(buildUnknownCommandReply(parsed.command))
+    return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+  }
+
   if (parsed.kind === 'unrecognized') {
-    await sendTelegramMessage(
-      botToken,
-      chatId,
-      'No entendí ese mensaje. Mandame algo tipo "Gasto 4500 café", o el código de 6 dígitos que te dio la app si todavía no vinculaste tu cuenta.'
-    )
+    await reply(buildUnrecognizedReply())
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
@@ -133,11 +305,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle()
 
   if (findError || !link) {
-    await sendTelegramMessage(
-      botToken,
-      chatId,
-      'Todavía no vinculaste tu cuenta. Generá un código desde la app (Configuración → Vincular Telegram) y mandámelo acá primero.'
-    )
+    await reply(buildNotLinkedReply())
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
@@ -157,13 +325,9 @@ Deno.serve(async (req: Request) => {
 
   if (insertError) {
     console.error('Error insertando transacción desde Telegram:', insertError)
-    await sendTelegramMessage(botToken, chatId, 'Hubo un error registrando el gasto. Probá de nuevo.')
+    await reply(buildExpenseErrorReply())
   } else {
-    await sendTelegramMessage(
-      botToken,
-      chatId,
-      `Listo ✅ Registré un gasto de $${parsed.amount.toLocaleString('es-AR')} en "${parsed.description}".`
-    )
+    await reply(buildExpenseConfirmedReply(parsed.amount, parsed.description))
   }
 
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })

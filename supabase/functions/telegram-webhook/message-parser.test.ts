@@ -41,4 +41,34 @@ describe('parseTelegramMessage', () => {
   it('devuelve unrecognized para un monto de 0 o negativo', () => {
     expect(parseTelegramMessage('Gasto 0 nada').kind).toBe('unrecognized')
   })
+
+  it('reconoce el comando /saldo', () => {
+    expect(parseTelegramMessage('/saldo')).toEqual({ kind: 'command', command: 'saldo' })
+  })
+
+  it('reconoce el comando /gastado', () => {
+    expect(parseTelegramMessage('/gastado')).toEqual({ kind: 'command', command: 'gastado' })
+  })
+
+  it('reconoce el comando /safetospend', () => {
+    expect(parseTelegramMessage('/safetospend')).toEqual({ kind: 'command', command: 'safetospend' })
+  })
+
+  it('reconoce /ayuda y /help como ayuda', () => {
+    expect(parseTelegramMessage('/ayuda')).toEqual({ kind: 'command', command: 'ayuda' })
+    expect(parseTelegramMessage('/help')).toEqual({ kind: 'command', command: 'ayuda' })
+  })
+
+  it('reconoce /start sin código como comando (no como link)', () => {
+    expect(parseTelegramMessage('/start')).toEqual({ kind: 'command', command: 'start' })
+  })
+
+  it('trata un comando conocido con texto extra como comando', () => {
+    expect(parseTelegramMessage('/saldo 5000')).toEqual({ kind: 'command', command: 'saldo' })
+  })
+
+  it('devuelve unknown_command para un comando no conocido', () => {
+    expect(parseTelegramMessage('/hola')).toEqual({ kind: 'unknown_command', command: 'hola' })
+    expect(parseTelegramMessage('/hola 5000')).toEqual({ kind: 'unknown_command', command: 'hola' })
+  })
 })
