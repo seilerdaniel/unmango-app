@@ -8,8 +8,18 @@ import { useHousehold } from '@/context/HouseholdContext'
 import { useToast } from '@/context/ToastContext'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeHouseholdBalance } from '@/lib/householdBalance'
+import { computeHouseholdSettlement } from '@/lib/householdSettlement'
 import { HouseholdExpense } from '@/types'
 import { Home, Plus, Trash2, Scale } from 'lucide-react'
+
+function getPaidTotals(expenses: HouseholdExpense[], myUserId?: string) {
+  return {
+    totalPaidByMe: expenses.filter((e) => e.paid_by_user_id === myUserId).reduce((acc, e) => acc + Number(e.amount), 0),
+    totalPaidByPartner: expenses
+      .filter((e) => e.paid_by_user_id !== myUserId)
+      .reduce((acc, e) => acc + Number(e.amount), 0),
+  }
+}
 
 export default function HouseholdExpenses() {
   const { formatAmount } = usePrivacy()
@@ -73,10 +83,25 @@ export default function HouseholdExpenses() {
   }
 
   async function handleSettleUp() {
-    if (!householdId) return
+    if (!householdId || !expenses) return
+
+    // Antes de borrar todo, la liquidación muestra a quién y cuánto le
+    // corresponde transferir para quedar a mano (50/50). Así la
+    // confirmación no es un "borrar ciego" sino un paso con dato concreto.
+    const totalPaidByMe = getPaidTotals(expenses, user?.id).totalPaidByMe
+    const totalPaidByPartner = getPaidTotals(expenses, user?.id).totalPaidByPartner
+    const settlement = computeHouseholdSettlement(totalPaidByMe, totalPaidByPartner)
+
+    const direction =
+      settlement.amount === 0
+        ? 'Están a mano, no hace falta transferir nada.'
+        : settlement.iOwe
+          ? `Le transferís ${formatAmount(settlement.amount)} a ${partnerEmail || 'tu pareja'}.`
+          : `${partnerEmail || 'Tu pareja'} te transfiere ${formatAmount(settlement.amount)}.`
+
     const ok = await confirmDialog({
       title: 'Marcar como saldado',
-      message: '¿Marcar como saldado? Esto borra todos los gastos de hogar registrados y arranca de cero (hacelo después de arreglar cuentas en la vida real).',
+      message: `${direction} Esto borra todos los gastos de hogar registrados y arranca de cero (hacelo después de arreglar cuentas en la vida real).`,
       confirmText: 'Saldar',
       variant: 'danger',
     })
@@ -97,10 +122,7 @@ export default function HouseholdExpenses() {
   if (!householdId || !user || !expenses) return null
 
   const myUserId = user.id
-  const totalPaidByMe = expenses.filter((e) => e.paid_by_user_id === myUserId).reduce((acc, e) => acc + Number(e.amount), 0)
-  const totalPaidByPartner = expenses
-    .filter((e) => e.paid_by_user_id !== myUserId)
-    .reduce((acc, e) => acc + Number(e.amount), 0)
+  const { totalPaidByMe, totalPaidByPartner } = getPaidTotals(expenses, myUserId)
   const balance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
 
   return (

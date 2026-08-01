@@ -2556,3 +2556,62 @@ todos pasando — 493 previos + 11 nuevos), `npm run build` (OK).
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 516 tests**,
 todos pasando — 504 previos + 12 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 7 — Modo Hogar: liquidación de deudas con dirección y monto
+
+Auditoría del flujo de Finanzas Compartidas (creación/vinculación de
+hogar, gastos, balance y liquidación). Hallazgos que se corrigen acá:
+
+- **"Marcar como saldado" era un borrado ciego**: `handleSettleUp` en
+  `HouseholdExpenses.tsx` confirmaba con un mensaje genérico y borraba
+  todos los `household_expenses` sin decirle al usuario cuánto ni en qué
+  dirección correspondía transferir para quedar a mano. La decisión de
+  producto se mantiene (la app NO crea transacciones de ajuste: los
+  gastos de hogar son informativos y la cuenta se arregla afuera, así el
+  asiento no contamina las finanzas personales de nadie), pero ahora el
+  paso previo muestra el dato concreto.
+- **No existía un helper de liquidación**: `computeHouseholdBalance` solo
+  devuelve el neto; faltaba la contraparte "quién le paga a quién y
+  cuánto" que la UI necesitaba para ser clara.
+- **`HouseholdExpenses.tsx` no tenía suite propia** (ni tests de
+  balance con casos borde para el usuario que paga todo solo).
+
+### `src/lib/householdSettlement.ts` (nuevo)
+- `computeHouseholdSettlement(totalPaidByMe, totalPaidByPartner)` →
+  `{ amount, iOwe, iAmOwed, debtorDescription, creditorDescription }`.
+  `amount` es `|netBalanceForMe|`; `iOwe` / `iAmOwed` dan la dirección
+  (pagué menos de la mitad → le transfiero a la pareja; pagué más → me
+  transfiere ella). Función pura, sin estado.
+- Descripciones estables para los movimientos de deudor y acreedor
+  (`HOUSEHOLD_DEBTOR_DESCRIPTION`, `HOUSEHOLD_CREDITOR_DESCRIPTION`),
+  pensadas para que un futuro "crear transacción de ajuste" las reutilice
+  sin duplicar strings.
+
+### `src/components/HouseholdExpenses.tsx`
+- Se extrajo `getPaidTotals` (module-scope, pura) para no duplicar el
+  cálculo de cuánto pagó cada uno entre el render y la liquidación.
+- `handleSettleUp` ahora muestra en el diálogo de confirmación la
+  liquidación con dirección y monto:
+  - a mano → "Están a mano, no hace falta transferir nada.";
+  - debo → "Le transferís $X a <pareja>.";
+  - me deben → "<pareja> te transfiere $X."
+  El borrado en sí no cambió (sigue siendo `delete().eq('household_id')`).
+
+### Tests (21 nuevos, 537 totales)
+- `householdBalance.test.ts`: 10 tests (5 nuevos) — usuario solo (pareja
+  no aportó nada → me debe la mitad), el otro pagó todo (le debo la
+  mitad), montos impares (neto fraccionario), y totales por persona
+  conservados con balance 0.
+- `householdSettlement.test.ts` (nuevo): 9 tests — a mano, sin gastos,
+  dirección correcta para ambos sentidos, pagador único, consistencia
+  entre balance y liquidación, y descripciones estables.
+- `HouseholdExpenses.test.tsx` (nuevo): 7 tests de integración con
+  `supabaseMock` — render del balance, la lista filtra por hogar, insert
+  con `paid_by_user_id` = usuario actual, delete por id, el diálogo de
+  saldar muestra el monto exacto a transferir, la confirmación borra los
+  gastos del hogar, y el insert que falla muestra toast y conserva el
+  formulario.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**64 archivos, 537 tests**,
+todos pasando — 516 previos + 21 nuevos), `npm run build` (OK).
