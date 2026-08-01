@@ -103,6 +103,9 @@ export default function SavingsGoals() {
   }, [user])
 
   useEffect(() => {
+    // loadGoals es async; sus setState ocurren post-await, no sincrónicos
+    // en el effect (falso positivo de la regla).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadGoals()
   }, [loadGoals])
 

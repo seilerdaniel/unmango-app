@@ -13,14 +13,12 @@ const DEFAULT_THRESHOLD = 3000
 export default function AntExpenses() {
   const { isPrivate, formatAmount } = usePrivacy()
   const { user } = useUser()
-  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD)
+  const [threshold, setThreshold] = useState<number>(() => {
+    if (typeof window === 'undefined') return DEFAULT_THRESHOLD
+    return Number(localStorage.getItem(STORAGE_KEY)) || DEFAULT_THRESHOLD
+  })
   const [expenses, setExpenses] = useState<{ amount: number }[]>([])
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) setThreshold(Number(saved) || DEFAULT_THRESHOLD)
-  }, [])
 
   useEffect(() => {
     async function load() {

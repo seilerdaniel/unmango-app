@@ -48,6 +48,11 @@ export function useAsyncData<T>(
   }, [loader, errorMessage])
 
   useEffect(() => {
+    // El loader es async: los setState ocurren después del await (en un
+    // microtask), no sincrónicamente — no hay doble render. La regla
+    // react-hooks/set-state-in-effect no puede ver a través de la
+    // función externa y lo marca igual.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refetch()
   }, [refetch])
 

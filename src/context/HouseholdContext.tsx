@@ -27,13 +27,13 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: userLoading } = useUser()
   const [link, setLink] = useState<HouseholdLinkType | null>(null)
   const [partnerEmail, setPartnerEmail] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(true)
 
   const refresh = useCallback(async () => {
     if (!user) {
       setLink(null)
       setPartnerEmail(null)
-      setLoading(false)
+      setDataLoading(false)
       return
     }
 
@@ -58,14 +58,21 @@ export function HouseholdProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Error cargando el vínculo de hogar:', err)
     } finally {
-      setLoading(false)
+      setDataLoading(false)
     }
   }, [user])
 
   useEffect(() => {
-    setLoading(userLoading)
+    // refresh es async; sus setState ocurren post-await, no sincrónicos
+    // en el effect (falso positivo de la regla).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!userLoading) refresh()
   }, [userLoading, refresh])
+
+  // loading se deriva: true mientras la sesión se resuelve O mientras
+  // los datos se cargan (evita un render extra seteando estado en el
+  // effect cuando userLoading cambia).
+  const loading = userLoading || dataLoading
 
   const householdId = link?.status === 'active' ? link.id : null
 

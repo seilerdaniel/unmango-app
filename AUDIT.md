@@ -1945,3 +1945,51 @@ Verificado: `npx tsc --noEmit` (0 errores), `npx vitest run`
 la línea base pre-existente, nada nuevo; los warnings de
 `exhaustive-deps` que este refactor introdujo se corrigieron en la misma
 tanda).
+
+## ✅ Limpieza de deuda de ESLint — `react-hooks/set-state-in-effect` (línea base a 0)
+
+`eslint-plugin-react-hooks@7.0.0` introdujo la regla del React Compiler
+`react-hooks/set-state-in-effect`, que la app traía desde el upgrade de
+dependencias (Fase de mantenimiento): **18 errores** (17
+`set-state-in-effect` + 1 `no-explicit-any`) y **2 warnings** de imports
+sin usar. Se llevó la línea base a **0 errores / 0 warnings**:
+
+- [x] **Casos síncronos reales → lazy initializer / estado derivado**
+  (la regla acierta, y el fix correcto es no setear en el effect):
+  - `AntExpenses`: `threshold` ahora se lee de `localStorage` con
+    `useState(() => …)` en vez de un effect que lo seteaba tras montar.
+  - `VoiceExpenseInput`: `supported` (Web Speech API) se detecta con
+    lazy initializer; se eliminó el effect que lo recalculaba (y su
+    `setSupported` quedó sin uso).
+  - `OfflineSyncManager`: `isOnline` y `pendingCount` se inicializan con
+    lazy initializer; se eliminaron los `setState` redundantes del effect.
+  - `TransactionFilters`: el filtrado ya **se deriva con `useMemo`** en el
+    render en vez de guardarse en estado con un effect; la notificación
+    al padre (`onFiltered`) vive en un effect separado.
+  - `CategoriesContext` / `HouseholdContext`: `loading` ahora **se
+    deriva** como `userLoading || dataLoading` en el render (el effect
+    que hacía `setLoading(userLoading)` desapareció).
+- [x] **Falsos positivos de loaders async → `eslint-disable-next-line`
+  con justificación** (la regla no distingue el setState síncrono en el
+  body del effect del que ocurre *después del `await`*, en un microtask,
+  que no causa render en cascada). Se verificó empíricamente con un probe
+  antes de aplicar el criterio: `.then(setData)` y IIFE async con setState
+  post-await **no** se marcan; llamar a un loader externo (`load()` /
+  `loadData()` / `refetch()`) **sí**, aunque sea idéntico. Aplicado en
+  `useAsyncData` y los 10 componentes que cargan datos al montar
+  (`ArsUsdCalculator`, `BudgetRule502030`, `DebtsManager`,
+  `DollarRatesTable`, `ExchangeGapSimulator`, `GoogleCalendarLink`,
+  `InstallmentTracker`, `SavingsGoals`, `TelegramLink`,
+  `OfflineSyncManager`).
+  - `ThemeContext` es el único caso **síncrono** silenciado: el patrón
+    anti-flash/hidratación es intencional (localStorage es inaccesible
+    en el SSR; el script inline de `layout.tsx` ya pintó la clase y el
+    effect solo sincroniza el estado de React al montar).
+- [x] **`no-explicit-any` + warnings**: el `as any` de `TransactionFilters`
+  (filtro de tipo) se tipó como `'all' | 'income' | 'expense'`, y se
+  removieron los imports `Filter` (TransactionFilters) y `Tag`
+  (TransactionForm) que no se usaban.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**57 archivos, 328 tests**,
+todos pasando), `npm run build` (OK).

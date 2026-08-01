@@ -23,13 +23,13 @@ const CategoriesContext = createContext<CategoriesContextType | undefined>(undef
 export function CategoriesProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: userLoading } = useUser()
   const [categories, setCategories] = useState<Category[]>([])
-  const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refreshCategories = useCallback(async () => {
     if (!user) {
       setCategories([])
-      setLoading(false)
+      setDataLoading(false)
       return
     }
 
@@ -47,14 +47,21 @@ export function CategoriesProvider({ children }: { children: React.ReactNode }) 
       console.error('Error cargando categorías:', err)
       setError('No se pudieron cargar las categorías.')
     } finally {
-      setLoading(false)
+      setDataLoading(false)
     }
   }, [user])
 
   useEffect(() => {
-    setLoading(userLoading)
+    // refreshCategories es async; sus setState ocurren post-await, no
+    // sincrónicos en el effect (falso positivo de la regla).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!userLoading) refreshCategories()
-  }, [userLoading, refreshCategories, user])
+  }, [userLoading, refreshCategories])
+
+  // loading se deriva: true mientras la sesión se resuelve O mientras
+  // los datos se cargan (evita un render extra seteando estado en el
+  // effect cuando userLoading cambia).
+  const loading = userLoading || dataLoading
 
   return (
     <CategoriesContext.Provider value={{ categories, loading, error, refreshCategories }}>

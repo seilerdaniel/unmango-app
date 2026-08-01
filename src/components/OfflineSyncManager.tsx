@@ -19,8 +19,8 @@ interface OfflineSyncManagerProps {
  */
 export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps) {
   const { user } = useUser()
-  const [isOnline, setIsOnline] = useState(true)
-  const [pendingCount, setPendingCount] = useState(0)
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+  const [pendingCount, setPendingCount] = useState(() => (typeof window !== 'undefined' ? countPending() : 0))
   const [syncing, setSyncing] = useState(false)
 
   const flushQueue = useCallback(async () => {
@@ -57,11 +57,11 @@ export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps
   }, [user, onSynced])
 
   useEffect(() => {
-    setIsOnline(navigator.onLine)
-    setPendingCount(countPending())
-
     // Si la app arranca ya online y quedó algo pendiente de una sesión
-    // anterior sin conexión, lo sincroniza de una.
+    // anterior sin conexión, lo sincroniza de una. El setSyncing(true)
+    // que marca el comienzo es deliberado (UI de "sincronizando"); el
+    // resto del trabajo de flushQueue es async.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (navigator.onLine) flushQueue()
 
     function handleOnline() {

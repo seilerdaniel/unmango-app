@@ -35,9 +35,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [oledBlack, setOledBlack] = useState(false)
 
   useEffect(() => {
+    // Patrón anti-flash/hidratación intencional: el tema preferido vive en
+    // localStorage (inaccesible durante el SSR/render). El script inline
+    // de layout.tsx ya pintó la clase correcta en <html>; acá solo se
+    // sincroniza el estado de React en el cliente. El setState síncrono es
+    // deliberado (un solo efecto al montar), no un render en cascada.
     const saved = localStorage.getItem(STORAGE_KEY) as Theme | null
     const initial =
       saved ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(initial)
     document.documentElement.classList.toggle('dark', initial === 'dark')
 

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useCategories } from '@/context/CategoriesContext'
 import { Transaction } from '@/types'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Search, Filter, Download, FileText } from 'lucide-react'
+import { Search, Download, FileText } from 'lucide-react'
 
 interface TransactionFiltersProps {
   transactions: Transaction[]
@@ -17,12 +17,12 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const { categories } = useCategories()
-  // Guardamos el resultado del filtrado para que "Exportar CSV" exporte
-  // lo que el usuario está viendo, no siempre la lista completa.
-  const [visibleTransactions, setVisibleTransactions] = useState<Transaction[]>(transactions)
-
-  // Aplicar filtros localmente en tiempo real
-  useEffect(() => {
+  // El resultado del filtrado se deriva en el render (no se guarda en
+  // estado) — así la lista visible y la notificación al padre siempre
+  // están en sync con los filtros sin un render extra. Lo usa "Exportar
+  // CSV" para exportar lo que el usuario está viendo, no la lista
+  // completa.
+  const visibleTransactions = useMemo(() => {
     let result = [...transactions]
 
     if (typeFilter !== 'all') {
@@ -47,9 +47,14 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
       )
     }
 
-    setVisibleTransactions(result)
-    onFiltered(result)
-  }, [searchTerm, typeFilter, categoryFilter, transactions, onFiltered])
+    return result
+  }, [searchTerm, typeFilter, categoryFilter, transactions])
+
+  // La lista filtrada vive en el padre (page.tsx la muestra); avisarle
+  // cuando cambia es un efecto de notificación, no un setState local.
+  useEffect(() => {
+    onFiltered(visibleTransactions)
+  }, [visibleTransactions, onFiltered])
 
   // Función para exportar los datos filtrados a CSV
   function exportToCSV() {
@@ -146,7 +151,7 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
         {/* Filtrar por tipo */}
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as any)}
+          onChange={(e) => setTypeFilter(e.target.value as 'all' | 'income' | 'expense')}
           className={selectStyle}
         >
           <option value="all">Todos los Tipos</option>

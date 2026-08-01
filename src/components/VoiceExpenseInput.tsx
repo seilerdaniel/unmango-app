@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
@@ -62,7 +62,7 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
   const [isListening, setIsListening] = useState(false)
   const [interimText, setInterimText] = useState('')
   const [rawText, setRawText] = useState('')
-  const [supported, setSupported] = useState(true)
+  const [supported] = useState(() => getSpeechRecognition() !== null)
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -78,10 +78,6 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
   const [walletId, setWalletId] = useState('')
 
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null)
-
-  useEffect(() => {
-    setSupported(getSpeechRecognition() !== null)
-  }, [])
 
   function handleTranscript(text: string) {
     setRawText(text)

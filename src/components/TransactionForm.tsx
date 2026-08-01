@@ -8,7 +8,7 @@ import { useWallets } from '@/context/WalletsContext'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
 import { computeHoursOfWork } from '@/lib/hoursOfWork'
 import { enqueueOfflineTransaction } from '@/lib/offlineQueue'
-import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Tag, Clock } from 'lucide-react'
+import { PlusCircle, DollarSign, ArrowUpCircle, ArrowDownCircle, Clock } from 'lucide-react'
 
 interface TransactionFormProps {
   onTransactionAdded: () => void

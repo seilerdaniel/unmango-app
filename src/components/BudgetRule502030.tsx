@@ -53,6 +53,9 @@ export default function BudgetRule502030() {
   }
 
   useEffect(() => {
+    // loadData es async; sus setState ocurren post-await, no sincrónicos en
+    // el effect (falso positivo de react-hooks/set-state-in-effect).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData()
   }, [])
 
