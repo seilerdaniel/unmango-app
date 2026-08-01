@@ -1,0 +1,68 @@
+# =============================================================
+# UnMango — Supabase local & CLI config
+#
+# Documentación del esquema: https://supabase.com/docs/reference/cli/config
+#
+# SEGURIDAD: este archivo NO guarda secrets. Los secrets de las Edge
+# Functions se setean en el proyecto real con `supabase secrets set`
+# (ver .env.example y los README de cada función).
+# =============================================================
+
+project_id = "unmango-app"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+# La app usa http://localhost:3000 en desarrollo (login social y el
+# flujo de Google Calendar redirigen a window.location.origin).
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+enable_signup = true
+
+# Proveedores OAuth (login social + Google Calendar). En producción se
+# configuran en Supabase Dashboard → Authentication → Providers con tus
+# credenciales reales. Acá se habilitan SOLO para emular el flujo en
+# `supabase start`, leyendo las credenciales desde variables de entorno
+# (env()) — nunca se escriben credenciales en este archivo.
+#
+# Google está activo (mismo client_id/secret que el login social). Los
+# demás quedan comentados como plantilla; descomentalos si los querés
+# probar en local y cargá sus env vars.
+[auth.external.google]
+enabled = true
+client_id = "env(GOOGLE_CLIENT_ID)"
+client_secret = "env(GOOGLE_CLIENT_SECRET)"
+
+# [auth.external.azure]
+# enabled = true
+# client_id = "env(AZURE_CLIENT_ID)"
+# client_secret = "env(AZURE_CLIENT_SECRET)"
+# url = "env(AZURE_TENANT_URL)"
+
+# [auth.external.apple]
+# enabled = true
+# client_id = "env(APPLE_CLIENT_ID)"
+# client_secret = "env(APPLE_CLIENT_SECRET)"
+
+# Edge Functions
+#
+# telegram-webhook: la invoca Telegram (no trae JWT de Supabase) →
+# verify_jwt = false.
+[functions.telegram-webhook]
+verify_jwt = false
+
+# send-renewal-reminders: la invoca el cron vía pg_net (no trae JWT de
+# Supabase; se autentica con el header x-cron-secret) → verify_jwt = false.
+[functions.send-renewal-reminders]
+verify_jwt = false
+
+# sync-google-calendar: la invoca el usuario logueado desde la app →
+# exige JWT válido de Supabase.
+[functions.sync-google-calendar]
+verify_jwt = true

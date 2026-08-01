@@ -45,7 +45,7 @@ describe('WalletManager', () => {
     renderWithProviders()
 
     await screen.findByText('Mercado Pago')
-    expect(screen.getAllByText('$ 4.500,00').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('$ 4.500').length).toBeGreaterThan(0)
   })
 
   it('crea una billetera con los campos correctos', async () => {

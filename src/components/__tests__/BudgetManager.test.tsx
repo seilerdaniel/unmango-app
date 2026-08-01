@@ -55,7 +55,7 @@ describe('BudgetManager', () => {
     renderWithProviders()
 
     expect(await screen.findByText('Excedido')).toBeInTheDocument()
-    expect(screen.getByText(/Gastado:/)).toHaveTextContent('12.000,00')
+    expect(screen.getByText(/Gastado:/)).toHaveTextContent('12.000')
   })
 
   it('no marca "Excedido" cuando el gasto está por debajo del límite', async () => {

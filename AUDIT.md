@@ -1646,3 +1646,83 @@ causas:
 Verificado en este sandbox: `npx tsc --noEmit` (0 errores),
 `npx eslint .` (misma línea base pre-existente, nada nuevo),
 `npx vitest run` (**52 archivos, 291 tests**, todos pasando).
+
+## ✅ Mantenimiento de configuración y dependencias (tanda de infraestructura)
+
+Ronda de higiene del proyecto, sin features nuevas: puesta al día de
+dependencias, y tres archivos de configuración que faltaban.
+
+### Dependencias actualizadas (parche/minor, sin majors)
+
+Se actualizó todo lo que `npm outdated` marcaba como no-breaking:
+- `@supabase/supabase-js` 2.110.9 → **2.111.0**
+- `@supabase/ssr` 0.12.3 → **0.12.4** (sigue sin usarse — la decisión de
+  implementar `proxy.ts` para auth server-side queda abierta como antes)
+- `react` / `react-dom` 19.2.4 → **19.2.8** (estaban fijadas en versión
+  exacta, se actualizaron con `npm install react@19.2.8 react-dom@19.2.8`)
+- `lucide-react` 1.27.0 → **1.28.0**
+- `@vitejs/plugin-react` 6.0.4 → **6.0.5**
+- `jsdom` 30.0.0 → **30.0.1**
+- `@playwright/test` 1.62.0 → **1.62.1**
+- `@types/react` / `@types/react-dom` (patch)
+
+**Se dejaron para evaluación aparte** (majors con breaking changes):
+`eslint` 10, `typescript` 7 (rewrite en Go) y `@types/node` 26.
+
+**Nota**: `npm audit` reporta 4 vulnerabilidades high, pero las 4 son
+transitivas de `next` (postcss + sharp/libvips que next empaqueta).
+`next` 16.2.12 es el último de la rama 16 — no hay patch que las
+resuelva todavía; se siguen upstream.
+
+### Configuración que faltaba
+
+- [x] **`supabase/config.toml`** (nuevo) — no existía, y es requisito
+  para `supabase start` (desarrollo local) y la forma declarativa de
+  definir las Edge Functions. Incluye:
+  - `project_id`, `[api]` (puerto 54321, `max_rows`).
+  - `[auth]`: `site_url` + `additional_redirect_urls` para
+    `http://localhost:3000` (necesario para el login social y el flujo
+    de Google Calendar en local).
+  - `[auth.external.google]` activo vía `env(GOOGLE_CLIENT_ID/SECRET)`
+    (sin credenciales hardcodeadas); `azure`/`apple` quedaron
+    comentados como plantilla.
+  - `verify_jwt` por función, alineado con cómo se invoca cada una:
+    `telegram-webhook` y `send-renewal-reminders` en `false` (las
+    invoca Telegram/el cron, sin JWT), `sync-google-calendar` en
+    `true` (la invoca el usuario logueado).
+  - Los secrets NO van en este archivo — se setean con
+    `supabase secrets set` (referencia en `.env.example`).
+- [x] **`.env.example`** (nuevo) — plantilla de variables de entorno
+  (URL/anon key de Supabase, OAuth para local) + bloque de referencia de
+  los secrets de las 3 Edge Functions con los comandos exactos.
+  **Ojo**: el `.gitignore` tiene `*.env*`, que lo ignoraba; se agregó
+  la excepción `!.env.example` para que sí se commitee.
+- [x] **Hardening de `src/lib/supabaseClient.ts`** — antes, si faltaban
+  `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` la app
+  caía silenciosamente en `placeholder.supabase.co` (riesgo de "funciona
+  pero contra nada" en producción). Ahora lanza un error claro que indica
+  qué falta y qué hacer (copiar `.env.example` a `.env.local`).
+- [x] **`vitest.setup.ts`** — el hardening de arriba rompía 3 suites de
+  tests que importan `supabaseClient` de forma transitiva sin mockearlo
+  (`BackupRestore`, `ImportTransactions`, `SpeedDialFab`). Se setean
+  env vars dummy de Supabase en el setup (los tests que usan Supabase lo
+  mockean igual con `test-utils/supabaseMock`).
+
+### Tests desincronizados que se aprovechó para corregir
+
+Corriendo la suite completa aparecieron 2 tests que fallaban **desde
+antes** de esta tanda (se verificó con `git stash` + corrida aislada:
+fallaban igual con el código commiteado). La causa: `formatAmount` en
+`PrivacyContext` formatea ARS con `maximumFractionDigits: 0` (ej.
+`$ 4.500`, sin decimales), pero los tests esperaban `$ 4.500,00` y
+`12.000,00` — quedaron desincronizados en una tanda anterior.
+- `WalletManager.test.tsx`: `'$ 4.500,00'` → `'$ 4.500'`.
+- `BudgetManager.test.tsx`: `'12.000,00'` → `'12.000'`.
+
+(La intención del componente — pesos sin decimales — es la correcta para
+finanzas personales en ARS; se corrigió la aserción, no el código.)
+
+Verificado: `npx tsc --noEmit` (0 errores), `npm run build` (✅ sin
+errores), `npx eslint .` (misma línea base pre-existente de siempre,
+nada nuevo), `npx vitest run` (**53 archivos, 293 tests**, todos
+pasando — antes había 2 fallando).
