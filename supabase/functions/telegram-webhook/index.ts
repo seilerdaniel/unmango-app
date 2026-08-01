@@ -1015,21 +1015,65 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (parsed.kind === 'expense') {
+      // Billetera: la pista que dejó el parser ("en Mercado Pago") se
+      // matchea contra las billeteras reales del usuario; si no hay match
+      // (o no es una billetera), la transacción queda sin wallet_id.
+      let walletId: string | null = null
+      let walletName: string | null = null
+      if (parsed.wallet) {
+        const { data: wallet, error: walletError } = await supabaseAdmin
+          .from('wallets')
+          .select('id, name')
+          .eq('user_id', link.user_id)
+          .ilike('name', `%${parsed.wallet.replace(/[%_]/g, '')}%`)
+          .maybeSingle()
+        if (walletError) throw walletError
+        walletId = wallet?.id ?? null
+        walletName = wallet?.name ?? null
+      }
+
+      // Categoría: el hint "Transporte" (SUBE, transporte, bondi...) se
+      // resuelve contra la categoría del usuario que contenga "transporte";
+      // si no existe, queda sin categoría.
+      let categoryId: string | null = null
+      let categoryName: string | null = null
+      if (parsed.categoryHint === 'Transporte') {
+        const { data: category, error: categoryError } = await supabaseAdmin
+          .from('categories')
+          .select('id, name')
+          .eq('user_id', link.user_id)
+          .ilike('name', '%transporte%')
+          .maybeSingle()
+        if (categoryError) throw categoryError
+        categoryId = category?.id ?? null
+        categoryName = category?.name ?? null
+      }
+
       const { error: insertError } = await supabaseAdmin.from('transactions').insert([
         {
           user_id: link.user_id,
-          type: 'expense',
+          type: parsed.type,
           description: parsed.description,
           payment_method: 'Otro (Telegram)',
           is_usd: false,
           amount_usd: null,
           amount_ars: parsed.amount,
           exchange_rate: null,
-          category_id: null,
+          category_id: categoryId,
+          wallet_id: walletId,
         },
       ])
       if (insertError) throw insertError
-      await reply(buildExpenseConfirmedReply(parsed.amount, parsed.description))
+      await reply(
+        buildExpenseConfirmedReply(
+          parsed.amount,
+          parsed.description,
+          parsed.type,
+          walletName,
+          categoryName,
+          parsed.notes
+        )
+      )
     } else if (parsed.kind === 'debt') {
       const { error: insertError } = await supabaseAdmin.from('debts').insert([
         {
@@ -1042,11 +1086,11 @@ Deno.serve(async (req: Request) => {
           remaining_amount: parsed.amount,
           interest_rate: 0,
           due_date: null,
-          notes: null,
+          notes: parsed.notes,
         },
       ])
       if (insertError) throw insertError
-      await reply(buildDebtConfirmedReply(parsed.debtType, parsed.amount, parsed.counterpartyName))
+      await reply(buildDebtConfirmedReply(parsed.debtType, parsed.amount, parsed.counterpartyName, parsed.notes))
     } else if (parsed.kind === 'installment') {
       const { error: insertError } = await supabaseAdmin.from('installment_purchases').insert([
         {
@@ -1057,11 +1101,19 @@ Deno.serve(async (req: Request) => {
           first_installment_date: new Date().toISOString().slice(0, 10),
           category_id: null,
           payment_method: null,
-          notes: null,
+          notes: parsed.notes,
         },
       ])
       if (insertError) throw insertError
-      await reply(buildInstallmentConfirmedReply(parsed.description, parsed.totalAmount, parsed.installmentsCount))
+      await reply(
+        buildInstallmentConfirmedReply(
+          parsed.description,
+          parsed.totalAmount,
+          parsed.installmentsCount,
+          parsed.installmentAmount,
+          parsed.notes
+        )
+      )
     } else if (parsed.kind === 'recurring') {
       const { error: insertError } = await supabaseAdmin.from('recurring_expenses').insert([
         {

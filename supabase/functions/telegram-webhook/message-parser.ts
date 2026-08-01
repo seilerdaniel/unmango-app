@@ -26,14 +26,39 @@ export type TelegramCommand =
   | 'billeteras'
   | 'vencimientos'
 
+export interface ParsedDebt {
+  kind: 'debt'
+  debtType: 'debo' | 'me_deben'
+  amount: number
+  counterpartyName: string
+  notes: string | null
+}
+
+export interface ParsedInstallment {
+  kind: 'installment'
+  description: string
+  totalAmount: number
+  installmentsCount: number
+  installmentAmount: number
+  notes: string | null
+}
+
 export type ParsedTelegramMessage =
   | { kind: 'link_code'; code: string }
-  | { kind: 'expense'; amount: number; description: string }
-  | { kind: 'debt'; debtType: 'debo' | 'me_deben'; amount: number; counterpartyName: string }
+  | {
+      kind: 'expense'
+      amount: number
+      description: string
+      type: 'income' | 'expense'
+      wallet: string | null
+      categoryHint: string | null
+      notes: string | null
+    }
+  | ParsedDebt
   | { kind: 'debt_payment'; amount: number; personName: string; paymentType: 'pay' | 'collect' }
   | { kind: 'recurring_payment'; amount: number; serviceName: string }
   | { kind: 'installment_payment'; amount: number | null; purchaseName: string; installmentNumber: number | null }
-  | { kind: 'installment'; description: string; totalAmount: number; installmentsCount: number }
+  | ParsedInstallment
   | { kind: 'recurring'; description: string; amount: number; expenseKind: 'subscription' | 'utility_rent' }
   | { kind: 'savings_goal'; name: string; targetAmount: number }
   | { kind: 'command'; command: TelegramCommand }
@@ -89,7 +114,9 @@ function extractDescription(text: string, amount: number | null, fallback = 'Gas
   if (amount !== null) {
     cleaned = cleaned.replace(/(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/, '')
   }
-  cleaned = cleaned.replace(/^\s*(gasto|gasté|pagué|compré)\s*/i, '').trim()
+  cleaned = cleaned
+    .replace(/^\s*(?:gasto|gasté|pagué|compré|cargué|cargue|ingreso|ingresé|ingresó|cobré|cobre|recibí|recibi|me depositaron|me pagaron|me transfirieron|me acreditaron)\s*/i, '')
+    .trim()
   return cleaned || fallback
 }
 
@@ -104,15 +131,98 @@ function cleanName(name: string): string {
 }
 
 /**
+ * Quita los acentos y pasa a minúsculas para comparar keywords
+ * tolerantes a tildes (ej. "cobré" y "cobré" con/sin tilde).
+ */
+function normalizeAccents(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+/**
+ * Palabras clave que convierten un mensaje con monto en un INGRESO en vez
+ * de un gasto. Se evalúan sobre el texto normalizado (sin tildes, en
+ * minúsculas) para tolerar "cobré"/"cobré" y variantes. Mismo espíritu que
+ * INCOME_VERBS del frontend (naturalLanguageExpense.ts), ampliado.
+ */
+const INCOME_PATTERNS: RegExp[] = [
+  /^\s*(?:cobre|cobro)\b/, // cobré/cobre, cobro
+  /^\s*recibi\b/, // recibí/recibi
+  /^\s*(?:ingrese|ingreso)\b/, // ingresé/ingrese/ingreso/ingresó
+  /^\s*me\s+(?:pagaron|depositaron|transfirieron|acreditaron)\b/,
+  /\b(?:deposito|transferencia recibida|sueldo|haber|honorarios|reembolso)\b/,
+]
+
+function detectExpenseType(text: string): 'income' | 'expense' {
+  const normalized = normalizeAccents(text)
+  return INCOME_PATTERNS.some((pattern) => pattern.test(normalized)) ? 'income' : 'expense'
+}
+
+/** "en Mercado Pago", "con Ualá", "por Galicia" — billetera al final. */
+const WALLET_PREPOSITION_PATTERN = /\s(?:en|con|por|desde)\s+([A-Za-zÁÉÍÓÚáéíóúñÑ][A-Za-zÁÉÍÓÚáéíóúñÑ0-9\s'&-]+)\s*$/i
+
+/** Proveedores conocidos de billetera mencionados sin preposición. */
+const WALLET_PROVIDER_PATTERN =
+  /\b(?:mercado\s*pago|uala|lemon\s*cash|naranja\s*x|galicia|santander|brubank|prex|bbva|macro|banco\s*naci[oó]n|bna|efectivo|personal\s*pay|cuenta\s*dni|modo)\b/i
+
+/**
+ * Pista de billetera: el texto tras "en/con/por/desde" al final, o un
+ * proveedor conocido mencionado en cualquier lado. La descripción NO se
+ * recorta acá (el handler la conserva); esto solo da la pista para que
+ * index.ts la matchee contra las billeteras reales del usuario.
+ */
+function extractWalletHint(text: string): string | null {
+  const prepositionMatch = text.match(WALLET_PREPOSITION_PATTERN)
+  if (prepositionMatch) {
+    const name = cleanName(prepositionMatch[1])
+    if (name) return name
+  }
+  const providerMatch = text.match(WALLET_PROVIDER_PATTERN)
+  if (providerMatch) return cleanName(providerMatch[0])
+  return null
+}
+
+/** Keywords que mapean a la categoría "Transporte" (ej. SUBE). */
+const TRANSPORT_PATTERN = /\b(?:sube|transporte|bondi|colectivo|subte)\b/i
+
+function detectCategoryHint(text: string): string | null {
+  return TRANSPORT_PATTERN.test(normalizeAccents(text)) ? 'Transporte' : null
+}
+
+/**
+ * Extrae una nota libre: un sufijo "nota: ..." / "notas: ..." o un texto
+ * entre paréntesis al final ("Debo 5000 a Juan nota: para el viaje" o
+ * "Pagué cuota Heladera (adelanté el mes)"). Devuelve la nota y el texto
+ * sin ella para que el resto del parseo siga igual.
+ */
+function extractNotes(text: string): { notes: string | null; rest: string } {
+  const notaMatch = text.match(/\s*notas?\s*:\s*(.+)$/i)
+  if (notaMatch) {
+    const notes = cleanName(notaMatch[1])
+    const rest = text.slice(0, notaMatch.index).trim()
+    return { notes: notes || null, rest }
+  }
+  const parenMatch = text.match(/\s*\(([^()]+)\)\s*$/)
+  if (parenMatch) {
+    const notes = cleanName(parenMatch[1])
+    const rest = text.slice(0, parenMatch.index).trim()
+    return { notes: notes || null, rest }
+  }
+  return { notes: null, rest: text }
+}
+
+/**
  * "Debo 5000 a Juan" (le debo plata a alguien) o "Me debe 3000 Pedro"
  * (alguien me debe plata a mí).
  */
-function parseDebt(text: string): ParsedTelegramMessage | null {
+function parseDebt(text: string): ParsedDebt | null {
   const deboMatch = text.match(/^(?:le\s+)?debo\s+(.+?)\s+a\s+(.+)$/i)
   if (deboMatch) {
     const amount = extractAmount(deboMatch[1])
     if (amount === null || amount <= 0) return null
-    return { kind: 'debt', debtType: 'debo', amount, counterpartyName: cleanName(deboMatch[2]) }
+    return { kind: 'debt', debtType: 'debo', amount, counterpartyName: cleanName(deboMatch[2]), notes: null }
   }
 
   const meDebeMatch = text.match(/^me\s+debe\s+(.+)$/i)
@@ -120,7 +230,7 @@ function parseDebt(text: string): ParsedTelegramMessage | null {
     const amount = extractAmount(meDebeMatch[1])
     if (amount === null || amount <= 0) return null
     const name = cleanName(stripAmount(meDebeMatch[1]))
-    return { kind: 'debt', debtType: 'me_deben', amount, counterpartyName: name || 'la otra persona' }
+    return { kind: 'debt', debtType: 'me_deben', amount, counterpartyName: name || 'la otra persona', notes: null }
   }
 
   return null
@@ -144,7 +254,7 @@ function parseDebtPayment(text: string): ParsedTelegramMessage | null {
     return { kind: 'debt_payment', amount, personName: cleanName(payToMatch[2]), paymentType: 'pay' }
   }
 
-  const collectMatch = text.match(/^cobr[eé]\s+(.+?)\s+de\s+(.+)$/i)
+  const collectMatch = text.match(/^cobr(?:[eé]|o)\s+(.+?)\s+de\s+(.+)$/i)
   if (collectMatch) {
     const amount = extractAmount(collectMatch[1])
     if (amount === null || amount <= 0) return null
@@ -210,6 +320,12 @@ const INSTALLMENT_VERB_PATTERN =
   /^(?:compré|compre|comprar|compra)\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+(\d{1,2})\s+cuotas?$/i
 const INSTALLMENT_NO_EN_PATTERN =
   /^(.+?)\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+(\d{1,2})\s+cuotas?$/i
+// "12 cuotas de 25000" → valor por cuota sin descripción.
+const INSTALLMENT_VALUE_BARE_PATTERN = /^(\d{1,2})\s+cuotas?\s+de\s+(\$?\s*[\d.,]+)$/i
+// "Heladera 12 cuotas de 25000" / "Heladera en 12 cuotas de 25000"
+// → descripción + valor por cuota.
+const INSTALLMENT_VALUE_PATTERN =
+  /^(.+?)\s+(?:en\s+)?(\d{1,2})\s+cuotas?\s+de\s+(\$?\s*[\d.,]+)$/i
 
 /**
  * "Heladera 200000 en 12 cuotas", "Heladera 200000 12 cuotas",
@@ -217,15 +333,61 @@ const INSTALLMENT_NO_EN_PATTERN =
  * primero el conector "en", después el formato con verbo (que ya no lleva
  * descripción) y por último el formato sin conector (que admite
  * descripción y le saca el verbo de compra si lo trae adelante).
+ *
+ * Además se distingue el monto TOTAL del VALOR por cuota: "12 cuotas de
+ * 25000" significa que cada cuota vale $25.000 (total = 25000 × 12); "en
+ * 12 cuotas" con un monto antes significa que ese monto es el total
+ * (valor por cuota = total ÷ 12). Ambos quedan expuestos en
+ * `totalAmount` e `installmentAmount`.
  */
-function parseInstallment(text: string): ParsedTelegramMessage | null {
+function parseInstallment(text: string): ParsedInstallment | null {
+  const valueBareMatch = text.match(INSTALLMENT_VALUE_BARE_PATTERN)
+  if (valueBareMatch) {
+    const amount = extractAmount(valueBareMatch[2].replace('$', '').trim())
+    const count = Number(valueBareMatch[1])
+    if (amount === null || amount <= 0 || count <= 0) return null
+    return {
+      kind: 'installment',
+      description: 'Compra en cuotas',
+      totalAmount: amount * count,
+      installmentsCount: count,
+      installmentAmount: amount,
+      notes: null,
+    }
+  }
+
+  const valueMatch = text.match(INSTALLMENT_VALUE_PATTERN)
+  if (valueMatch) {
+    const amount = extractAmount(valueMatch[3].replace('$', '').trim())
+    const count = Number(valueMatch[2])
+    if (amount === null || amount <= 0 || count <= 0) return null
+    const description = cleanName(
+      extractDescription(valueMatch[1], amount, 'Compra en cuotas').replace(/^(?:compré|compre|comprar|compra)\s+/i, '')
+    )
+    return {
+      kind: 'installment',
+      description: description || 'Compra en cuotas',
+      totalAmount: amount * count,
+      installmentsCount: count,
+      installmentAmount: amount,
+      notes: null,
+    }
+  }
+
   const enMatch = text.match(INSTALLMENT_EN_PATTERN)
   if (enMatch) {
     const amount = extractAmount(enMatch[1])
     const count = Number(enMatch[2])
     if (amount === null || amount <= 0 || count <= 0) return null
     const description = extractDescription(enMatch[1], amount, 'Compra en cuotas')
-    return { kind: 'installment', description, totalAmount: amount, installmentsCount: count }
+    return {
+      kind: 'installment',
+      description,
+      totalAmount: amount,
+      installmentsCount: count,
+      installmentAmount: count > 0 ? amount / count : amount,
+      notes: null,
+    }
   }
 
   const verbMatch = text.match(INSTALLMENT_VERB_PATTERN)
@@ -233,7 +395,14 @@ function parseInstallment(text: string): ParsedTelegramMessage | null {
     const amount = extractAmount(verbMatch[1])
     const count = Number(verbMatch[2])
     if (amount === null || amount <= 0 || count <= 0) return null
-    return { kind: 'installment', description: 'Compra en cuotas', totalAmount: amount, installmentsCount: count }
+    return {
+      kind: 'installment',
+      description: 'Compra en cuotas',
+      totalAmount: amount,
+      installmentsCount: count,
+      installmentAmount: count > 0 ? amount / count : amount,
+      notes: null,
+    }
   }
 
   const noEnMatch = text.match(INSTALLMENT_NO_EN_PATTERN)
@@ -244,7 +413,14 @@ function parseInstallment(text: string): ParsedTelegramMessage | null {
     const description = cleanName(
       extractDescription(noEnMatch[1], amount, 'Compra en cuotas').replace(/^(?:compré|compre|comprar|compra)\s+/i, '')
     )
-    return { kind: 'installment', description: description || 'Compra en cuotas', totalAmount: amount, installmentsCount: count }
+    return {
+      kind: 'installment',
+      description: description || 'Compra en cuotas',
+      totalAmount: amount,
+      installmentsCount: count,
+      installmentAmount: count > 0 ? amount / count : amount,
+      notes: null,
+    }
   }
 
   return null
@@ -416,6 +592,11 @@ export function parseTelegramMessage(text: string): ParsedTelegramMessage {
     return { kind: 'link_code', code: linkMatch[1] ?? linkMatch[2] }
   }
 
+  // Una nota libre ("nota: ..." o "(...)") al final se saca del texto
+  // antes de parsear la intención y se le adjunta al resultado cuando la
+  // entidad lo soporta (gasto, deuda o compra en cuotas).
+  const { notes, rest } = extractNotes(trimmed)
+
   // Las intenciones en texto libre se evalúan ANTES del gasto genérico:
   // deuda ("Debo... a..." / "Me debe..."), pago de cuota ("Pago cuota
   // X", "Pago N cuota X", "Pagué [monto] cuota X"), pagos de deudas
@@ -424,39 +605,44 @@ export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   // cuotas ("... en N cuotas" o "... N cuotas"), fijos/suscripciones
   // ("Suscripción...", "Alquiler...", "... mensual") y metas ("Meta...",
   // "Ahorrar... para...").
-  const debt = parseDebt(trimmed)
-  if (debt) return debt
+  const debt = parseDebt(rest)
+  if (debt) return { ...debt, notes }
 
   // El pago de cuota se evalúa ANTES que el pago de deuda y el pago de
   // servicio: "Pago cuota X", "Pago 1 cuota X" y "Pagué 150000 cuota X"
   // empezarían como pago de deuda ("pago X Y") o de servicio ("pagué X")
   // si no se revisara primero.
-  const installmentPayment = parseInstallmentPayment(trimmed)
+  const installmentPayment = parseInstallmentPayment(rest)
   if (installmentPayment) return installmentPayment
 
-  const debtPayment = parseDebtPayment(trimmed)
+  const debtPayment = parseDebtPayment(rest)
   if (debtPayment) return debtPayment
 
-  const recurringPayment = parseRecurringPayment(trimmed)
+  const recurringPayment = parseRecurringPayment(rest)
   if (recurringPayment) return recurringPayment
 
-  const installment = parseInstallment(trimmed)
-  if (installment) return installment
+  const installment = parseInstallment(rest)
+  if (installment) return { ...installment, notes }
 
-  const recurring = parseRecurring(trimmed)
+  const recurring = parseRecurring(rest)
   if (recurring) return recurring
 
-  const savingsGoal = parseSavingsGoal(trimmed)
+  const savingsGoal = parseSavingsGoal(rest)
   if (savingsGoal) return savingsGoal
 
-  const amount = extractAmount(trimmed)
+  const amount = extractAmount(rest)
   if (amount === null || amount <= 0) {
     return { kind: 'unrecognized' }
   }
 
+  const type = detectExpenseType(rest)
   return {
     kind: 'expense',
     amount,
-    description: extractDescription(trimmed, amount),
+    description: extractDescription(rest, amount, type === 'income' ? 'Ingreso por Telegram' : 'Gasto por Telegram'),
+    type,
+    wallet: extractWalletHint(rest),
+    categoryHint: detectCategoryHint(rest),
+    notes,
   }
 }

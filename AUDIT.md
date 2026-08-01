@@ -2677,3 +2677,75 @@ una sola vez.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**66 archivos, 552 tests**,
 todos pasando — 537 previos + 15 nuevos), `npm run build` (OK).
+
+## 9. Tanda 9 - Bot Telegram (ingresos, billetera, categorias y notas) + editar deudas
+
+**Motivo**: los mensajes del bot solo registraban gastos (nunca ingresos),
+no se podia indicar con que billetera se pago, no habia forma de que
+cargar la SUBE quedara en la categoria Transporte, las notas escritas en
+el mensaje se descartaban, "12 cuotas de 25000" se interpretaba como total
+en vez de valor por cuota, y en la web no habia forma de editar una deuda.
+
+### `supabase/functions/telegram-webhook/message-parser.ts`
+- **Ingresos**: `detectExpenseType()` + `INCOME_PATTERNS[]` con
+  normalizacion de acentos y case-insensitive. Verbos: `cobré/cobre/cobro`,
+  `recibí/recibi`, `ingresé/ingrese/ingreso/ingresó`; expresiones:
+  `me pagaron`, `me depositaron`, `me transfirieron`, `me acreditaron`;
+  conceptos: `depósito`, `transferencia recibida`, `sueldo`, `haber`,
+  `honorarios`, `reembolso`. Si hay keyword + monto, el gasto se registra
+  con `type: 'income'`.
+- **Billetera**: `extractWalletHint()` detecta "en/con/por/desde X" al
+  final o un proveedor conocido (Mercado Pago, Ualá, Lemon Cash, Naranja X,
+  Galicia, Santander, Brubank, Prex, BBVA, Macro, Banco Nación/BNA,
+  efectivo, Personal Pay, Cuenta DNI, Modo).
+- **Categoria**: `detectCategoryHint()` marca `'Transporte'` si el mensaje
+  menciona sube/transporte/bondi/colectivo/subte.
+- **Notas**: `extractNotes()` saca un sufijo `nota: ...`/`notas: ...` o un
+  parentesis final `(...)`; la nota viaja en `notes` para gasto, deuda y
+  compra en cuotas.
+- **Cuotas total-vs-valor**: `"12 cuotas de 25000"` / `"12 cuotas de
+  $25.000"` ahora se leen como VALOR por cuota (`totalAmount = 25000 x 12`,
+  `installmentAmount = 25000`); `"Heladera 240000 en 12 cuotas"` sigue
+  siendo total (`installmentAmount = total / 12`). Ambos quedan en el tipo
+  `ParsedInstallment`.
+- `extractDescription()` quita los verbos de ingreso del principio.
+
+### `supabase/functions/telegram-webhook/index.ts`
+- **Gasto**: resuelve la pista de billetera contra `wallets` del usuario
+  (ilike, escapando `%`/`_`) y el hint de categoria contra `categories`
+  (ilike '%transporte%'); inserta `type: parsed.type` (income/expense),
+  `wallet_id` y `category_id`; la confirmacion lleva tipo, billetera,
+  categoria y nota.
+- **Deuda**: persiste `notes`; confirmacion con nota.
+- **Cuota**: persiste `notes`; confirmacion con valor por cuota.
+
+### `supabase/functions/telegram-webhook/reply-builder.ts`
+- `buildExpenseConfirmedReply` con `type` (un ingreso/un gasto), `walletName`,
+  `categoryName` y `notes` (defaults retrocompatibles).
+- `buildDebtConfirmedReply` y `buildInstallmentConfirmedReply` aceptan notas
+  y valor por cuota (`installmentAmount ?? total / count`).
+
+### `src/components/DebtsManager.tsx`
+- Boton "Editar" (lapiz) por deuda activa + modal "Editar Deuda" (patron
+  `SplitExpenseTool.tsx`): descripcion, contraparte, tipo, monto, moneda,
+  vencimiento, interes y notas.
+- Al guardar: `update` directo si hay conexion, o
+  `enqueueOfflineMutation('debts', 'update', { ...payload, id })` si no
+  (mismo flujo que `RecurringManager`). La edicion resetea
+  `remaining_amount` al total editado.
+
+### Tests (25 nuevos, 577 totales)
+- `message-parser.test.ts` (13 nuevos): ingresos (`Me depositaron 50000`,
+  `Ingreso 200000 Mercado Pago`, `Cobré 30000 sueldo`), billetera en gastos
+  (`Gasto 4500 café en Mercado Pago`, `Gasto 4500 con Ualá`), categoria
+  Transporte (`Cargué SUBE 5000`), notas (`Debo 5000 a Juan nota: para el
+  viaje`, parentesis, notas en gasto) y cuotas total-vs-valor (`Heladera 12
+  cuotas de 25000`, `12 cuotas de 25000`, `Heladera en 12 cuotas de 25000`).
+- `reply-builder.test.ts` (6 nuevos): ingreso vs gasto, billetera/categoria/
+  nota en la confirmacion, deuda con nota, cuota con valor por cuota y con nota.
+- `DebtsManager.test.tsx` (nuevo, 3 tests): apertura del modal con los datos
+  precargados, guardado con update, y update offline en cola con el id real.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**67 archivos, 577 tests**,
+todos pasando - 552 previos + 25 nuevos), `npm run build` (OK).

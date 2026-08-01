@@ -14,17 +14,41 @@ describe('parseTelegramMessage', () => {
 
   it('parsea un gasto simple: "Gasto 4500 café"', () => {
     const result = parseTelegramMessage('Gasto 4500 café')
-    expect(result).toEqual({ kind: 'expense', amount: 4500, description: 'café' })
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
   })
 
   it('parsea un gasto sin la palabra "Gasto" adelante', () => {
     const result = parseTelegramMessage('4500 café')
-    expect(result).toEqual({ kind: 'expense', amount: 4500, description: 'café' })
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
   })
 
   it('usa una descripción genérica si no queda texto después del monto', () => {
     const result = parseTelegramMessage('Gasto 4500')
-    expect(result).toEqual({ kind: 'expense', amount: 4500, description: 'Gasto por Telegram' })
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'Gasto por Telegram',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
   })
 
   it('parsea montos en formato argentino', () => {
@@ -80,6 +104,7 @@ describe('parseTelegramMessage: deudas', () => {
       debtType: 'debo',
       amount: 5000,
       counterpartyName: 'Juan',
+      notes: null,
     })
   })
 
@@ -89,6 +114,7 @@ describe('parseTelegramMessage: deudas', () => {
       debtType: 'debo',
       amount: 1500,
       counterpartyName: 'María',
+      notes: null,
     })
   })
 
@@ -98,12 +124,19 @@ describe('parseTelegramMessage: deudas', () => {
       debtType: 'me_deben',
       amount: 3000,
       counterpartyName: 'Pedro',
+      notes: null,
     })
   })
 
   it('"Me debe 3000" sin nombre usa "la otra persona"', () => {
     const result = parseTelegramMessage('Me debe 3000')
-    expect(result).toEqual({ kind: 'debt', debtType: 'me_deben', amount: 3000, counterpartyName: 'la otra persona' })
+    expect(result).toEqual({
+      kind: 'debt',
+      debtType: 'me_deben',
+      amount: 3000,
+      counterpartyName: 'la otra persona',
+      notes: null,
+    })
   })
 })
 
@@ -186,6 +219,8 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       description: 'Heladera',
       totalAmount: 200000,
       installmentsCount: 12,
+      installmentAmount: 200000 / 12,
+      notes: null,
     })
   })
 
@@ -195,6 +230,8 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       description: 'Compra en cuotas',
       totalAmount: 200000,
       installmentsCount: 12,
+      installmentAmount: 200000 / 12,
+      notes: null,
     })
   })
 
@@ -204,6 +241,8 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       description: 'Compra en cuotas',
       totalAmount: 200000,
       installmentsCount: 12,
+      installmentAmount: 200000 / 12,
+      notes: null,
     })
   })
 
@@ -213,6 +252,8 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       description: 'Heladera',
       totalAmount: 200000,
       installmentsCount: 12,
+      installmentAmount: 200000 / 12,
+      notes: null,
     })
   })
 
@@ -222,6 +263,41 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       description: 'TV',
       totalAmount: 450000,
       installmentsCount: 6,
+      installmentAmount: 450000 / 6,
+      notes: null,
+    })
+  })
+
+  it('"Heladera 12 cuotas de 25000" toma el monto como valor por cuota y calcula el total', () => {
+    expect(parseTelegramMessage('Heladera 12 cuotas de 25000')).toEqual({
+      kind: 'installment',
+      description: 'Heladera',
+      totalAmount: 25000 * 12,
+      installmentsCount: 12,
+      installmentAmount: 25000,
+      notes: null,
+    })
+  })
+
+  it('"en 12 cuotas de 25000" sin descripción calcula el total', () => {
+    expect(parseTelegramMessage('12 cuotas de 25000')).toEqual({
+      kind: 'installment',
+      description: 'Compra en cuotas',
+      totalAmount: 25000 * 12,
+      installmentsCount: 12,
+      installmentAmount: 25000,
+      notes: null,
+    })
+  })
+
+  it('"Heladera en 12 cuotas de 25000" soporta el conector "en" con valor por cuota', () => {
+    expect(parseTelegramMessage('Heladera en 12 cuotas de 25000')).toEqual({
+      kind: 'installment',
+      description: 'Heladera',
+      totalAmount: 25000 * 12,
+      installmentsCount: 12,
+      installmentAmount: 25000,
+      notes: null,
     })
   })
 })
@@ -377,14 +453,173 @@ describe('parseTelegramMessage: comandos nuevos', () => {
 
 describe('parseTelegramMessage: el gasto común sigue intacto', () => {
   it('"Gasto 4500 café" sigue siendo un gasto', () => {
-    expect(parseTelegramMessage('Gasto 4500 café')).toEqual({ kind: 'expense', amount: 4500, description: 'café' })
+    expect(parseTelegramMessage('Gasto 4500 café')).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
   })
 
   it('"Gasto 20000 alquiler" no se confunde con un gasto fijo', () => {
-    expect(parseTelegramMessage('Gasto 20000 alquiler')).toEqual({ kind: 'expense', amount: 20000, description: 'alquiler' })
+    expect(parseTelegramMessage('Gasto 20000 alquiler')).toEqual({
+      kind: 'expense',
+      amount: 20000,
+      description: 'alquiler',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
   })
 
   it('"Pagué 4500 café" sigue siendo un gasto común (el monto va primero)', () => {
-    expect(parseTelegramMessage('Pagué 4500 café')).toEqual({ kind: 'expense', amount: 4500, description: 'café' })
+    expect(parseTelegramMessage('Pagué 4500 café')).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
+  })
+})
+
+describe('parseTelegramMessage: ingresos', () => {
+  it('"Ingreso 200000" es un ingreso', () => {
+    const result = parseTelegramMessage('Ingreso 200000')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 200000,
+      description: 'Ingreso por Telegram',
+      type: 'income',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
+  })
+
+  it('"Ingreso 200000 Mercado Pago" detecta la billetera', () => {
+    const result = parseTelegramMessage('Ingreso 200000 Mercado Pago')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 200000,
+      description: 'Mercado Pago',
+      type: 'income',
+      wallet: 'Mercado Pago',
+      categoryHint: null,
+      notes: null,
+    })
+  })
+
+  it('"Cobré 30000 sueldo" es un ingreso', () => {
+    const result = parseTelegramMessage('Cobré 30000 sueldo')
+    expect(result.kind).toBe('expense')
+    if (result.kind === 'expense') expect(result.type).toBe('income')
+  })
+
+  it('"Recibí 1500 con tarjeta" es un ingreso', () => {
+    expect(parseTelegramMessage('Recibí 1500 con tarjeta').kind).toBe('expense')
+  })
+
+  it('"Me depositaron 50000" es un ingreso', () => {
+    const result = parseTelegramMessage('Me depositaron 50000')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 50000,
+      description: 'Ingreso por Telegram',
+      type: 'income',
+      wallet: null,
+      categoryHint: null,
+      notes: null,
+    })
+  })
+
+  it('"Cobro de deuda" no es ingreso (queda como gasto o unrecognized)', () => {
+    const result = parseTelegramMessage('Cobro 3000 de Pedro')
+    expect(result.kind).toBe('debt_payment')
+  })
+})
+
+describe('parseTelegramMessage: billetera y categoría en gastos', () => {
+  it('"Gasto 4500 café en Mercado Pago" detecta la billetera', () => {
+    const result = parseTelegramMessage('Gasto 4500 café en Mercado Pago')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café en Mercado Pago',
+      type: 'expense',
+      wallet: 'Mercado Pago',
+      categoryHint: null,
+      notes: null,
+    })
+  })
+
+  it('"Gasto 4500 con Ualá" detecta la billetera con preposición', () => {
+    const result = parseTelegramMessage('Gasto 4500 con Ualá')
+    if (result.kind === 'expense') expect(result.wallet).toBe('Ualá')
+  })
+
+  it('"Cargué SUBE 5000" se marca como categoría Transporte', () => {
+    const result = parseTelegramMessage('Cargué SUBE 5000')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 5000,
+      description: 'SUBE',
+      type: 'expense',
+      wallet: null,
+      categoryHint: 'Transporte',
+      notes: null,
+    })
+  })
+
+  it('"Gasto 2000 en el transporte" se marca como categoría Transporte', () => {
+    const result = parseTelegramMessage('Gasto 2000 en el transporte')
+    if (result.kind === 'expense') expect(result.categoryHint).toBe('Transporte')
+  })
+
+  it('un gasto común sin señales no trae billetera ni categoría', () => {
+    const result = parseTelegramMessage('Gasto 4500 café')
+    expect(result).toMatchObject({ wallet: null, categoryHint: null })
+  })
+})
+
+describe('parseTelegramMessage: notas', () => {
+  it('"Debo 5000 a Juan nota: para el viaje" guarda la nota', () => {
+    expect(parseTelegramMessage('Debo 5000 a Juan nota: para el viaje')).toEqual({
+      kind: 'debt',
+      debtType: 'debo',
+      amount: 5000,
+      counterpartyName: 'Juan',
+      notes: 'para el viaje',
+    })
+  })
+
+  it('"Debo 5000 a Juan (préstamo familiar)" guarda la nota entre paréntesis', () => {
+    const result = parseTelegramMessage('Debo 5000 a Juan (préstamo familiar)')
+    expect(result).toEqual({
+      kind: 'debt',
+      debtType: 'debo',
+      amount: 5000,
+      counterpartyName: 'Juan',
+      notes: 'préstamo familiar',
+    })
+  })
+
+  it('"Gasto 4500 café nota: salida con amigos" guarda la nota en el gasto', () => {
+    const result = parseTelegramMessage('Gasto 4500 café nota: salida con amigos')
+    expect(result).toEqual({
+      kind: 'expense',
+      amount: 4500,
+      description: 'café',
+      type: 'expense',
+      wallet: null,
+      categoryHint: null,
+      notes: 'salida con amigos',
+    })
   })
 })

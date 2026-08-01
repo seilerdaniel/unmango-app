@@ -149,8 +149,21 @@ export function buildUnrecognizedReply(): string {
   return 'No entendí ese mensaje. Mandame algo tipo "Gasto 4500 café", un comando como /saldo, o el código de 6 dígitos que te dio la app si todavía no vinculaste tu cuenta.'
 }
 
-export function buildExpenseConfirmedReply(amount: number, description: string): string {
-  return `Listo ✅ Registré un gasto de ${formatArs(amount)} en "${description}".`
+export function buildExpenseConfirmedReply(
+  amount: number,
+  description: string,
+  type: 'income' | 'expense' = 'expense',
+  walletName: string | null = null,
+  categoryName: string | null = null,
+  notes: string | null = null
+): string {
+  const kindLabel = type === 'income' ? 'un ingreso' : 'un gasto'
+  const extra = [walletName ? `billetera ${walletName}` : null, categoryName ? `categoría ${categoryName}` : null]
+    .filter(Boolean)
+    .join(' · ')
+  const extrasSuffix = extra ? ` (${extra})` : ''
+  const notesSuffix = notes ? ` Nota: ${notes}` : ''
+  return `Listo ✅ Registré ${kindLabel} de ${formatArs(amount)} en "${description}"${extrasSuffix}.${notesSuffix}`
 }
 
 export function buildExpenseErrorReply(): string {
@@ -497,16 +510,29 @@ export interface RecurringListItem {
 
 // ---------------- Builders nuevos ----------------
 
-export function buildDebtConfirmedReply(debtType: 'debo' | 'me_deben', amount: number, counterpartyName: string): string {
+export function buildDebtConfirmedReply(
+  debtType: 'debo' | 'me_deben',
+  amount: number,
+  counterpartyName: string,
+  notes: string | null = null
+): string {
+  const notesSuffix = notes ? ` Nota: ${notes}` : ''
   if (debtType === 'debo') {
-    return `Listo ✅ Registré que le debés ${formatArs(amount)} a ${counterpartyName}.`
+    return `Listo ✅ Registré que le debés ${formatArs(amount)} a ${counterpartyName}.${notesSuffix}`
   }
-  return `Listo ✅ Registré que ${counterpartyName} te debe ${formatArs(amount)}.`
+  return `Listo ✅ Registré que ${counterpartyName} te debe ${formatArs(amount)}.${notesSuffix}`
 }
 
-export function buildInstallmentConfirmedReply(description: string, totalAmount: number, installmentsCount: number): string {
-  const monthlyAmount = installmentsCount > 0 ? totalAmount / installmentsCount : 0
-  return `Listo ✅ Registré "${description}" por ${formatArs(totalAmount)} en ${installmentsCount} cuotas de ${formatArs(monthlyAmount)}.`
+export function buildInstallmentConfirmedReply(
+  description: string,
+  totalAmount: number,
+  installmentsCount: number,
+  installmentAmount: number | null = null,
+  notes: string | null = null
+): string {
+  const monthlyAmount = installmentAmount ?? (installmentsCount > 0 ? totalAmount / installmentsCount : 0)
+  const notesSuffix = notes ? ` Nota: ${notes}` : ''
+  return `Listo ✅ Registré "${description}" por ${formatArs(totalAmount)} en ${installmentsCount} cuotas de ${formatArs(monthlyAmount)}.${notesSuffix}`
 }
 
 export function buildRecurringConfirmedReply(description: string, amount: number, expenseKind: 'subscription' | 'utility_rent'): string {

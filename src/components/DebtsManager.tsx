@@ -11,7 +11,7 @@ import { Debt } from '@/types'
 import SplitExpenseTool from '@/components/SplitExpenseTool'
 import { sortDebts, filterDebtsByType, DebtSortField } from '@/lib/debtsSort'
 import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
-import { HandCoins, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { HandCoins, Plus, Trash2, CheckCircle2, AlertTriangle, Pencil, X } from 'lucide-react'
 
 const emptyForm = {
   description: '',
@@ -43,6 +43,9 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
   const [sortField, setSortField] = useState<DebtSortField>('dueDate')
   const [sortAscending, setSortAscending] = useState(true)
   const [filterType, setFilterType] = useState('all')
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
+  const [editForm, setEditForm] = useState(emptyForm)
+  const [editSaving, setEditSaving] = useState(false)
 
   const loadDebts = useCallback(async () => {
     try {
@@ -144,6 +147,69 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
       toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando deuda:', error)
     }
+  }
+
+  function startEditing(debt: Debt) {
+    setEditingDebt(debt)
+    setEditForm({
+      description: debt.description,
+      counterpartyName: debt.counterparty_name,
+      debtType: debt.debt_type,
+      currency: debt.currency,
+      totalAmount: String(debt.total_amount),
+      interestRate: debt.interest_rate ? String(debt.interest_rate) : '',
+      dueDate: debt.due_date ?? '',
+      notes: debt.notes ?? '',
+    })
+  }
+
+  function closeEditModal() {
+    setEditingDebt(null)
+    setEditForm(emptyForm)
+    setEditSaving(false)
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingDebt || !editForm.description.trim() || !editForm.counterpartyName.trim() || !editForm.totalAmount || Number(editForm.totalAmount) <= 0)
+      return
+    if (!user) return
+
+    setEditSaving(true)
+
+    const payload = {
+      description: editForm.description.trim(),
+      counterparty_name: editForm.counterpartyName.trim(),
+      debt_type: editForm.debtType,
+      currency: editForm.currency,
+      total_amount: Number(editForm.totalAmount),
+      remaining_amount: Number(editForm.totalAmount),
+      interest_rate: Number(editForm.interestRate) || 0,
+      due_date: editForm.dueDate || null,
+      notes: editForm.notes.trim() || null,
+    }
+
+    if (isOffline()) {
+      enqueueOfflineMutation('debts', 'update', { ...payload, id: editingDebt.id })
+      toast.info(OFFLINE_TOAST)
+      closeEditModal()
+      return
+    }
+
+    const { error } = await supabase.from('debts').update(payload).eq('id', editingDebt.id)
+
+    if (!error) {
+      closeEditModal()
+      await loadDebts()
+    } else if (isOffline()) {
+      enqueueOfflineMutation('debts', 'update', { ...payload, id: editingDebt.id })
+      toast.info(OFFLINE_TOAST)
+      closeEditModal()
+    } else {
+      toast.error('Error al editar la deuda: ' + error.message)
+      console.error('Error editando deuda:', error)
+    }
+    setEditSaving(false)
   }
 
   async function handleRegisterPayment(debt: Debt) {
@@ -395,12 +461,21 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleDelete(debt.id)}
-                    className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => startEditing(debt)}
+                      title="Editar"
+                      className="text-gray-400 hover:text-amber-600 transition p-1 cursor-pointer"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(debt.id)}
+                      className="text-gray-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
@@ -460,6 +535,116 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {editingDebt && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <HandCoins size={16} className="text-amber-600" /> Editar Deuda
+              </h3>
+              <button
+                onClick={closeEditModal}
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="text"
+                  placeholder="Descripción"
+                  title="Ej: Préstamo para el viaje"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  required
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                />
+                <input
+                  type="text"
+                  placeholder="¿Con quién?"
+                  title="Ej: Mi hermano, Juan"
+                  value={editForm.counterpartyName}
+                  onChange={(e) => setEditForm((f) => ({ ...f, counterpartyName: e.target.value }))}
+                  required
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                />
+                <select
+                  value={editForm.debtType}
+                  onChange={(e) => setEditForm((f) => ({ ...f, debtType: e.target.value as 'debo' | 'me_deben' }))}
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                >
+                  <option value="debo">Yo debo</option>
+                  <option value="me_deben">Me deben</option>
+                </select>
+                <div className="flex gap-1">
+                  <input
+                    type="number"
+                    placeholder="Monto total"
+                    value={editForm.totalAmount}
+                    onChange={(e) => setEditForm((f) => ({ ...f, totalAmount: e.target.value }))}
+                    required
+                    min="1"
+                    step="any"
+                    className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                  />
+                  <select
+                    value={editForm.currency}
+                    onChange={(e) => setEditForm((f) => ({ ...f, currency: e.target.value as 'ARS' | 'USD' }))}
+                    className="text-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-2 font-bold text-gray-700 dark:text-gray-300"
+                  >
+                    <option value="ARS">ARS</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+                <input
+                  type="date"
+                  title="Fecha límite (opcional)"
+                  value={editForm.dueDate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                />
+                <input
+                  type="number"
+                  placeholder="Interés % (opcional)"
+                  value={editForm.interestRate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, interestRate: e.target.value }))}
+                  min="0"
+                  step="any"
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300"
+                />
+                <input
+                  type="text"
+                  placeholder="Notas (opcional)"
+                  title="Ej: acordamos pagar en 3 cuotas"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-300 sm:col-span-2"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2.5 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {editSaving ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

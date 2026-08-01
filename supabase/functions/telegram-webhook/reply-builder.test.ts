@@ -201,6 +201,18 @@ describe('mensajes de texto', () => {
     expect(buildExpenseConfirmedReply(4500, 'café')).toBe('Listo ✅ Registré un gasto de $4.500 en "café".')
   })
 
+  it('buildExpenseConfirmedReply distingue ingreso de gasto', () => {
+    expect(buildExpenseConfirmedReply(200000, 'Mercado Pago', 'income')).toContain('Registré un ingreso de $200.000')
+    expect(buildExpenseConfirmedReply(4500, 'café', 'expense')).toContain('Registré un gasto de $4.500')
+  })
+
+  it('buildExpenseConfirmedReply incluye billetera, categoría y nota', () => {
+    const reply = buildExpenseConfirmedReply(5000, 'café', 'expense', 'Mercado Pago', 'Transporte', 'salida con amigos')
+    expect(reply).toContain('billetera Mercado Pago')
+    expect(reply).toContain('categoría Transporte')
+    expect(reply).toContain('Nota: salida con amigos')
+  })
+
   it('buildUnknownCommandReply menciona el comando recibido', () => {
     expect(buildUnknownCommandReply('hola')).toContain('/hola')
     expect(buildUnknownCommandReply('hola')).toContain('/ayuda')
@@ -501,8 +513,23 @@ describe('confirmaciones nuevas', () => {
     expect(buildDebtConfirmedReply('me_deben', 3000, 'Pedro')).toBe('Listo ✅ Registré que Pedro te debe $3.000.')
   })
 
+  it('buildDebtConfirmedReply incluye la nota si viene', () => {
+    expect(buildDebtConfirmedReply('debo', 5000, 'Juan', 'para el viaje')).toContain('Nota: para el viaje')
+  })
+
   it('buildInstallmentConfirmedReply muestra monto y cuota', () => {
     expect(buildInstallmentConfirmedReply('Heladera', 200000, 12)).toContain('12 cuotas de $16.666,67')
+  })
+
+  it('buildInstallmentConfirmedReply usa el valor por cuota si viene', () => {
+    const reply = buildInstallmentConfirmedReply('Heladera', 300000, 12, 25000)
+    expect(reply).toContain('12 cuotas de $25.000')
+  })
+
+  it('buildInstallmentConfirmedReply incluye la nota si viene', () => {
+    expect(buildInstallmentConfirmedReply('Heladera', 200000, 12, null, 'adelanté el mes')).toContain(
+      'Nota: adelanté el mes'
+    )
   })
 
   it('buildRecurringConfirmedReply según el tipo', () => {
