@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import { sortWallets, filterWalletsByType, WalletSortField } from '@/lib/walletSort'
@@ -36,7 +37,7 @@ function walletIconFor(type: Wallet['type']) {
 }
 
 export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?: () => void }) {
-  const [wallets, setWallets] = useState<WalletWithBalance[]>([])
+  const { wallets, totalBalance, loading, error } = useWallets()
   const [name, setName] = useState('')
   const [type, setType] = useState<Wallet['type']>('virtual_wallet')
   const [color, setColor] = useState('#6366f1')
@@ -46,50 +47,10 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [sortField, setSortField] = useState<WalletSortField>('name')
   const [sortAscending, setSortAscending] = useState(true)
   const [filterType, setFilterType] = useState('all')
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
   const containerRef = useRef<HTMLDivElement>(null)
-
-  async function loadWallets() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const [{ data: walletsData, error: walletsError }, { data: balancesData, error: balancesError }] =
-        await Promise.all([
-          supabase.from('wallets').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
-          supabase.rpc('get_wallet_balances'),
-        ])
-
-      if (walletsError) throw walletsError
-      if (balancesError) throw balancesError
-
-      const balanceByWallet: Record<string, number> = {}
-      for (const row of balancesData ?? []) {
-        balanceByWallet[row.wallet_id] = Number(row.balance) || 0
-      }
-
-      const combined: WalletWithBalance[] = (walletsData ?? []).map((w) => ({
-        ...w,
-        balance: balanceByWallet[w.id] ?? (Number(w.initial_balance) || 0),
-      }))
-
-      setWallets(combined)
-      setLoadError(null)
-    } catch (err) {
-      console.error('Error cargando billeteras:', err)
-      setLoadError('No se pudieron cargar las billeteras. Reintentá más tarde.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadWallets()
-  }, [])
 
   function resetForm() {
     setName('')
@@ -133,7 +94,6 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
 
       if (!error) {
         resetForm()
-        await loadWallets()
         if (onWalletsUpdated) onWalletsUpdated()
       } else {
         alert(`Error al ${editingId ? 'editar' : 'crear'} la billetera: ` + error.message)
@@ -152,7 +112,6 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
       const { error } = await supabase.from('wallets').delete().eq('id', id)
       if (!error) {
         if (editingId === id) resetForm()
-        await loadWallets()
         if (onWalletsUpdated) onWalletsUpdated()
       } else {
         alert('Error al eliminar la billetera: ' + error.message)
@@ -160,8 +119,6 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
       }
     }
   }
-
-  const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0)
 
   if (loading) {
     return (
@@ -188,8 +145,8 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         )}
       </div>
 
-      {loadError && (
-        <p className="text-xs font-semibold text-rose-600">{loadError}</p>
+      {error && (
+        <p className="text-xs font-semibold text-rose-600">{error}</p>
       )}
 
       {editingId && (

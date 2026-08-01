@@ -44,6 +44,45 @@ Cambios:
   lista priorizada). Verificado: `tsc --noEmit` 0 errores, 293/293 tests
   pasando.
 
+## ✅ Fase 1c — Refactor de arquitectura: contextos compartidos (items #1 y #2 de la auditoría)
+
+La auditoría de arquitectura encontró que la pestaña Inicio hacía **~13
+consultas simultáneas a Supabase** (los mismos agregados recomputados por
+cada widget) y que **6 componentes** repetían la misma carga de
+`wallets` al montar. Se resolvió con dos contextos globales:
+
+- [x] **`src/context/DashboardDataContext.tsx`** (`DashboardDataProvider`):
+  trae UNA sola vez las agregaciones compartidas por los widgets de Inicio
+  — `get_monthly_trend {p_months:1}`, gastos del mes, recurrentes activos,
+  `installment_purchases` del usuario y `get_transaction_totals` — en
+  paralelo (`Promise.all`). Refactorizados para leer de ahí (dejaron de
+  consultar Supabase por su cuenta):
+  `FinancialHealthScoreWidget`, `FinancialAdviceWidget` (conserva sus
+  señales propias: cambios de precio, presupuestos, deuda, metas,
+  categorías, hogar), `ZeroSpendStreak`, `MonthEndProjection` y
+  `SafeToSpendWidget`. `page.tsx` también lee los totales del header de
+  este contexto (eliminó su `fetchTotals` propio).
+  - Nota: se implementó como contexto sobre las RPC ya existentes en vez
+    de crear una RPC nueva — el objetivo era eliminar la duplicación sin
+    sumar SQL pendiente de correr. Una RPC `get_dashboard_data` única
+    queda como optimización futura si hiciera falta.
+- [x] **`src/context/WalletsContext.tsx`** (`WalletsProvider`): fuente única
+  de billeteras + saldos (`get_wallet_balances`). Refactorizados para
+  leer de ahí: `WalletCarousel`, `WalletManager`, `TransactionForm`
+  (el quick-add de billetera llama a `refresh()`), `RecurringManager`,
+  `ImportTransactions` y `VoiceExpenseInput`. `page.tsx` deriva el
+  "En billeteras" del header y el refresco del total de este contexto.
+- [x] **Mecanismo de refresco unificado**: en `page.tsx`, `dataVersion`
+  ahora dispara `refresh()` de ambos contextos (efecto sobre
+  `dataVersion`). Se eliminaron los remounts por `key={`score-${dataVersion}`}`
+  de Score y Recomendaciones. Cada alta/baja de movimiento (via
+  `fetchTransactions`) y cada cierre de Configuración refrescan todo en
+  un solo lugar.
+- [x] Tests actualizados para envolver con `WalletsProvider`
+  (`WalletManager`, `RecurringManager`, `VoiceExpenseInput`,
+  `SpeedDialFab` — que renderiza `VoiceExpenseInput`).
+  Verificado: `tsc --noEmit` 0 errores, 293/293 tests pasando, `next build` OK.
+
 ## 🟠 Fase 2 — Bugs menores y UX
 
 - [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada

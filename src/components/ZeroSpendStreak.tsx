@@ -1,48 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useMemo } from 'react'
+import { useDashboardData } from '@/context/DashboardDataContext'
 import { computeZeroSpendStats } from '@/lib/zeroSpendStats'
 import { Flame, Sparkles } from 'lucide-react'
 
 export default function ZeroSpendStreak() {
-  const [stats, setStats] = useState<{ daysElapsed: number; zeroSpendDays: number; currentStreak: number } | null>(
-    null
+  const { data, loading } = useDashboardData()
+
+  const stats = useMemo(
+    () => (data ? computeZeroSpendStats(data.monthExpenses.map((t) => new Date(t.created_at).getDate()), new Date()) : null),
+    [data]
   )
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const now = new Date()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
-        // Query liviana: solo la fecha de los gastos del mes, no las
-        // transacciones completas.
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('created_at')
-          .eq('user_id', user.id)
-          .eq('type', 'expense')
-          .gte('created_at', monthStart)
-
-        if (error) throw error
-
-        const expenseDays = (data ?? []).map((row) => new Date(row.created_at).getDate())
-        setStats(computeZeroSpendStats(expenseDays, now))
-      } catch (err) {
-        console.error('Error calculando la racha de días sin gastos:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  if (loading || !stats) return null
+  if (loading || !data || !stats) return null
 
   const { zeroSpendDays, daysElapsed, currentStreak } = stats
 

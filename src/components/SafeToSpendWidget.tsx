@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useMemo } from 'react'
+import { useDashboardData } from '@/context/DashboardDataContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { computeSafeToSpend } from '@/lib/safeToSpend'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
@@ -9,54 +9,29 @@ import { Wallet as WalletIcon } from 'lucide-react'
 
 export default function SafeToSpendWidget() {
   const { isPrivate, formatAmount } = usePrivacy()
-  const [safeAmount, setSafeAmount] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data, loading } = useDashboardData()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+  const safeAmount = useMemo(() => {
+    if (!data) return null
 
-        const now = new Date()
-        const dayOfMonth = now.getDate()
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-        // +1 porque el día de hoy también cuenta como "día disponible para gastar".
-        const daysRemaining = daysInMonth - dayOfMonth + 1
+    const now = new Date()
+    const dayOfMonth = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    // +1 porque el día de hoy también cuenta como "día disponible para gastar".
+    const daysRemaining = daysInMonth - dayOfMonth + 1
 
-        const [totalsResult, recurringResult] = await Promise.all([
-          supabase.rpc('get_transaction_totals'),
-          supabase
-            .from('recurring_expenses')
-            .select('amount, currency, billing_frequency')
-            .eq('user_id', user.id)
-            .eq('is_active', true),
-        ])
+    const availableBalance = data.totalIncome - data.totalExpense
 
-        if (totalsResult.error) throw totalsResult.error
-        if (recurringResult.error) throw recurringResult.error
+    // Mismo criterio que "Fijo Comprometido": solo ARS, prorrateando
+    // las anuales a su equivalente mensual.
+    const fixedCommitments = data.recurring
+      .filter((r) => r.currency === 'ARS')
+      .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
-        const totalIncome = Number(totalsResult.data?.[0]?.total_income) || 0
-        const totalExpense = Number(totalsResult.data?.[0]?.total_expense) || 0
-        const availableBalance = totalIncome - totalExpense
+    return computeSafeToSpend(availableBalance, fixedCommitments, daysRemaining)
+  }, [data])
 
-        // Mismo criterio que "Fijo Comprometido": solo ARS, prorrateando
-        // las anuales a su equivalente mensual.
-        const fixedCommitments = (recurringResult.data ?? [])
-          .filter((r) => r.currency === 'ARS')
-          .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
-
-        setSafeAmount(computeSafeToSpend(availableBalance, fixedCommitments, daysRemaining))
-      } catch (err) {
-        console.error('Error calculando el límite seguro de gasto diario:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  if (loading || safeAmount === null) return null
+  if (loading || !data || safeAmount === null) return null
 
   return (
     <div id="safe-to-spend" className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">

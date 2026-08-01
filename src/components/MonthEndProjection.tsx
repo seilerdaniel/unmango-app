@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useMemo } from 'react'
+import { useDashboardData } from '@/context/DashboardDataContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { projectMonthEnd } from '@/lib/monthProjection'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
@@ -9,64 +9,33 @@ import { TrendingUp } from 'lucide-react'
 
 export default function MonthEndProjection() {
   const { isPrivate, formatAmount } = usePrivacy()
-  const [loading, setLoading] = useState(true)
-  const [projection, setProjection] = useState<ReturnType<typeof projectMonthEnd> | null>(null)
+  const { data, loading } = useDashboardData()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+  const projection = useMemo(() => {
+    if (!data) return null
 
-        const now = new Date()
-        const dayOfMonth = now.getDate()
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const now = new Date()
+    const dayOfMonth = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
 
-        const [trendResult, expensesResult, recurringResult] = await Promise.all([
-          supabase.rpc('get_monthly_trend', { p_months: 1 }),
-          supabase
-            .from('transactions')
-            .select('description, amount_ars')
-            .eq('user_id', user.id)
-            .eq('type', 'expense')
-            .gte('created_at', monthStart),
-          supabase.from('recurring_expenses').select('amount, currency, billing_frequency').eq('user_id', user.id).eq('is_active', true),
-        ])
+    // Separamos lo que ya vino de "Pagar" una suscripción o un
+    // servicio/alquiler (fijo, usa el mismo prefijo que arma
+    // RecurringManager) del resto (variable).
+    const variableSpendSoFar = data.monthExpenses
+      .filter((t) => !t.description?.startsWith('[Suscripción]') && !t.description?.startsWith('[Servicio/Alquiler]'))
+      .reduce((acc, t) => acc + Number(t.amount_ars), 0)
 
-        if (trendResult.error) throw trendResult.error
-        if (expensesResult.error) throw expensesResult.error
-        if (recurringResult.error) throw recurringResult.error
+    // Mismo criterio que "Fijo Comprometido" en Suscripciones: solo
+    // ARS (para no depender de una cotización USD acá), y los anuales
+    // se prorratean a su equivalente mensual.
+    const fixedMonthlyCosts = data.recurring
+      .filter((r) => r.currency === 'ARS')
+      .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
-        const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
+    return projectMonthEnd({ variableSpendSoFar, fixedMonthlyCosts, monthlyIncome: data.monthlyIncome, dayOfMonth, daysInMonth })
+  }, [data])
 
-        // Separamos lo que ya vino de "Pagar" una suscripción o un
-        // servicio/alquiler (fijo, usa el mismo prefijo que arma
-        // RecurringManager) del resto (variable).
-        const variableSpendSoFar = (expensesResult.data ?? [])
-          .filter((t) => !t.description?.startsWith('[Suscripción]') && !t.description?.startsWith('[Servicio/Alquiler]'))
-          .reduce((acc, t) => acc + Number(t.amount_ars), 0)
-
-        // Mismo criterio que "Fijo Comprometido" en Suscripciones: solo
-        // ARS (para no depender de una cotización USD acá), y los
-        // anuales se prorratean a su equivalente mensual.
-        const fixedMonthlyCosts = (recurringResult.data ?? [])
-          .filter((r) => r.currency === 'ARS')
-          .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
-
-        setProjection(
-          projectMonthEnd({ variableSpendSoFar, fixedMonthlyCosts, monthlyIncome, dayOfMonth, daysInMonth })
-        )
-      } catch (err) {
-        console.error('Error calculando la proyección de fin de mes:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  if (loading || !projection) return null
+  if (loading || !data || !projection) return null
 
   const isNegative = projection.projectedBalance < 0
 

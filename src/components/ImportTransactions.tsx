@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
-import { Wallet } from '@/types'
+import { useWallets } from '@/context/WalletsContext'
 import { Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
 
 interface ImportTransactionsProps {
@@ -63,7 +63,7 @@ export function parseAmount(raw: string): number | null {
 
 export default function ImportTransactions({ onImported }: ImportTransactionsProps) {
   const { categories } = useCategories()
-  const [wallets, setWallets] = useState<Wallet[]>([])
+  const { wallets } = useWallets()
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [dateColumn, setDateColumn] = useState('')
@@ -75,23 +75,11 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
   const [importing, setImporting] = useState(false)
   const [importedCount, setImportedCount] = useState<number | null>(null)
 
-  async function ensureWalletsLoaded() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-    if (data) setWallets(data)
-  }
-
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
     setImportedCount(null)
-    ensureWalletsLoaded()
 
     Papa.parse<Record<string, string>>(file, {
       header: true,

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import RecurringManager from '../RecurringManager'
 import { CategoriesProvider } from '@/context/CategoriesContext'
 import { PrivacyProvider } from '@/context/PrivacyContext'
+import { WalletsProvider } from '@/context/WalletsContext'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 
 // El mock tiene que existir antes de que se evalúe vi.mock (que Vitest
@@ -48,7 +49,9 @@ const RECURRING_ITEM_USD = {
 function renderWithProviders(ui: React.ReactElement) {
   return render(
     <PrivacyProvider>
-      <CategoriesProvider>{ui}</CategoriesProvider>
+      <CategoriesProvider>
+        <WalletsProvider>{ui}</WalletsProvider>
+      </CategoriesProvider>
     </PrivacyProvider>
   )
 }

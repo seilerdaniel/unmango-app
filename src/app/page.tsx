@@ -21,6 +21,8 @@ import HouseholdExpenses from "@/components/HouseholdExpenses";
 import TransactionFilters from "@/components/TransactionFilters";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useDashboardData } from "@/context/DashboardDataContext";
+import { useWallets } from "@/context/WalletsContext";
 import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
@@ -71,28 +73,27 @@ export default function Home() {
   const [filteredTransactions, setFilteredTransactions] = useState<
     Transaction[]
   >([]);
-  const [totals, setTotals] = useState({ totalIncome: 0, totalExpense: 0 });
-  const [totalWalletBalance, setTotalWalletBalance] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("inicio");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Contador que fuerza a Un Mango Score y Recomendaciones a
-  // refrescarse: esos dos widgets consultan sus datos una sola vez al
-  // montar. Como Inicio se desmonta/remonta solo al cambiar de pestaña
-  // (los cambios hechos en Planes ya se reflejan solos al volver), el
-  // hueco real es Configuración — es un overlay que NO desmonta Inicio
-  // de atrás, así que agregar/editar una billetera ahí no se reflejaba
-  // hasta refrescar la página entera. Se bombea en fetchTransactions()
-  // (cubre Carga Manual y "Pagar" en los managers) y al cerrar
-  // Configuración (cubre billeteras y cualquier otro cambio ahí).
+  // Contador que fuerza a los contextos compartidos de Inicio
+  // (DashboardDataContext y WalletsContext) a refrescarse: los widgets
+  // leen de ahí en vez de consultar Supabase por separado. Se bombea en
+  // fetchTransactions() (cubre Carga Manual y "Pagar" en los managers) y
+  // al cerrar Configuración (cubre billeteras y cualquier otro cambio ahí).
   const [dataVersion, setDataVersion] = useState(0);
   const router = useRouter();
 
   // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
   const { theme, toggleTheme, oledBlack, toggleOledBlack } = useTheme();
+
+  // Datos compartidos por los widgets de la pestaña Inicio (totales del
+  // mes, gastos, recurrentes, cuotas) y las billeteras con su saldo.
+  const { data: dashboardData, refresh: refreshDashboard } = useDashboardData();
+  const { wallets, totalBalance: walletsTotalBalance, refresh: refreshWallets } = useWallets();
 
   // Atajos de teclado: N nueva transacción, P modo privado, / buscar.
   useKeyboardShortcuts({
@@ -105,47 +106,14 @@ export default function Home() {
     },
   });
 
-  // Totales de TODA la historia del usuario, calculados en Postgres para no
-  // tener que traer todas las filas al cliente solo para sumarlas.
-  async function fetchTotals() {
-    const { data, error } = await supabase.rpc("get_transaction_totals");
-    if (!error && data && data[0]) {
-      setTotals({
-        totalIncome: Number(data[0].total_income) || 0,
-        totalExpense: Number(data[0].total_expense) || 0,
-      });
-    } else if (error) {
-      console.error("Error calculando totales:", error);
-    }
-  }
-
-  // Suma de los saldos de todas las billeteras — se muestra al lado del
-  // Balance Disponible porque son cálculos DISTINTOS (ver tooltip en la
-  // tarjeta) y pueden no coincidir: el Balance Disponible cuenta todos
-  // los movimientos tengan o no billetera asignada; el total de
-  // billeteras solo cuenta lo que se asignó explícitamente + el saldo
-  // inicial de cada una.
-  async function fetchWalletTotal() {
-    setDataVersion((v) => v + 1);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: walletsData, error: walletsError } = await supabase
-      .from("wallets")
-      .select("id")
-      .eq("user_id", user.id);
-    if (walletsError || !walletsData || walletsData.length === 0) {
-      setTotalWalletBalance(null);
-      return;
-    }
-
-    const { data, error } = await supabase.rpc("get_wallet_balances");
-    if (!error && data) {
-      setTotalWalletBalance(data.reduce((acc, w) => acc + (Number(w.balance) || 0), 0));
-    } else if (error) {
-      console.error("Error calculando el total de billeteras:", error);
-    }
-  }
+  // Cada vez que cambia dataVersion (alta/baja de movimiento, cambio en
+  // Configuración) los contextos compartidos se vuelven a traer — así
+  // los widgets de Inicio quedan frescos sin que cada uno consulte por
+  // su lado.
+  useEffect(() => {
+    refreshDashboard();
+    refreshWallets();
+  }, [dataVersion, refreshDashboard, refreshWallets]);
 
   // Primera página del historial (la más reciente). Se llama al iniciar y
   // después de cualquier alta/baja de movimiento.
@@ -172,8 +140,7 @@ export default function Home() {
       setHasMore(data.length === PAGE_SIZE);
     }
 
-    await fetchTotals();
-    await fetchWalletTotal();
+    setDataVersion((v) => v + 1);
   }
 
   // Trae la siguiente página y la agrega al final de lo ya cargado.
@@ -284,8 +251,10 @@ export default function Home() {
     }
   }
 
-  const { totalIncome, totalExpense } = totals;
+  const totalIncome = dashboardData?.totalIncome ?? 0;
+  const totalExpense = dashboardData?.totalExpense ?? 0;
   const balance = totalIncome - totalExpense;
+  const totalWalletBalance = wallets.length > 0 ? walletsTotalBalance : null;
 
   if (loading) {
     return (
@@ -444,8 +413,8 @@ export default function Home() {
             </div>
 
             <div className="space-y-6 mt-6">
-              <FinancialHealthScoreWidget key={`score-${dataVersion}`} />
-              <FinancialAdviceWidget key={`advice-${dataVersion}`} onNavigate={handleAdviceNavigate} />
+              <FinancialHealthScoreWidget />
+              <FinancialAdviceWidget onNavigate={handleAdviceNavigate} />
               <WalletCarousel />
               <ZeroSpendStreak />
               <SafeToSpendWidget />
@@ -611,7 +580,7 @@ export default function Home() {
         }}
       >
         <ImportTransactions onImported={fetchTransactions} />
-        <WalletManager onWalletsUpdated={fetchWalletTotal} />
+        <WalletManager onWalletsUpdated={() => setDataVersion((v) => v + 1)} />
         <CategoryManager onCategoriesUpdated={fetchTransactions} />
         <BackupRestore />
         <TelegramLink />

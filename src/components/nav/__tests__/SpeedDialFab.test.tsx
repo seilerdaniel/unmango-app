@@ -3,11 +3,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SpeedDialFab from '../SpeedDialFab'
 import { CategoriesProvider } from '@/context/CategoriesContext'
+import { WalletsProvider } from '@/context/WalletsContext'
 
 function renderFab(onManualEntry = vi.fn()) {
   return render(
     <CategoriesProvider>
-      <SpeedDialFab onManualEntry={onManualEntry} />
+      <WalletsProvider>
+        <SpeedDialFab onManualEntry={onManualEntry} />
+      </WalletsProvider>
     </CategoriesProvider>
   )
 }

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
+import { useWallets } from '@/context/WalletsContext'
 import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
 import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
@@ -57,8 +58,8 @@ const emptyForm = {
  */
 export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
   const { categories } = useCategories()
+  const { wallets } = useWallets()
   const [items, setItems] = useState<RecurringExpense[]>([])
-  const [wallets, setWallets] = useState<Wallet[]>([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [sortField, setSortField] = useState<RecurringSortField>('nextDue')
@@ -72,17 +73,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const { isPrivate, formatAmount } = usePrivacy()
   const containerRef = useRef<HTMLDivElement>(null)
 
-  async function loadWallets() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-    if (data) setWallets(data)
-  }
-
   useEffect(() => {
     let isMounted = true
 
@@ -91,15 +81,13 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        const [{ data: itemsData }] = await Promise.all([
-          supabase
-            .from('recurring_expenses')
-            .select('*, categories(*)')
-            .eq('user_id', user.id)
-            .order('billing_day', { ascending: true }),
-          loadWallets(),
-        ])
+        const { data: itemsData, error } = await supabase
+          .from('recurring_expenses')
+          .select('*, categories(*)')
+          .eq('user_id', user.id)
+          .order('billing_day', { ascending: true })
 
+        if (error) throw error
         if (isMounted && itemsData) setItems(itemsData)
       } catch (err) {
         console.error('Error al cargar pagos recurrentes:', err)

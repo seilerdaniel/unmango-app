@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useDashboardData } from '@/context/DashboardDataContext'
+import { useWallets } from '@/context/WalletsContext'
 import { computeFinancialHealthScore, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { generateFinancialAdvice, AdviceItem } from '@/lib/financialAdvice'
 import { detectAntExpenses } from '@/lib/antExpenses'
@@ -40,71 +42,52 @@ export default function FinancialAdviceWidget({
   const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const { data } = useDashboardData()
+  const { wallets } = useWallets()
+
   useEffect(() => {
+    if (!data) return
+    const dashboard = data
+
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
         const now = new Date()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
         const dayOfMonth = now.getDate()
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
         const daysRemaining = daysInMonth - dayOfMonth + 1
 
-        const [
-          trendResult,
-          expensesResult,
-          recurringResult,
-          installmentsResult,
-          walletsResult,
-          priceChangesResult,
-          budgetsResult,
-          categorySpendResult,
-          debtsResult,
-          goalsResult,
-          categoriesResult,
-        ] = await Promise.all([
-          supabase.rpc('get_monthly_trend', { p_months: 1 }),
-          supabase
-            .from('transactions')
-            .select('amount_ars, created_at')
-            .eq('user_id', user.id)
-            .eq('type', 'expense')
-            .gte('created_at', monthStart),
-          supabase
-            .from('recurring_expenses')
-            .select('amount, currency, billing_frequency')
-            .eq('user_id', user.id)
-            .eq('is_active', true),
-          supabase.from('installment_purchases').select('description, total_amount, installments_count').eq('user_id', user.id),
-          supabase.rpc('get_wallet_balances'),
-          supabase.rpc('get_recurring_price_changes'),
-          supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', user.id),
-          supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
-          supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', user.id),
-          supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', user.id),
-          supabase.from('categories').select('id').eq('user_id', user.id),
-        ])
+        // La base (tendencia del mes, gastos, recurrentes, cuotas y
+        // billeteras) ya la trae DashboardDataContext una sola vez para
+        // todos los widgets de Inicio; acá solo quedan las señales
+        // propias de las recomendaciones.
+        const [priceChangesResult, budgetsResult, categorySpendResult, debtsResult, goalsResult, categoriesResult] =
+          await Promise.all([
+            supabase.rpc('get_recurring_price_changes'),
+            supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
+            supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
+            supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
+            supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
+            supabase.from('categories').select('id').eq('user_id', dashboard.userId),
+          ])
 
-        const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
-        const monthlyExpense = Number(trendResult.data?.[0]?.total_expense) || 0
+        const monthlyIncome = dashboard.monthlyIncome
+        const monthlyExpense = dashboard.monthlyExpense
 
-        const fixedCommitments = (recurringResult.data ?? [])
+        const fixedCommitments = dashboard.recurring
           .filter((r) => r.currency === 'ARS')
           .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
-        const installmentsMonthlyObligation = (installmentsResult.data ?? []).reduce(
+        const installmentsMonthlyObligation = dashboard.installments.reduce(
           (acc, p) => acc + Number(p.total_amount) / p.installments_count,
           0
         )
 
-        const emergencyFundBalance = (walletsResult.data ?? []).reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
+        const emergencyFundBalance = wallets.reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
 
         const savedThreshold = typeof window !== 'undefined' ? localStorage.getItem(ANT_THRESHOLD_STORAGE_KEY) : null
         const threshold = savedThreshold ? Number(savedThreshold) || DEFAULT_ANT_THRESHOLD : DEFAULT_ANT_THRESHOLD
         const antExpenses = detectAntExpenses(
-          (expensesResult.data ?? []).map((t) => ({ amount: Number(t.amount_ars) })),
+          dashboard.monthExpenses.map((t) => ({ amount: Number(t.amount_ars) })),
           threshold
         )
 
@@ -124,9 +107,8 @@ export default function FinancialAdviceWidget({
         }))
         const hasSubscriptionPriceIncrease = detectPriceIncreases(priceChanges).length > 0
 
-        const fixedARSDaily = fixedCommitments
         const safeToSpendToday =
-          monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedARSDaily, daysRemaining) : null
+          monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedCommitments, daysRemaining) : null
 
         // Presupuesto excedido: cruzamos el límite de cada categoría con
         // lo gastado ese mes (misma función que ya usa BudgetManager).
@@ -146,12 +128,12 @@ export default function FinancialAdviceWidget({
         // puede evaluar "grande respecto a qué", se omite el aviso).
         const largeInstallment =
           monthlyIncome > 0
-            ? (installmentsResult.data ?? []).find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)
+            ? dashboard.installments.find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)
             : undefined
         const largeInstallmentDescription = largeInstallment?.description ?? null
 
         // Racha de gastos rota: mismo criterio que ZeroSpendStreak.tsx.
-        const expenseDayNumbers = (expensesResult.data ?? []).map((t) => new Date(t.created_at as string).getDate())
+        const expenseDayNumbers = dashboard.monthExpenses.map((t) => new Date(t.created_at).getDate())
         const brokenStreakDays = computeStreakBreak(expenseDayNumbers, now)
 
         // Metas de ahorro estancadas.
@@ -173,7 +155,7 @@ export default function FinancialAdviceWidget({
           .from('household_links')
           .select('id')
           .eq('status', 'active')
-          .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
+          .or(`user_a_id.eq.${dashboard.userId},user_b_id.eq.${dashboard.userId}`)
           .maybeSingle()
 
         if (householdLink) {
@@ -185,10 +167,10 @@ export default function FinancialAdviceWidget({
 
           if (householdExpenses && householdExpenses.length > 0) {
             const totalPaidByMe = householdExpenses
-              .filter((e) => e.paid_by_user_id === user.id)
+              .filter((e) => e.paid_by_user_id === dashboard.userId)
               .reduce((acc, e) => acc + Number(e.amount), 0)
             const totalPaidByPartner = householdExpenses
-              .filter((e) => e.paid_by_user_id !== user.id)
+              .filter((e) => e.paid_by_user_id !== dashboard.userId)
               .reduce((acc, e) => acc + Number(e.amount), 0)
             const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
 
@@ -222,9 +204,9 @@ export default function FinancialAdviceWidget({
       }
     }
     load()
-  }, [])
+  }, [data, wallets])
 
-  if (loading || !advice) return null
+  if (loading || !data || !advice) return null
 
   if (noData) {
     return (

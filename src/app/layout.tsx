@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PrivacyProvider } from "@/context/PrivacyContext";
 import { CategoriesProvider } from "@/context/CategoriesContext";
+import { WalletsProvider } from "@/context/WalletsContext";
+import { DashboardDataProvider } from "@/context/DashboardDataContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
@@ -80,7 +82,11 @@ export default function RootLayout({
         <ThemeProvider>
           <PrivacyProvider>
             <CategoriesProvider>
-              {children}
+              <WalletsProvider>
+                <DashboardDataProvider>
+                  {children}
+                </DashboardDataProvider>
+              </WalletsProvider>
             </CategoriesProvider>
           </PrivacyProvider>
         </ThemeProvider>

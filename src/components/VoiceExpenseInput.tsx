@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
+import { useWallets } from '@/context/WalletsContext'
 import { parseNaturalLanguageExpense } from '@/lib/naturalLanguageExpense'
 import { guessCategoryName } from '@/lib/expenseCategoryGuess'
 import { speechErrorMessage } from '@/lib/speechErrorMessage'
@@ -55,13 +56,13 @@ interface VoiceExpenseInputProps {
 
 export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded }: VoiceExpenseInputProps) {
   const { categories } = useCategories()
+  const { wallets } = useWallets()
   const [isListening, setIsListening] = useState(false)
   const [interimText, setInterimText] = useState('')
   const [rawText, setRawText] = useState('')
   const [supported, setSupported] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [wallets, setWallets] = useState<Wallet[]>([])
 
   // Campos editables de confirmación — se pre-llenan con lo que se
   // entendió (monto, descripción, categoría y medio de pago), pero
@@ -79,17 +80,6 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
   useEffect(() => {
     setSupported(getSpeechRecognition() !== null)
   }, [])
-
-  useEffect(() => {
-    if (!isOpen) return
-    async function loadWallets() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase.from('wallets').select('*').eq('user_id', user.id)
-      if (data) setWallets(data)
-    }
-    loadWallets()
-  }, [isOpen])
 
   function handleTranscript(text: string) {
     setRawText(text)

@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { WalletWithBalance } from '@/types'
 import { Landmark, Banknote, Smartphone, CreditCard, WalletIcon } from 'lucide-react'
@@ -30,39 +29,7 @@ function walletIconFor(type: WalletWithBalance['type']) {
  */
 export default function WalletCarousel() {
   const { isPrivate, formatAmount } = usePrivacy()
-  const [wallets, setWallets] = useState<WalletWithBalance[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const [{ data: walletsData }, { data: balancesData }] = await Promise.all([
-          supabase.from('wallets').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
-          supabase.rpc('get_wallet_balances'),
-        ])
-
-        const balanceByWallet: Record<string, number> = {}
-        for (const row of balancesData ?? []) {
-          balanceByWallet[row.wallet_id] = Number(row.balance) || 0
-        }
-
-        setWallets(
-          (walletsData ?? []).map((w) => ({
-            ...w,
-            balance: balanceByWallet[w.id] ?? (Number(w.initial_balance) || 0),
-          }))
-        )
-      } catch (err) {
-        console.error('Error cargando el carrusel de billeteras:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
+  const { wallets, loading } = useWallets()
 
   if (loading || wallets.length === 0) return null
 

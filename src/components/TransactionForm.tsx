@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
-import { Wallet } from '@/types'
+import { useWallets } from '@/context/WalletsContext'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
 import { computeHoursOfWork } from '@/lib/hoursOfWork'
 import { enqueueOfflineTransaction } from '@/lib/offlineQueue'
@@ -20,6 +20,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [paymentMethod, setPaymentMethod] = useState('Billetera Virtual')
   const [categoryId, setCategoryId] = useState<string>('')
   const { categories } = useCategories()
+  const { wallets, refresh: refreshWallets } = useWallets()
 
   // Billetera asociada al movimiento (Fase 5 — saldo por billetera). Es
   // opcional: si no se elige ninguna, el movimiento no impacta el saldo
@@ -29,9 +30,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   // que ver con las billeteras reales que se crean en WalletManager —
   // por eso una billetera nueva no aparecía ahí. Se unificó en este
   // único selector, que sí lee las billeteras reales del usuario.
-  const [wallets, setWallets] = useState<Wallet[]>([])
   const [walletId, setWalletId] = useState<string>('')
-
   const [isUsd, setIsUsd] = useState(false)
   const [amountUsd, setAmountUsd] = useState('')
   const [exchangeRate, setExchangeRate] = useState('1200')
@@ -42,20 +41,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   // workSettings queda null y el hint simplemente no se muestra.
   const [workSettings, setWorkSettings] = useState<{ monthlyIncome: number; monthlyWorkHours: number } | null>(null)
 
-  async function loadWallets() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-    if (data) setWallets(data)
-  }
-
   useEffect(() => {
-    loadWallets()
-
     async function loadWorkSettings() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -90,7 +76,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       return
     }
 
-    await loadWallets()
+    await refreshWallets()
     if (data) setWalletId(data.id)
   }
 

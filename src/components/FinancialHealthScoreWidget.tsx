@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useMemo } from 'react'
+import { useDashboardData } from '@/context/DashboardDataContext'
+import { useWallets } from '@/context/WalletsContext'
 import { computeFinancialHealthScore, FinancialHealthResult, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { detectAntExpenses } from '@/lib/antExpenses'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
@@ -27,80 +28,42 @@ function scoreRingColor(score: number): string {
 }
 
 export default function FinancialHealthScoreWidget() {
-  const [result, setResult] = useState<FinancialHealthResult | null>(null)
-  const [noData, setNoData] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const { data, loading } = useDashboardData()
+  const { wallets } = useWallets()
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+  const result = useMemo<FinancialHealthResult | null>(() => {
+    if (!data) return null
 
-        const now = new Date()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const fixedCommitments = data.recurring
+      .filter((r) => r.currency === 'ARS')
+      .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
-        const [trendResult, expensesResult, recurringResult, installmentsResult, walletsResult] = await Promise.all([
-          supabase.rpc('get_monthly_trend', { p_months: 1 }),
-          supabase
-            .from('transactions')
-            .select('amount_ars')
-            .eq('user_id', user.id)
-            .eq('type', 'expense')
-            .gte('created_at', monthStart),
-          supabase
-            .from('recurring_expenses')
-            .select('amount, currency, billing_frequency')
-            .eq('user_id', user.id)
-            .eq('is_active', true),
-          supabase
-            .from('installment_purchases')
-            .select('total_amount, installments_count')
-            .eq('user_id', user.id),
-          supabase.rpc('get_wallet_balances'),
-        ])
+    const installmentsMonthlyObligation = data.installments.reduce(
+      (acc, p) => acc + Number(p.total_amount) / p.installments_count,
+      0
+    )
 
-        const monthlyIncome = Number(trendResult.data?.[0]?.total_income) || 0
-        const monthlyExpense = Number(trendResult.data?.[0]?.total_expense) || 0
+    const emergencyFundBalance = wallets.reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
 
-        const fixedCommitments = (recurringResult.data ?? [])
-          .filter((r) => r.currency === 'ARS')
-          .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
+    const savedThreshold = typeof window !== 'undefined' ? localStorage.getItem(ANT_THRESHOLD_STORAGE_KEY) : null
+    const threshold = savedThreshold ? Number(savedThreshold) || DEFAULT_ANT_THRESHOLD : DEFAULT_ANT_THRESHOLD
+    const antExpenses = detectAntExpenses(
+      data.monthExpenses.map((t) => ({ amount: Number(t.amount_ars) })),
+      threshold
+    )
 
-        const installmentsMonthlyObligation = (installmentsResult.data ?? []).reduce(
-          (acc, p) => acc + Number(p.total_amount) / p.installments_count,
-          0
-        )
+    return computeFinancialHealthScore({
+      monthlyIncome: data.monthlyIncome,
+      monthlyExpense: data.monthlyExpense,
+      monthlyDebtPayments: fixedCommitments + installmentsMonthlyObligation,
+      emergencyFundBalance,
+      antExpensesTotal: antExpenses.total,
+    })
+  }, [data, wallets])
 
-        const emergencyFundBalance = (walletsResult.data ?? []).reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
+  const noData = data ? hasNoFinancialData(data.monthlyIncome, data.monthlyExpense) : false
 
-        const savedThreshold = typeof window !== 'undefined' ? localStorage.getItem(ANT_THRESHOLD_STORAGE_KEY) : null
-        const threshold = savedThreshold ? Number(savedThreshold) || DEFAULT_ANT_THRESHOLD : DEFAULT_ANT_THRESHOLD
-        const antExpenses = detectAntExpenses(
-          (expensesResult.data ?? []).map((t) => ({ amount: Number(t.amount_ars) })),
-          threshold
-        )
-
-        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense))
-        setResult(
-          computeFinancialHealthScore({
-            monthlyIncome,
-            monthlyExpense,
-            monthlyDebtPayments: fixedCommitments + installmentsMonthlyObligation,
-            emergencyFundBalance,
-            antExpensesTotal: antExpenses.total,
-          })
-        )
-      } catch (err) {
-        console.error('Error calculando el Score de Salud Financiera:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  if (loading || !result) return null
+  if (loading || !data || !result) return null
 
   if (noData) {
     return (
