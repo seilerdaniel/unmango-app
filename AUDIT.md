@@ -131,6 +131,55 @@ hook), `next build` OK, `eslint` bajó de 20 a **19 errores** (todos del
 patrón pre-existente `react-hooks/set-state-in-effect`, ahora concentrado
 en un solo lugar).
 
+## ✅ Fase 1e — BackupRestore: escritura por lotes (item #3 de la auditoría)
+
+El restore insertaba **una fila por request** (y categorías/billeteras
+con un `.select('id').single()` por fila para capturar el id recién
+generado). Se refactorizó a escritura en lotes:
+
+- [x] **`src/lib/backupRestore.ts`** (nuevo, lógica pura testable):
+  - `chunk()` — parte un array en lotes; `generateId()` — uuid generado
+    en el cliente (con fallback). Ahora las categorías/billeteras llevan
+    el id nuevo explícito en el insert, así el mapa viejo→nuevo se arma
+    en memoria sin leer de vuelta cada fila (se eliminaron los
+    `.select('id').single()` de a uno).
+  - Builders por tabla (`buildCategoryInsertRows`, `buildWalletInsertRows`,
+    `buildTransactionInsertRows`, `buildBudgetInsertRows`,
+    `buildRecurringInsertRows`, `buildGoalInsertRows`): preparan las filas
+    del lote con `user_id` seteado y FKs remapeados.
+  - `insertBatches()` — orquesta el flujo: por cada lote de hasta
+    `RESTORE_BATCH_SIZE` (100) prepara, inserta, reporta progreso
+    acumulado y cede el hilo (`yieldToUI()`, un `setTimeout(0)` entre
+    lotes para que React pinte el avance).
+- [x] **Bug latente corregido**: `recurring_expenses.wallet_id` tiene FK
+  a `wallets(id)`, pero el restore viejo no lo remapeaba (dejaba el id
+  viejo del backup → violación de FK y la fila no entraba, en silencio).
+  Ahora `buildRecurringInsertRows` lo remapea igual que `category_id`.
+- [x] **Progreso visible**: barra de progreso con la sección actual,
+  `done de total` y % — se actualiza entre lotes porque se cede el hilo,
+  así la UI no se congela en restauraciones grandes.
+- [x] **Errores por lote**: si un lote falla NO se aborta el resto (el
+  restore es aditivo, mejor que entre lo que sí puede), se acumula el
+  primer error y al final se muestra un banner ámbar: "Se insertaron X de
+  Y registros. N no se pudieron insertar (primer error: ...)".
+- [x] **Rollback transaccional**: no se puede hacer con el cliente de
+  Supabase — cada `.insert()` es una operación independiente, el cliente
+  no soporta transacciones multi-statement. Se optó por la alternativa
+  que pedía la tarea ("notificar el estado de avance"). Un rollback
+  atómico real requeriría una RPC `security definer` que haga todo en una
+  transacción SQL — queda anotado como optimización futura.
+- [x] Tests: `src/lib/__tests__/backupRestore.test.ts` (21 tests: chunk,
+  remapForeignKey, builders con remap/filtrado, `insertBatches` con
+  progreso y con fallo de un lote que no frena el resto) +
+  `src/components/__tests__/BackupRestore.test.tsx` (2 tests de flujo:
+  250 movimientos se insertan en 3 lotes de 100, y el banner de error
+  cuando un lote falla). Se reemplazó el `BackupRestore.test.ts` viejo
+  (que solo testeaba `remapForeignKey`).
+
+Verificado: `tsc --noEmit` 0 errores, **318/318 tests** pasando (299 + 19
+nuevos), `next build` OK, `eslint` sin cambios (19 errores de la línea
+base pre-existente, nada nuevo).
+
 ## 🟠 Fase 2 — Bugs menores y UX
 
 - [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada
