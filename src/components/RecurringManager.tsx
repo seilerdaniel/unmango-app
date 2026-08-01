@@ -7,6 +7,7 @@ import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useToast } from '@/context/ToastContext'
 import { Repeat, Plus, Trash2, CheckCircle2, Calendar, Power, AlertTriangle, Pencil, X } from 'lucide-react'
 import { applyTax } from '@/lib/applyTax'
 import { daysUntilNextBilling, monthlyEquivalentAmount, BillingFrequency } from '@/lib/recurringBilling'
@@ -73,6 +74,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
   const [impactingId, setImpactingId] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -176,7 +178,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       resetForm()
       await reloadData()
     } else {
-      alert(`Error al ${editingId ? 'editar' : 'agregar'}: ` + error.message)
+      toast.error(`Error al ${editingId ? 'editar' : 'agregar'}: ` + error.message)
       console.error(`Error ${editingId ? 'editando' : 'agregando'}:`, error)
     }
     setSubmitting(false)
@@ -189,7 +191,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
     const { error } = await supabase.from('recurring_expenses').update({ is_active: newStatus }).eq('id', item.id)
     if (error) {
-      alert('Error al actualizar: ' + error.message)
+      toast.error('Error al actualizar: ' + error.message)
       console.error('Error actualizando estado:', error)
       await reloadData()
     }
@@ -201,7 +203,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       setItems((prev) => prev.filter((r) => r.id !== id))
       if (editingId === id) resetForm()
     } else {
-      alert('Error al eliminar: ' + error.message)
+      toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando:', error)
     }
   }
@@ -219,7 +221,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
       if (rateInput === null) return
       exchangeRate = Number(rateInput)
       if (!exchangeRate || exchangeRate <= 0) {
-        alert('Cotización inválida. No se registró el pago.')
+        toast.error('Cotización inválida. No se registró el pago.')
         return
       }
       amountArs = taxedAmount * exchangeRate
@@ -250,7 +252,7 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     if (!error) {
       if (onTransactionAdded) onTransactionAdded()
     } else {
-      alert('Error al registrar el pago: ' + error.message)
+      toast.error('Error al registrar el pago: ' + error.message)
       console.error('Error al registrar transacción:', error)
     }
     setImpactingId(null)

@@ -5,6 +5,7 @@ import jsQR from 'jsqr'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
+import { useToast } from '@/context/ToastContext'
 import { parseAfipQrUrl } from '@/lib/afipQr'
 import { QrCode, X, CheckCircle2, CameraOff } from 'lucide-react'
 
@@ -17,6 +18,7 @@ interface QrInvoiceScannerProps {
 export default function QrInvoiceScanner({ isOpen, onClose, onTransactionAdded }: QrInvoiceScannerProps) {
   const { user } = useUser()
   const { categories } = useCategories()
+  const { toast } = useToast()
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [scannedAmount, setScannedAmount] = useState<number | null>(null)
   const [description, setDescription] = useState('')
@@ -120,7 +122,7 @@ export default function QrInvoiceScanner({ isOpen, onClose, onTransactionAdded }
       handleClose()
       if (onTransactionAdded) onTransactionAdded()
     } else {
-      alert('Error al guardar el movimiento: ' + error.message)
+      toast.error('Error al guardar el movimiento: ' + error.message)
       console.error('Error guardando movimiento desde QR:', error)
     }
     setSubmitting(false)

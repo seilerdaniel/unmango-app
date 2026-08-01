@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useHousehold } from '@/context/HouseholdContext'
+import { useToast } from '@/context/ToastContext'
 import { generateHouseholdInviteCode } from '@/lib/householdInviteCode'
 import { Home, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
@@ -14,6 +15,7 @@ interface HouseholdLinkProps {
 export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
   const { user } = useUser()
   const { link, partnerEmail, loading, refresh } = useHousehold()
+  const { toast, confirmDialog } = useToast()
   const [inviteInput, setInviteInput] = useState('')
   const [generating, setGenerating] = useState(false)
   const [accepting, setAccepting] = useState(false)
@@ -35,7 +37,7 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
     if (!error) {
       await refresh()
     } else {
-      alert('Error al generar el código: ' + error.message)
+      toast.error('Error al generar el código: ' + error.message)
       console.error('Error generando código de hogar:', error)
     }
     setGenerating(false)
@@ -53,7 +55,7 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
       await refresh()
       if (onLinkChanged) onLinkChanged()
     } else {
-      alert('No se pudo vincular: ' + error.message)
+      toast.error('No se pudo vincular: ' + error.message)
       console.error('Error aceptando invitación de hogar:', error)
     }
     setAccepting(false)
@@ -61,14 +63,20 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
 
   async function handleUnlink() {
     if (!link) return
-    if (!confirm('¿Desvincular el hogar? Se borran los gastos compartidos registrados — esto no se puede deshacer.')) return
+    const ok = await confirmDialog({
+      title: 'Desvincular hogar',
+      message: '¿Desvincular el hogar? Se borran los gastos compartidos registrados — esto no se puede deshacer.',
+      confirmText: 'Desvincular',
+      variant: 'danger',
+    })
+    if (!ok) return
 
     const { error } = await supabase.from('household_links').delete().eq('id', link.id)
     if (!error) {
       await refresh()
       if (onLinkChanged) onLinkChanged()
     } else {
-      alert('Error al desvincular: ' + error.message)
+      toast.error('Error al desvincular: ' + error.message)
     }
   }
 

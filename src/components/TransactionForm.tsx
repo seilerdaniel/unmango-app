@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useToast } from '@/context/ToastContext'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
 import { computeHoursOfWork } from '@/lib/hoursOfWork'
 import { enqueueOfflineTransaction } from '@/lib/offlineQueue'
@@ -23,6 +24,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   const [categoryId, setCategoryId] = useState<string>('')
   const { categories } = useCategories()
   const { wallets, refresh: refreshWallets } = useWallets()
+  const { toast } = useToast()
 
   // Billetera asociada al movimiento (Fase 5 — saldo por billetera). Es
   // opcional: si no se elige ninguna, el movimiento no impacta el saldo
@@ -71,7 +73,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       .single()
 
     if (error) {
-      alert('Error al crear la billetera: ' + error.message)
+      toast.error('Error al crear la billetera: ' + error.message)
       console.error('Error creando billetera desde el formulario:', error)
       return
     }
@@ -85,7 +87,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
     setLoading(true)
 
     if (!user) {
-      alert('Sesión no válida')
+      toast.error('Sesión no válida')
       setLoading(false)
       return
     }
@@ -98,7 +100,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       : evaluateMathExpression(amountArs) ?? Number(amountArs)
 
     if (!Number.isFinite(finalAmountArs) || finalAmountArs <= 0) {
-      alert('El monto ingresado no es válido. Revisá que sea un número o una cuenta como "2500 + 1300".')
+      toast.error('El monto ingresado no es válido. Revisá que sea un número o una cuenta como "2500 + 1300".')
       setLoading(false)
       return
     }
@@ -123,7 +125,7 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
     // Supabase — directo a la cola offline.
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       enqueueOfflineTransaction(payload)
-      alert('Sin conexión: guardado en tu celular. Se va a sincronizar solo cuando vuelvas a tener internet.')
+      toast.info('Sin conexión: guardado en tu celular. Se va a sincronizar solo cuando vuelvas a tener internet.')
       setDescription('')
       setAmountArs('')
       setAmountUsd('')
@@ -140,13 +142,13 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       // offline en vez de mostrar un error que asuste al usuario.
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         enqueueOfflineTransaction(payload)
-        alert('Se cortó la conexión: guardado en tu celular, se sincroniza solo.')
+        toast.info('Se cortó la conexión: guardado en tu celular, se sincroniza solo.')
         setDescription('')
         setAmountArs('')
         setAmountUsd('')
         onTransactionAdded()
       } else {
-        alert('Error al guardar el movimiento: ' + error.message)
+        toast.error('Error al guardar el movimiento: ' + error.message)
       }
     } else {
       setDescription('')

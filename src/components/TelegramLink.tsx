@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { generateLinkingCode } from '@/lib/telegramLinkCode'
 import { Send, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
 export default function TelegramLink() {
   const { user } = useUser()
+  const { toast, confirmDialog } = useToast()
   const [loading, setLoading] = useState(true)
   const [code, setCode] = useState<string | null>(null)
   const [linked, setLinked] = useState(false)
@@ -64,7 +66,7 @@ export default function TelegramLink() {
       setCode(newCode)
       setLinked(false)
     } catch (err) {
-      alert('Error generando el código: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('Error generando el código: ' + (err instanceof Error ? err.message : String(err)))
       console.error('Error generando código de Telegram:', err)
     } finally {
       setGenerating(false)
@@ -72,7 +74,13 @@ export default function TelegramLink() {
   }
 
   async function handleUnlink() {
-    if (!confirm('¿Desvincular tu cuenta de Telegram? El bot va a dejar de registrar gastos hasta que vincules de nuevo.')) return
+    const ok = await confirmDialog({
+      title: 'Desvincular Telegram',
+      message: '¿Desvincular tu cuenta de Telegram? El bot va a dejar de registrar gastos hasta que vincules de nuevo.',
+      confirmText: 'Desvincular',
+      variant: 'danger',
+    })
+    if (!ok) return
 
     if (!user) return
 
@@ -81,7 +89,7 @@ export default function TelegramLink() {
       setCode(null)
       setLinked(false)
     } else {
-      alert('Error al desvincular: ' + error.message)
+      toast.error('Error al desvincular: ' + error.message)
     }
   }
 

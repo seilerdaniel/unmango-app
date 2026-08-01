@@ -23,6 +23,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useUser } from "@/context/UserContext";
 import { useDashboardData } from "@/context/DashboardDataContext";
 import { useWallets } from "@/context/WalletsContext";
+import { useToast } from "@/context/ToastContext";
 import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
@@ -94,6 +95,7 @@ export default function Home() {
   // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
   const { theme, toggleTheme, oledBlack, toggleOledBlack } = useTheme();
+  const { toast, confirmDialog } = useToast();
 
   // Datos compartidos por los widgets de la pestaña Inicio (totales del
   // mes, gastos, recurrentes, cuotas) y las billeteras con su saldo.
@@ -162,24 +164,30 @@ export default function Home() {
       setAllTransactions((prev) => [...prev, ...data]);
       setHasMore(data.length === PAGE_SIZE);
     } else if (error) {
-      alert("Error al cargar más movimientos: " + error.message);
+      toast.error("Error al cargar más movimientos: " + error.message);
       console.error("Error paginando transacciones:", error);
     }
     setLoadingMore(false);
   }
 
   async function handleDelete(id: string) {
-    if (confirm("¿Quieres eliminar este movimiento?")) {
-      const { error } = await supabase
-        .from("transactions")
-        .delete()
-        .eq("id", id);
-      if (!error) {
-        fetchTransactions();
-      } else {
-        alert("Error al eliminar el movimiento: " + error.message);
-        console.error("Error eliminando transacción:", error);
-      }
+    const confirmed = await confirmDialog({
+      title: "Eliminar movimiento",
+      message: "¿Quieres eliminar este movimiento?",
+      confirmText: "Eliminar",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", id);
+    if (!error) {
+      fetchTransactions();
+      toast.success("Movimiento eliminado.");
+    } else {
+      toast.error("Error al eliminar el movimiento: " + error.message);
+      console.error("Error eliminando transacción:", error);
     }
   }
 

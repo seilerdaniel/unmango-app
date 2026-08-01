@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useToast } from '@/context/ToastContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
 import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
@@ -19,6 +20,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const { user } = useUser()
   const { categories } = useCategories()
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast, confirmDialog } = useToast()
 
   const [purchases, setPurchases] = useState<PurchaseWithPayments[]>([])
   const [description, setDescription] = useState('')
@@ -107,7 +109,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         setNotes('')
         await loadPurchases()
       } else {
-        alert('Error al crear la compra en cuotas: ' + error.message)
+        toast.error('Error al crear la compra en cuotas: ' + error.message)
         console.error('Error creando compra en cuotas:', error)
       }
     }
@@ -115,13 +117,19 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   }
 
   async function handleDeletePurchase(id: string) {
-    if (!confirm('¿Eliminar esta compra en cuotas? Las cuotas ya pagadas quedan en tu historial de todos modos.')) return
+    const ok = await confirmDialog({
+      title: 'Eliminar compra en cuotas',
+      message: '¿Eliminar esta compra en cuotas? Las cuotas ya pagadas quedan en tu historial de todos modos.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!ok) return
 
     const { error } = await supabase.from('installment_purchases').delete().eq('id', id)
     if (!error) {
       setPurchases((prev) => prev.filter((p) => p.id !== id))
     } else {
-      alert('Error al eliminar: ' + error.message)
+      toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando compra en cuotas:', error)
     }
   }
@@ -160,7 +168,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
       .single()
 
     if (txError || !txData) {
-      alert('Error al registrar el pago: ' + txError?.message)
+      toast.error('Error al registrar el pago: ' + txError?.message)
       console.error('Error pagando cuota:', txError)
       setPayingId(null)
       return
@@ -176,7 +184,7 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     ])
 
     if (paymentError) {
-      alert('El gasto se registró pero hubo un error marcando la cuota como pagada: ' + paymentError.message)
+      toast.error('El gasto se registró pero hubo un error marcando la cuota como pagada: ' + paymentError.message)
       console.error('Error registrando installment_payment:', paymentError)
     }
 

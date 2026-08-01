@@ -14,6 +14,7 @@ import { Line } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { buildExchangeGapSeries, computeGapSummary, NetWorthSnapshot } from '@/lib/exchangeGap'
 import { Scale, RefreshCw } from 'lucide-react'
 
@@ -33,6 +34,7 @@ async function fetchBlueRate(): Promise<number | null> {
 export default function ExchangeGapSimulator() {
   const { user } = useUser()
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast } = useToast()
   const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [takingSnapshot, setTakingSnapshot] = useState(false)
@@ -82,7 +84,7 @@ export default function ExchangeGapSimulator() {
 
       if (totalsError) throw totalsError
       if (blueRate === null) {
-        alert('No se pudo obtener la cotización del dólar Blue justo ahora. Probá de nuevo en un rato.')
+        toast.error('No se pudo obtener la cotización del dólar Blue justo ahora. Probá de nuevo en un rato.')
         return
       }
 
@@ -105,7 +107,7 @@ export default function ExchangeGapSimulator() {
       if (error) throw error
       await loadSnapshots()
     } catch (err) {
-      alert('Error al tomar el snapshot: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('Error al tomar el snapshot: ' + (err instanceof Error ? err.message : String(err)))
       console.error('Error tomando snapshot de patrimonio:', err)
     } finally {
       setTakingSnapshot(false)

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BackupRestore from '../BackupRestore'
@@ -39,14 +39,10 @@ async function restoreFile(container: HTMLElement, payload: unknown) {
   const input = container.querySelector('input[type="file"]') as HTMLInputElement
   const file = new File([JSON.stringify(payload)], 'backup.json', { type: 'application/json' })
   await userEvent.upload(input, file)
+  await userEvent.click(screen.getByRole('button', { name: 'Restaurar' }))
 }
 
 describe('BackupRestore', () => {
-  beforeEach(() => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'alert').mockImplementation(() => {})
-  })
-
   it('restaura en lotes (chunks) y muestra el resumen de lo insertado', async () => {
     Object.assign(
       supabaseMock,

@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/context/ToastContext'
 import { LogIn, UserPlus, Eye, EyeOff } from 'lucide-react'
 
 // Proveedores de login social vía Supabase Auth (OAuth). El código ya
@@ -30,6 +31,7 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
+  const { toast } = useToast()
 
   async function handleOAuthLogin(provider: 'google' | 'azure' | 'apple') {
     setOauthLoading(provider)
@@ -61,7 +63,7 @@ export default function LoginPage() {
       if (error) {
         setErrorMsg(error.message)
       } else {
-        alert('¡Registro exitoso! Ya puedes iniciar sesión.')
+        toast.success('¡Registro exitoso! Ya puedes iniciar sesión.')
         setIsSignUp(false)
       }
     } else {

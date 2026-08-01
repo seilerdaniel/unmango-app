@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import {
   RESTORE_BATCH_SIZE,
   buildBudgetInsertRows,
@@ -36,6 +37,7 @@ interface RestoreProgress {
 
 export default function BackupRestore() {
   const { user } = useUser()
+  const { toast, confirmDialog } = useToast()
   const [exporting, setExporting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [restoreSummary, setRestoreSummary] = useState<string | null>(null)
@@ -75,7 +77,7 @@ export default function BackupRestore() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Error al generar la copia de seguridad: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('Error al generar la copia de seguridad: ' + (err instanceof Error ? err.message : String(err)))
       console.error('Error exportando backup:', err)
     } finally {
       setExporting(false)
@@ -87,13 +89,12 @@ export default function BackupRestore() {
     if (!file) return
     e.target.value = '' // permite re-seleccionar el mismo archivo después
 
-    if (
-      !confirm(
-        'Esto va a AGREGAR los datos del archivo a tu cuenta actual (no borra nada existente). ¿Continuar?'
-      )
-    ) {
-      return
-    }
+    const ok = await confirmDialog({
+      title: 'Restaurar backup',
+      message: 'Esto va a AGREGAR los datos del archivo a tu cuenta actual (no borra nada existente). ¿Continuar?',
+      confirmText: 'Restaurar',
+    })
+    if (!ok) return
 
     setRestoring(true)
     setRestoreSummary(null)
@@ -239,7 +240,7 @@ export default function BackupRestore() {
         setRestoreSummary('No se restauró ningún registro.')
       }
     } catch (err) {
-      alert('Error al restaurar el backup: ' + (err instanceof Error ? err.message : String(err)))
+      toast.error('Error al restaurar el backup: ' + (err instanceof Error ? err.message : String(err)))
       console.error('Error restaurando backup:', err)
     } finally {
       setRestoring(false)

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useUser } from '@/context/UserContext'
 import { useHousehold } from '@/context/HouseholdContext'
+import { useToast } from '@/context/ToastContext'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeHouseholdBalance } from '@/lib/householdBalance'
 import { HouseholdExpense } from '@/types'
@@ -14,6 +15,7 @@ export default function HouseholdExpenses() {
   const { formatAmount } = usePrivacy()
   const { user } = useUser()
   const { householdId, partnerEmail } = useHousehold()
+  const { toast, confirmDialog } = useToast()
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -55,7 +57,7 @@ export default function HouseholdExpenses() {
       setAmount('')
       await refetch()
     } else {
-      alert('Error al registrar el gasto: ' + error.message)
+      toast.error('Error al registrar el gasto: ' + error.message)
       console.error('Error creando gasto de hogar:', error)
     }
     setSubmitting(false)
@@ -66,19 +68,25 @@ export default function HouseholdExpenses() {
     if (!error) {
       await refetch()
     } else {
-      alert('Error al eliminar: ' + error.message)
+      toast.error('Error al eliminar: ' + error.message)
     }
   }
 
   async function handleSettleUp() {
     if (!householdId) return
-    if (!confirm('¿Marcar como saldado? Esto borra todos los gastos de hogar registrados y arranca de cero (hacelo después de arreglar cuentas en la vida real).')) return
+    const ok = await confirmDialog({
+      title: 'Marcar como saldado',
+      message: '¿Marcar como saldado? Esto borra todos los gastos de hogar registrados y arranca de cero (hacelo después de arreglar cuentas en la vida real).',
+      confirmText: 'Saldar',
+      variant: 'danger',
+    })
+    if (!ok) return
 
     const { error } = await supabase.from('household_expenses').delete().eq('household_id', householdId)
     if (!error) {
       await refetch()
     } else {
-      alert('Error al liquidar: ' + error.message)
+      toast.error('Error al liquidar: ' + error.message)
     }
   }
 

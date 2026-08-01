@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { Clock, CheckCircle2 } from 'lucide-react'
 
 export default function WorkSettings() {
   const { user } = useUser()
+  const { toast } = useToast()
   const [monthlyIncome, setMonthlyIncome] = useState('')
   const [monthlyWorkHours, setMonthlyWorkHours] = useState('160')
   const [loading, setLoading] = useState(true)
@@ -62,7 +64,7 @@ export default function WorkSettings() {
     if (!error) {
       setSaved(true)
     } else {
-      alert('Error al guardar: ' + error.message)
+      toast.error('Error al guardar: ' + error.message)
       console.error('Error guardando configuración de ingreso/horas:', error)
     }
     setSaving(false)

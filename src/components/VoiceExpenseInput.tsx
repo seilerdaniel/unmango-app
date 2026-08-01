@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useToast } from '@/context/ToastContext'
 import { parseNaturalLanguageExpense } from '@/lib/naturalLanguageExpense'
 import { guessCategoryName } from '@/lib/expenseCategoryGuess'
 import { speechErrorMessage } from '@/lib/speechErrorMessage'
@@ -59,6 +60,7 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
   const { user } = useUser()
   const { categories } = useCategories()
   const { wallets } = useWallets()
+  const { toast } = useToast()
   const [isListening, setIsListening] = useState(false)
   const [interimText, setInterimText] = useState('')
   const [rawText, setRawText] = useState('')
@@ -191,7 +193,7 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
       resetForm()
       if (onTransactionAdded) onTransactionAdded()
     } else {
-      alert('Error al guardar el movimiento: ' + error.message)
+      toast.error('Error al guardar el movimiento: ' + error.message)
       console.error('Error guardando movimiento por voz:', error)
     }
     setSubmitting(false)

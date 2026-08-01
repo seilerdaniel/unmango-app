@@ -2048,3 +2048,56 @@ Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**57 archivos, 340 tests**,
 todos pasando — 328 previos + 16 nuevos − 4 viejos reemplazados), `npm run
 build` (OK).
+
+## Sistema de Toasts y ConfirmDialog — reemplazo de alert()/confirm() (Fase 2 UX/UI)
+
+**Problema**: la app usaba `window.alert()` / `window.confirm()` nativos (66
+usos en 21 archivos). Son bloqueantes, feos, rompen el flujo con el modal del
+navegador y no son accesibles (no se pueden leer bien con lectores de pantalla
+ni hay feedback para errores no críticos).
+
+**Decisión**: contexto propio ligero (`ToastContext`) en vez de una librería
+externa — la API es pequeña, no justifica una dependencia nueva.
+
+- [x] **`src/context/ToastContext.tsx`** (`ToastProvider` + `useToast`):
+  - `toast.success(message)`, `toast.error(message)`, `toast.warning(message)`,
+    `toast.info(message)` — cada variante con su propio estilo e icono
+    (CheckCircle2 / XCircle / AlertTriangle / Info de lucide-react).
+  - Los toasts se auto-descartan a los 4 segundos y tienen botón de cierre.
+    Contenedor `fixed top-4 inset-x-0 z-[80]` con `aria-live="polite"` para
+    que los lectores de pantalla anuncien las notificaciones.
+  - `confirmDialog(options): Promise<boolean>` reemplaza a `window.confirm`:
+    resuelve `true`/`false` según la acción elegida. `useToast` tira error si
+    se usa fuera del provider (falla temprano en vez de romper silencioso).
+- [x] **`src/components/ConfirmDialog.tsx`**: modal accesible — `role="dialog"`,
+  `aria-modal="true"`, `aria-labelledby`; focus inicial en Cancelar (acción
+  segura) y restaura el foco al elemento que abrió el diálogo al cerrarse;
+  Esc cancela, Enter confirma, click en el overlay cancela. Variantes `default`
+  (ámbar) y `danger` (rojo, para acciones destructivas).
+- [x] **`src/app/layout.tsx`**: `ToastProvider` agregado al árbol de providers
+  (dentro de `DashboardDataProvider`), cubriendo toda la app.
+- [x] **Refactor de los 21 archivos** (66 usos): errores de guardado/creación →
+  `toast.error`, confirmaciones destructivas (eliminar, desvincular, saldar,
+  restaurar backup) → `confirmDialog` con `variant: 'danger'`, avisos
+  informativos ("sin conexión: guardado local", "ya tenés todas las categorías
+  sugeridas") → `toast.info`/`toast.warning`. Se reemplazó también el
+  `alert` de "Sesión no válida" en TransactionForm.
+- [x] **Tests** (16 nuevos): `src/context/__tests__/ToastContext.test.tsx` (7:
+  error fuera del provider, agregar toast, auto-dismiss 4s con fake timers,
+  descarte manual, múltiples toasts, confirm/cancel resuelven la promesa) y
+  `src/components/__tests__/ConfirmDialog.test.tsx` (9: no renderiza cerrado,
+  textos default/custom, confirm/cancel, Esc/Enter, overlay, restauración de
+  focus).
+- [x] **`src/test-utils/AppProviders.tsx`**: envuelto con `ToastProvider` para
+  que los tests de componentes refactorizados no rompan.
+- [x] **`BackupRestore.test.tsx`** actualizado: mockeaba `window.confirm`/
+  `window.alert`; ahora confirma el modal nuevo (`getByRole('button',
+  { name: 'Restaurar' })`).
+- [ ] **Fuera de scope (consciente)**: los `window.prompt` que piden input al
+  usuario (DebtsManager pago, SavingsGoals monto, RecurringManager cotización
+  USD) siguen como estaban — reemplazarlos por un modal con campo de texto es
+  una tarea aparte.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**59 archivos, 356 tests**,
+todos pasando — 340 previos + 16 nuevos), `npm run build` (OK).

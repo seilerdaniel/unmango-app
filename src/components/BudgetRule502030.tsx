@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useToast } from '@/context/ToastContext'
 import { computeRule502030, BudgetGroup } from '@/lib/rule502030'
 import { PieChart, ChevronDown } from 'lucide-react'
 
@@ -22,6 +23,7 @@ const GROUP_COLORS: Record<BudgetGroup, string> = {
 export default function BudgetRule502030() {
   const { categories, refreshCategories } = useCategories()
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast } = useToast()
   const [income, setIncome] = useState(0)
   const [categorySpends, setCategorySpends] = useState<{ categoryId: string; spent: number }[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,7 +68,7 @@ export default function BudgetRule502030() {
       .eq('id', categoryId)
 
     if (error) {
-      alert('Error al asignar el grupo: ' + error.message)
+      toast.error('Error al asignar el grupo: ' + error.message)
       console.error('Error asignando budget_group:', error)
       return
     }

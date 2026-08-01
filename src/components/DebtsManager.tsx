@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { computeDebtProgress, daysOverdue } from '@/lib/debts'
 import { applyTax } from '@/lib/applyTax'
 import { Debt } from '@/types'
@@ -29,6 +30,7 @@ interface DebtsManagerProps {
 export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) {
   const { user } = useUser()
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast, confirmDialog } = useToast()
   const [debts, setDebts] = useState<Debt[]>([])
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(true)
@@ -94,20 +96,26 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
       setForm(emptyForm)
       await loadDebts()
     } else {
-      alert('Error al crear la deuda: ' + error.message)
+      toast.error('Error al crear la deuda: ' + error.message)
       console.error('Error creando deuda:', error)
     }
     setSubmitting(false)
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('¿Eliminar este registro? Los pagos/cobros ya registrados quedan en tu historial de todos modos.')) return
+    const confirmed = await confirmDialog({
+      title: 'Eliminar registro',
+      message: '¿Eliminar este registro? Los pagos/cobros ya registrados quedan en tu historial de todos modos.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!confirmed) return
 
     const { error } = await supabase.from('debts').delete().eq('id', id)
     if (!error) {
       setDebts((prev) => prev.filter((d) => d.id !== id))
     } else {
-      alert('Error al eliminar: ' + error.message)
+      toast.error('Error al eliminar: ' + error.message)
       console.error('Error eliminando deuda:', error)
     }
   }
@@ -119,7 +127,7 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
 
     const amount = Number(input)
     if (!amount || amount <= 0) {
-      alert('Monto inválido.')
+      toast.error('Monto inválido.')
       return
     }
 
@@ -137,7 +145,7 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
       .eq('id', debt.id)
 
     if (updateError) {
-      alert('Error al registrar el pago: ' + updateError.message)
+      toast.error('Error al registrar el pago: ' + updateError.message)
       console.error('Error actualizando deuda:', updateError)
       setPayingId(null)
       return

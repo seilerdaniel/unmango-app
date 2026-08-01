@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
 
 interface ImportTransactionsProps {
@@ -66,6 +67,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
   const { user } = useUser()
   const { categories } = useCategories()
   const { wallets } = useWallets()
+  const { toast } = useToast()
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [dateColumn, setDateColumn] = useState('')
@@ -100,7 +102,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
         setAmountColumn(findCol(['monto', 'importe', 'amount', 'valor']))
       },
       error: (err: Error) => {
-        alert('No se pudo leer el archivo CSV: ' + err.message)
+        toast.error('No se pudo leer el archivo CSV: ' + err.message)
       },
     })
   }
@@ -162,9 +164,7 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
       const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
       const { error } = await supabase.from('transactions').insert(batch)
       if (error) {
-        alert(
-          `Se importaron ${insertedTotal} movimientos antes de un error: ${error.message}`
-        )
+        toast.error(`Se importaron ${insertedTotal} movimientos antes de un error: ${error.message}`)
         console.error('Error importando transacciones:', error)
         setImporting(false)
         setImportedCount(insertedTotal)

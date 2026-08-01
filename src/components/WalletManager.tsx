@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useToast } from '@/context/ToastContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import { sortWallets, filterWalletsByType, WalletSortField } from '@/lib/walletSort'
 import ColorPicker from '@/components/ColorPicker'
@@ -52,6 +53,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [submitting, setSubmitting] = useState(false)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast, confirmDialog } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
 
   function resetForm() {
@@ -97,7 +99,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         resetForm()
         if (onWalletsUpdated) onWalletsUpdated()
       } else {
-        alert(`Error al ${editingId ? 'editar' : 'crear'} la billetera: ` + error.message)
+        toast.error(`Error al ${editingId ? 'editar' : 'crear'} la billetera: ` + error.message)
         console.error(`Error ${editingId ? 'editando' : 'creando'} billetera:`, error)
       }
     }
@@ -105,19 +107,20 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   }
 
   async function handleDeleteWallet(id: string) {
-    if (
-      confirm(
-        '¿Eliminar esta billetera? Los movimientos que tenía asignados van a quedar sin billetera, no se borran.'
-      )
-    ) {
-      const { error } = await supabase.from('wallets').delete().eq('id', id)
-      if (!error) {
-        if (editingId === id) resetForm()
-        if (onWalletsUpdated) onWalletsUpdated()
-      } else {
-        alert('Error al eliminar la billetera: ' + error.message)
-        console.error('Error eliminando billetera:', error)
-      }
+    const ok = await confirmDialog({
+      title: 'Eliminar billetera',
+      message: '¿Eliminar esta billetera? Los movimientos que tenía asignados van a quedar sin billetera, no se borran.',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!ok) return
+    const { error } = await supabase.from('wallets').delete().eq('id', id)
+    if (!error) {
+      if (editingId === id) resetForm()
+      if (onWalletsUpdated) onWalletsUpdated()
+    } else {
+      toast.error('Error al eliminar la billetera: ' + error.message)
+      console.error('Error eliminando billetera:', error)
     }
   }
 

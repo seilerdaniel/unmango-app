@@ -4,6 +4,7 @@ import { useState, useRef, createElement } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import ColorPicker from '@/components/ColorPicker'
 import IconPicker from '@/components/IconPicker'
 import PopoverPicker from '@/components/PopoverPicker'
@@ -18,6 +19,7 @@ interface CategoryManagerProps {
 export default function CategoryManager({ onCategoriesUpdated }: CategoryManagerProps) {
   const { user } = useUser()
   const { categories, loading: categoriesLoading, error: categoriesError, refreshCategories } = useCategories()
+  const { toast, confirmDialog } = useToast()
   const [name, setName] = useState('')
   const [color, setColor] = useState('#f59e0b')
   const [icon, setIcon] = useState('tag')
@@ -52,22 +54,27 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
         await refreshCategories()
         if (onCategoriesUpdated) onCategoriesUpdated()
       } else {
-        alert('Error al crear categoría: ' + error.message)
+        toast.error('Error al crear categoría: ' + error.message)
       }
     }
     setSubmitting(false)
   }
 
   async function handleDeleteCategory(id: string) {
-    if (confirm('¿Quieres eliminar esta categoría?')) {
-      const { error } = await supabase.from('categories').delete().eq('id', id)
-      if (!error) {
-        await refreshCategories()
-        if (onCategoriesUpdated) onCategoriesUpdated()
-      } else {
-        alert('Error al eliminar la categoría: ' + error.message)
-        console.error('Error eliminando categoría:', error)
-      }
+    const confirmed = await confirmDialog({
+      title: 'Eliminar categoría',
+      message: '¿Quieres eliminar esta categoría?',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+    const { error } = await supabase.from('categories').delete().eq('id', id)
+    if (!error) {
+      await refreshCategories()
+      if (onCategoriesUpdated) onCategoriesUpdated()
+    } else {
+      toast.error('Error al eliminar la categoría: ' + error.message)
+      console.error('Error eliminando categoría:', error)
     }
   }
 
@@ -90,7 +97,7 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
       }))
 
       if (toInsert.length === 0) {
-        alert('Ya tenés todas las categorías sugeridas cargadas.')
+        toast.info('Ya tenés todas las categorías sugeridas cargadas.')
         return
       }
 
@@ -99,7 +106,7 @@ export default function CategoryManager({ onCategoriesUpdated }: CategoryManager
         await refreshCategories()
         if (onCategoriesUpdated) onCategoriesUpdated()
       } else {
-        alert('Error al cargar las categorías sugeridas: ' + error.message)
+        toast.error('Error al cargar las categorías sugeridas: ' + error.message)
         console.error('Error cargando categorías sugeridas:', error)
       }
     } finally {

@@ -14,6 +14,7 @@ import { Line } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { SavingsGoal } from '@/types'
 import { SUGGESTED_GOALS } from '@/lib/suggestedGoals'
 import { PiggyBank, Plus, Trash2, Pencil, Sparkles } from 'lucide-react'
@@ -59,6 +60,7 @@ function projectGoal(goal: SavingsGoal) {
 
 export default function SavingsGoals() {
   const { user } = useUser()
+  const { toast, confirmDialog } = useToast()
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [name, setName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
@@ -137,7 +139,7 @@ export default function SavingsGoals() {
         setMonthlyInterestPercent('')
         await loadGoals()
       } else {
-        alert('Error al crear la meta: ' + error.message)
+        toast.error('Error al crear la meta: ' + error.message)
         console.error('Error creando meta de ahorro:', error)
       }
     }
@@ -152,7 +154,7 @@ export default function SavingsGoals() {
     if (input === null) return
     const newAmount = Number(input)
     if (Number.isNaN(newAmount) || newAmount < 0) {
-      alert('Monto inválido.')
+      toast.error('Monto inválido.')
       return
     }
 
@@ -164,20 +166,25 @@ export default function SavingsGoals() {
     if (!error) {
       await loadGoals()
     } else {
-      alert('Error al actualizar la meta: ' + error.message)
+      toast.error('Error al actualizar la meta: ' + error.message)
       console.error('Error actualizando meta de ahorro:', error)
     }
   }
 
   async function handleDeleteGoal(id: string) {
-    if (confirm('¿Eliminar esta meta de ahorro?')) {
-      const { error } = await supabase.from('savings_goals').delete().eq('id', id)
-      if (!error) {
-        setGoals((prev) => prev.filter((g) => g.id !== id))
-      } else {
-        alert('Error al eliminar la meta: ' + error.message)
-        console.error('Error eliminando meta de ahorro:', error)
-      }
+    const ok = await confirmDialog({
+      title: 'Eliminar meta de ahorro',
+      message: '¿Eliminar esta meta de ahorro?',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!ok) return
+    const { error } = await supabase.from('savings_goals').delete().eq('id', id)
+    if (!error) {
+      setGoals((prev) => prev.filter((g) => g.id !== id))
+    } else {
+      toast.error('Error al eliminar la meta: ' + error.message)
+      console.error('Error eliminando meta de ahorro:', error)
     }
   }
 

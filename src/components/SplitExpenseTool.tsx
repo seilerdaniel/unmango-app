@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useToast } from '@/context/ToastContext'
 import { computeSplitShare, buildSplitExpenseMessage, buildWhatsAppLink } from '@/lib/splitExpense'
 import { Users, X, MessageCircle } from 'lucide-react'
 
@@ -21,6 +22,7 @@ interface SplitExpenseToolProps {
 export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProps) {
   const { user } = useUser()
   const { formatAmount } = usePrivacy()
+  const { toast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
@@ -64,7 +66,7 @@ export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProp
           },
         ])
         if (error) {
-          alert('Error al registrar la deuda: ' + error.message)
+          toast.error('Error al registrar la deuda: ' + error.message)
           console.error('Error creando deuda desde dividir gasto:', error)
         } else {
           setSavedMessage('Registrado en Deudas y Préstamos ✓')

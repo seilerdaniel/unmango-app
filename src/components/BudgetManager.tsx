@@ -6,6 +6,7 @@ import { Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { suggestBudgets } from '@/lib/suggestedBudgets'
 import { Target, Plus, Trash2, AlertCircle, Sparkles } from 'lucide-react'
 
@@ -25,6 +26,7 @@ export default function BudgetManager() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const { isPrivate, formatAmount } = usePrivacy()
+  const { toast } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
 
   function applySuggestedBudget(categoryId: string, amount: number) {
@@ -146,7 +148,7 @@ export default function BudgetManager() {
       setLimitAmount('')
       await reloadData()
     } else {
-      alert('Error al guardar el presupuesto: ' + error.message)
+      toast.error('Error al guardar el presupuesto: ' + error.message)
       console.error('Error guardando presupuesto:', error)
     }
 
@@ -158,7 +160,7 @@ export default function BudgetManager() {
     if (!error) {
       setBudgets((prev) => prev.filter((b) => b.id !== id))
     } else {
-      alert('Error al eliminar el presupuesto: ' + error.message)
+      toast.error('Error al eliminar el presupuesto: ' + error.message)
       console.error('Error eliminando presupuesto:', error)
     }
   }

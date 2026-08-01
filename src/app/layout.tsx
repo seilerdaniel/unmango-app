@@ -7,6 +7,7 @@ import { CategoriesProvider } from "@/context/CategoriesContext";
 import { WalletsProvider } from "@/context/WalletsContext";
 import { DashboardDataProvider } from "@/context/DashboardDataContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { ToastProvider } from "@/context/ToastContext";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
@@ -88,7 +89,7 @@ export default function RootLayout({
                 <CategoriesProvider>
                   <WalletsProvider>
                     <DashboardDataProvider>
-                      {children}
+                      <ToastProvider>{children}</ToastProvider>
                     </DashboardDataProvider>
                   </WalletsProvider>
                 </CategoriesProvider>

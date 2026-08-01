@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
+import { useToast } from '@/context/ToastContext'
 import { CalendarDays, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
 // Scope mínimo necesario: solo crear/editar/borrar eventos, no acceso
@@ -15,6 +16,7 @@ const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
 export default function GoogleCalendarLink() {
   const { user } = useUser()
+  const { toast, confirmDialog } = useToast()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -85,7 +87,7 @@ export default function GoogleCalendarLink() {
       },
     })
     if (error) {
-      alert('Error conectando con Google: ' + error.message)
+      toast.error('Error conectando con Google: ' + error.message)
       setConnecting(false)
     }
     // Si no hay error, el navegador redirige a Google — no hace falta
@@ -93,7 +95,13 @@ export default function GoogleCalendarLink() {
   }
 
   async function handleDisconnect() {
-    if (!confirm('¿Desconectar Google Calendar? Dejamos de crear/actualizar eventos hasta que vuelvas a conectar.')) return
+    const ok = await confirmDialog({
+      title: 'Desconectar Google Calendar',
+      message: '¿Desconectar Google Calendar? Dejamos de crear/actualizar eventos hasta que vuelvas a conectar.',
+      confirmText: 'Desconectar',
+      variant: 'danger',
+    })
+    if (!ok) return
 
     if (!user) return
 
@@ -101,7 +109,7 @@ export default function GoogleCalendarLink() {
     if (!error) {
       setConnected(false)
     } else {
-      alert('Error al desconectar: ' + error.message)
+      toast.error('Error al desconectar: ' + error.message)
     }
   }
 
