@@ -31,6 +31,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { parseTelegramMessage } from './message-parser.ts'
 import {
+  buildBilleterasReply,
   buildConsejosReply,
   buildCuotasReply,
   buildDebtConfirmedReply,
@@ -55,10 +56,13 @@ import {
   buildScoreReply,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
+  buildVencimientosReply,
   computeFinancialHealthScore,
   computeHouseholdBalance,
   computeSafeToSpend,
   computeStreakBreak,
+  computeUpcomingDueItems,
+  computeWalletBalances,
   detectAntExpenses,
   generateAdviceMessages,
   getDaysRemainingInMonth,
@@ -252,6 +256,108 @@ async function fetchHouseholdData(
   }
 
   return { balance, unsettledDays }
+}
+
+// Saldo por billetera, replicando get_wallet_balances() pero con
+// consultas directas por user_id (la RPC filtra por auth.uid()).
+async function fetchWalletBalances(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<ReturnType<typeof computeWalletBalances>> {
+  const [walletsResult, transactionsResult] = await Promise.all([
+    supabase
+      .from('wallets')
+      .select('id, name, type, initial_balance')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('transactions')
+      .select('wallet_id, type, amount_ars, is_usd, amount_usd')
+      .eq('user_id', userId),
+  ])
+
+  if (walletsResult.error || transactionsResult.error) {
+    throw walletsResult.error || transactionsResult.error
+  }
+
+  return computeWalletBalances(
+    (walletsResult.data ?? []).map((w) => ({
+      id: w.id,
+      name: w.name,
+      type: w.type,
+      initialBalance: Number(w.initial_balance) || 0,
+    })),
+    (transactionsResult.data ?? []).map((t) => ({
+      walletId: t.wallet_id,
+      type: t.type,
+      amountArs: Number(t.amount_ars) || 0,
+      isUsd: t.is_usd,
+      amountUsd: t.amount_usd !== null ? Number(t.amount_usd) : null,
+    }))
+  )
+}
+
+// Vencimientos próximos: fijos activos, cuotas impagas y deudas "debo"
+// con fecha — todo dentro de la ventana de 30 días (UPCOMING_WINDOW_DAYS).
+async function fetchUpcomingDueItems(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<ReturnType<typeof computeUpcomingDueItems>> {
+  const [recurring, purchases, payments, debts] = await Promise.all([
+    supabase
+      .from('recurring_expenses')
+      .select('title, amount, currency, billing_day, billing_frequency, billing_month')
+      .eq('user_id', userId)
+      .eq('is_active', true),
+    supabase
+      .from('installment_purchases')
+      .select('id, description, total_amount, installments_count, first_installment_date')
+      .eq('user_id', userId),
+    supabase
+      .from('installment_payments')
+      .select('installment_purchase_id, installment_number')
+      .eq('user_id', userId),
+    supabase
+      .from('debts')
+      .select('description, remaining_amount, currency, due_date, debt_type')
+      .eq('user_id', userId),
+  ])
+
+  for (const r of [recurring, purchases, payments, debts]) {
+    if (r.error) throw r.error
+  }
+
+  const paidByPurchase = new Map<string, number[]>()
+  for (const p of payments.data ?? []) {
+    const list = paidByPurchase.get(p.installment_purchase_id) ?? []
+    list.push(p.installment_number)
+    paidByPurchase.set(p.installment_purchase_id, list)
+  }
+
+  return computeUpcomingDueItems({
+    recurring: (recurring.data ?? []).map((r) => ({
+      title: r.title,
+      amount: Number(r.amount) || 0,
+      currency: r.currency,
+      billingDay: r.billing_day,
+      billingFrequency: r.billing_frequency,
+      billingMonth: r.billing_month,
+    })),
+    installments: (purchases.data ?? []).map((p) => ({
+      description: p.description,
+      totalAmount: Number(p.total_amount) || 0,
+      installmentsCount: p.installments_count,
+      firstInstallmentDate: p.first_installment_date,
+      paidInstallmentNumbers: paidByPurchase.get(p.id) ?? [],
+    })),
+    debts: (debts.data ?? []).map((d) => ({
+      description: d.description,
+      remainingAmount: Number(d.remaining_amount) || 0,
+      currency: d.currency,
+      dueDate: d.due_date,
+      debtType: d.debt_type,
+    })),
+  })
 }
 
 interface AdviceData {
@@ -614,6 +720,12 @@ Deno.serve(async (req: Request) => {
       } else if (parsed.command === 'hogar') {
         const household = await fetchHouseholdData(supabaseAdmin, link.user_id)
         await reply(buildHogarReply(household.balance, household.unsettledDays))
+      } else if (parsed.command === 'billeteras') {
+        const balances = await fetchWalletBalances(supabaseAdmin, link.user_id)
+        await reply(buildBilleterasReply(balances))
+      } else if (parsed.command === 'vencimientos') {
+        const dueItems = await fetchUpcomingDueItems(supabaseAdmin, link.user_id)
+        await reply(buildVencimientosReply(dueItems))
       }
     } catch (err) {
       console.error('Error consultando datos para el bot:', err)
@@ -658,8 +770,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // Expensas, deudas, cuotas, fijos y metas requieren que el chat esté
-  // vinculado — buscamos a qué usuario corresponde este chat_id.
+  // Deudas, cuotas, fijos, metas, hogar, billeteras y vencimientos
+  // requieren que el chat esté vinculado — buscamos a qué usuario
+  // corresponde este chat_id.
   const { data: link, error: findError } = await supabaseAdmin
     .from('telegram_links')
     .select('user_id')

@@ -2335,3 +2335,55 @@ queries por `user_id`:
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 465 tests**,
 todos pasando — 413 previos + 52 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 5 — Consultas detalladas: `/billeteras` y `/vencimientos`
+
+Dos comandos nuevos de consulta para el bot de Telegram sobre el trabajo
+de la Tanda 4.
+
+### `/billeteras` — saldo individual por billetera
+- `computeWalletBalances` replica `get_wallet_balances()` (wallets.sql)
+  con consultas directas por `user_id` (la RPC filtra por `auth.uid()` y
+  no sirve con service role): saldo por billetera = `initial_balance` +
+  ingresos vinculados − gastos vinculados (todo en `amount_ars`, igual
+  que la app; las transacciones sin `wallet_id` no tocan ningún saldo).
+- `buildBilleterasReply` lista cada billetera con saldo en ARS, el USD
+  de las transacciones en dólares vinculadas (solo informativo, las
+  billeteras se llevan en ARS) y la etiqueta de tipo
+  (`WALLET_TYPES` del frontend: Billetera Virtual, Banco, Efectivo, …),
+  más el total en ARS.
+- `fetchWalletBalances` levanta `wallets` + `transactions` en paralelo.
+
+### `/vencimientos` — lo que vence en los próximos 30 días
+- `nextBillingDate` replica `src/lib/recurringBilling.ts`
+  (`daysUntilNextBilling`) pero devolviendo la fecha: mensual clampea
+  días inexistentes al último día del mes; anual respeta `billing_month`.
+- `computeInstallmentScheduleItems` replica `computeInstallmentSchedule`
+  de `src/lib/installments.ts`: cuotas mensuales desde
+  `first_installment_date` con el resto del redondeo en la última.
+- `computeUpcomingDueItems` consolida fijos activos (próxima
+  facturación), cuotas impagas (cuotas que vencen en la ventana,
+  restando `installment_payments`) y deudas tipo "debo" con `due_date`,
+  dentro de la ventana de 30 días y ordenadas por fecha.
+- `buildVencimientosReply` muestra fecha (dd/mm), descripción, detalle
+  de cuota, monto (ARS/USD) y tipo, más el total a pagar en ARS y USD.
+- `fetchUpcomingDueItems` levanta `recurring_expenses` activos,
+  `installment_purchases` + `installment_payments` y `debts` en paralelo.
+
+### Tests (13 nuevos, 478 totales)
+- `message-parser.test.ts`: 35 tests (1 nuevo) — `/billeteras` y
+  `/vencimientos` se reconocen como comandos.
+- `reply-builder.test.ts`: 70 tests (12 nuevos) — `nextBillingDate`
+  (mensual, próximo mes, clampeo 31→30, anual), schedule de cuotas con
+  resto en la última, consolidación y orden por fecha, exclusión fuera
+  de ventana y de "me_deben", y builders de ambas respuestas.
+
+### Fuera de scope (consciente)
+- `/vencimientos` no muestra deudas sin fecha de vencimiento (no hay
+  cuándo vencer) ni cuotas vencidas fuera de la ventana.
+- El total en dólares se suma por separado (no se convierte a ARS; el
+  bot no consulta la cotización, igual que el resto de comandos).
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 478 tests**,
+todos pasando — 465 previos + 13 nuevos), `npm run build` (OK).

@@ -222,6 +222,11 @@ describe('parseTelegramMessage: comandos nuevos', () => {
     expect(parseTelegramMessage('/consejos')).toEqual({ kind: 'command', command: 'consejos' })
     expect(parseTelegramMessage('/hogar')).toEqual({ kind: 'command', command: 'hogar' })
   })
+
+  it('reconoce /billeteras y /vencimientos', () => {
+    expect(parseTelegramMessage('/billeteras')).toEqual({ kind: 'command', command: 'billeteras' })
+    expect(parseTelegramMessage('/vencimientos')).toEqual({ kind: 'command', command: 'vencimientos' })
+  })
 })
 
 describe('parseTelegramMessage: el gasto común sigue intacto', () => {

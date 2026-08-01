@@ -3,7 +3,8 @@
 Mandale un mensaje al bot tipo `Gasto 4500 café` y UnMango lo registra
 automáticamente. También entendé deudas, cuotas, gastos fijos y metas de
 ahorro en texto libre, y responde comandos de consulta (/score, /deudas,
-/cuotas, /metas, /fijos, /consejos, /hogar). No pude hacer estos pasos
+/cuotas, /metas, /fijos, /consejos, /hogar, /billeteras, /vencimientos).
+No pude hacer estos pasos
 por vos porque requieren que crees tu propio bot en Telegram (gratis,
 pero es una cuenta/token que solo vos podés generar).
 
@@ -24,6 +25,9 @@ estos comandos:
 - `/fijos` — lista de tus suscripciones y gastos fijos activos.
 - `/consejos` — recomendaciones según tus números.
 - `/hogar` — balance de gastos de hogar con tu pareja.
+- `/billeteras` — saldo individual de cada billetera (ARS + USD).
+- `/vencimientos` — lo que vence en los próximos 30 días (fijos,
+  cuotas impagas y deudas), ordenado por fecha y con total a pagar.
 - `/ayuda` — lista de comandos.
 
 ## Intenciones en texto libre

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildBilleterasReply,
   buildConsejosReply,
   buildCuotasReply,
   buildDebtConfirmedReply,
@@ -23,10 +24,14 @@ import {
   buildScoreReply,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
+  buildVencimientosReply,
   computeFinancialHealthScore,
   computeHouseholdBalance,
+  computeInstallmentScheduleItems,
   computeSafeToSpend,
   computeStreakBreak,
+  computeUpcomingDueItems,
+  computeWalletBalances,
   detectAntExpenses,
   formatArs,
   formatMoney,
@@ -35,6 +40,7 @@ import {
   hasNoFinancialData,
   isGoalStalled,
   monthlyEquivalentAmount,
+  nextBillingDate,
 } from './reply-builder'
 
 describe('formatArs', () => {
@@ -210,6 +216,8 @@ describe('mensajes de texto', () => {
     expect(help).toContain('/fijos')
     expect(help).toContain('/consejos')
     expect(help).toContain('/hogar')
+    expect(help).toContain('/billeteras')
+    expect(help).toContain('/vencimientos')
   })
 })
 
@@ -497,5 +505,112 @@ describe('confirmaciones nuevas', () => {
 
   it('buildSaveErrorReply existe', () => {
     expect(buildSaveErrorReply()).toContain('error')
+  })
+})
+
+describe('buildBilleterasReply', () => {
+  it('sin billeteras sugiere crear una', () => {
+    expect(buildBilleterasReply([])).toContain('Todavía no creaste ninguna billetera')
+  })
+
+  it('muestra saldo, tipo y total', () => {
+    const reply = buildBilleterasReply([
+      { name: 'MercadoPago', type: 'virtual_wallet', balance: 25000, usdHeld: 0 },
+      { name: 'Banco Nación', type: 'bank', balance: 100000, usdHeld: 0 },
+      { name: 'Caja ahorro USD', type: 'bank', balance: 0, usdHeld: 150 },
+    ])
+    expect(reply).toContain('MercadoPago — $25.000 [Billetera Virtual]')
+    expect(reply).toContain('Banco Nación — $100.000 [Banco]')
+    expect(reply).toContain('(+ US$150)')
+    expect(reply).toContain('Total: $125.000')
+  })
+
+  it('computeWalletBalances replica get_wallet_balances', () => {
+    const rows = computeWalletBalances(
+      [{ id: 'w1', name: 'Efectivo', type: 'cash', initialBalance: 1000 }],
+      [
+        { walletId: 'w1', type: 'income', amountArs: 5000, isUsd: false, amountUsd: null },
+        { walletId: 'w1', type: 'expense', amountArs: 2000, isUsd: false, amountUsd: null },
+        { walletId: null, type: 'expense', amountArs: 999, isUsd: false, amountUsd: null },
+      ]
+    )
+    expect(rows[0].balance).toBe(4000)
+  })
+})
+
+describe('vencimientos', () => {
+  const today = new Date(2026, 7, 1)
+
+  it('nextBillingDate mensual vence este mes', () => {
+    const next = nextBillingDate(15, 'monthly', null, today)
+    expect(next.getDate()).toBe(15)
+    expect(next.getMonth()).toBe(7)
+  })
+
+  it('nextBillingDate mensual vence el próximo mes si el día ya pasó', () => {
+    const next = nextBillingDate(5, 'monthly', null, new Date(2026, 7, 15))
+    expect(next.getMonth()).toBe(8)
+    expect(next.getDate()).toBe(5)
+  })
+
+  it('nextBillingDate mensual clampea días inexistentes (31 → 30 en abril)', () => {
+    const next = nextBillingDate(31, 'monthly', null, new Date(2026, 3, 1))
+    expect(next.getDate()).toBe(30)
+  })
+
+  it('nextBillingDate anual respeta billing_month', () => {
+    const next = nextBillingDate(10, 'annual', 12, today)
+    expect(next.getMonth()).toBe(11)
+    expect(next.getDate()).toBe(10)
+  })
+
+  it('computeInstallmentScheduleItems reparte el resto en la última cuota', () => {
+    const items = computeInstallmentScheduleItems(1000, 3, new Date(2026, 0, 10))
+    expect(items.map((i) => i.installmentNumber)).toEqual([1, 2, 3])
+    expect(items.map((i) => i.amount)).toEqual([333.33, 333.33, 333.34])
+    expect(items.reduce((acc, i) => acc + i.amount, 0)).toBe(1000)
+  })
+
+  it('computeUpcomingDueItems consolida fijos, cuotas y deudas ordenadas por fecha', () => {
+    const items = computeUpcomingDueItems({
+      recurring: [{ title: 'Netflix', amount: 5000, currency: 'ARS', billingDay: 20, billingFrequency: 'monthly', billingMonth: null }],
+      installments: [
+        { description: 'Heladera', totalAmount: 120000, installmentsCount: 12, firstInstallmentDate: '2026-07-15', paidInstallmentNumbers: [1] },
+      ],
+      debts: [
+        { description: 'Préstamo', remainingAmount: 30000, currency: 'ARS', dueDate: '2026-08-25', debtType: 'debo' },
+        { description: 'Crédito que me deben', remainingAmount: 99999, currency: 'ARS', dueDate: '2026-08-10', debtType: 'me_deben' },
+      ],
+      today,
+    })
+    expect(items.map((i) => i.kind)).toEqual(['cuota', 'fijo', 'deuda'])
+    expect(items[0].detail).toBe('cuota 2/12')
+  })
+
+  it('computeUpcomingDueItems ignora lo que vence fuera de la ventana', () => {
+    const items = computeUpcomingDueItems({
+      recurring: [{ title: 'Seguro', amount: 10000, currency: 'ARS', billingDay: 15, billingFrequency: 'annual', billingMonth: 12 }],
+      installments: [],
+      debts: [],
+      today,
+    })
+    expect(items).toEqual([])
+  })
+
+  it('buildVencimientosReply arma el listado con total ARS y USD', () => {
+    const reply = buildVencimientosReply([
+      { description: 'Netflix', dueDate: '2026-08-20', amount: 5000, currency: 'ARS', kind: 'fijo' },
+      { description: 'Préstamo', dueDate: '2026-08-25', amount: 30000, currency: 'ARS', kind: 'deuda' },
+      { description: 'Suscripción USD', dueDate: '2026-08-15', amount: 10, currency: 'USD', kind: 'fijo' },
+    ])
+    expect(reply).toContain('20/08 — Netflix — $5.000 [fijo]')
+    expect(reply).toContain('25/08 — Préstamo — $30.000 [deuda]')
+    expect(reply).toContain('15/08 — Suscripción USD — US$10 [fijo]')
+    expect(reply).toContain('Total a pagar: $35.000')
+    expect(reply).toContain('US$10')
+  })
+
+  it('buildVencimientosReply informa cuando no hay vencimientos', () => {
+    expect(buildVencimientosReply([])).toContain('No tenés vencimientos')
   })
 })

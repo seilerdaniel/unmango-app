@@ -14,7 +14,11 @@
 // (src/lib/householdBalance.ts), detectAntExpenses
 // (src/lib/antExpenses.ts), isGoalStalled (src/lib/savingsGoalStall.ts),
 // computeStreakBreak (src/lib/zeroSpendStats.ts) y generateAdviceMessages
-// (versión en texto de src/lib/financialAdvice.ts).
+// (versión en texto de src/lib/financialAdvice.ts). Para /billeteras se
+// replica get_wallet_balances() (wallets.sql) y para /vencimientos las
+// fórmulas de nextBillingDate (src/lib/recurringBilling.ts),
+// computeInstallmentScheduleItems (src/lib/installments.ts) y la regla
+// de deudas pendientes (src/lib/debts.ts).
 
 export type SafeToSpendStatus = 'safe' | 'tight' | 'over'
 
@@ -103,6 +107,8 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 /fijos — tus suscripciones y gastos fijos
 /consejos — recomendaciones según tus números
 /hogar — balance de gastos de hogar con tu pareja
+/billeteras — saldo individual de cada billetera
+/vencimientos — lo que vence en los próximos 30 días
 /ayuda — este mensaje
 
 También podés mandarme texto libre, por ejemplo:
@@ -613,4 +619,285 @@ export function buildHogarReply(balance: HouseholdBalance | null, unsettledDays:
     lines.push(`Hace ${unsettledDays} días que está sin saldar — puede ser buen momento para arreglar cuentas.`)
   }
   return lines.join('\n')
+}
+
+// ---------------- Billeteras (replica de get_wallet_balances, wallets.sql) ----------------
+
+const WALLET_TYPE_LABELS: Record<string, string> = {
+  virtual_wallet: 'Billetera Virtual',
+  bank: 'Banco',
+  cash: 'Efectivo',
+  credit_card: 'Tarjeta de Crédito',
+  debit_card: 'Tarjeta de Débito',
+  other: 'Otra',
+}
+
+export interface WalletBalanceRow {
+  name: string
+  type: string
+  /** Saldo en ARS (saldo inicial + ingresos vinculados - gastos vinculados). */
+  balance: number
+  /** Suma de amount_usd de las transacciones en dólares vinculadas (informativo). */
+  usdHeld: number
+}
+
+/**
+ * Replica de get_wallet_balances() (wallets.sql): saldo por billetera =
+ * saldo inicial + ingresos vinculados - gastos vinculados, todo en ARS
+ * (amount_ars). Las transacciones sin billetera (wallet_id null, las
+ * viejas) no afectan ningún saldo — igual que en la app. Además suma el
+ * USD de las transacciones en dólares vinculadas para mostrarlo aparte.
+ */
+export function computeWalletBalances(
+  wallets: { id: string; name: string; type: string; initialBalance: number }[],
+  transactions: { walletId: string | null; type: string; amountArs: number; isUsd: boolean; amountUsd: number | null }[]
+): WalletBalanceRow[] {
+  return wallets.map((w) => {
+    const linked = transactions.filter((t) => t.walletId === w.id)
+    const balance = linked.reduce(
+      (acc, t) => acc + (t.type === 'income' ? t.amountArs : -t.amountArs),
+      w.initialBalance
+    )
+    const usdHeld = linked
+      .filter((t) => t.isUsd)
+      .reduce((acc, t) => acc + (Number(t.amountUsd) || 0), 0)
+    return { name: w.name, type: w.type, balance, usdHeld }
+  })
+}
+
+export function buildBilleterasReply(items: WalletBalanceRow[]): string {
+  if (items.length === 0) {
+    return 'Todavía no creaste ninguna billetera. Creá una desde la app (Billeteras) y volvé a preguntarme /billeteras.'
+  }
+  const lines = items.map((w) => {
+    const label = WALLET_TYPE_LABELS[w.type] ?? w.type
+    const usd = w.usdHeld > 0 ? ` (+ ${formatMoney(w.usdHeld, 'USD')})` : ''
+    return `• ${w.name} — ${formatArs(w.balance)}${usd} [${label}]`
+  })
+  const total = items.reduce((acc, w) => acc + w.balance, 0)
+  return ['Tus billeteras:', ...lines, '', `Total: ${formatArs(total)}`].join('\n')
+}
+
+// ---------------- Vencimientos próximos (replicas de recurringBilling / installments / debts) ----------------
+
+export type DueKind = 'fijo' | 'cuota' | 'deuda'
+
+export interface DueItem {
+  description: string
+  /** Fecha de vencimiento en formato YYYY-MM-DD. */
+  dueDate: string
+  amount: number
+  currency: string
+  kind: DueKind
+  /** Detalle opcional, ej. "cuota 3/12". */
+  detail?: string
+}
+
+/** Ventana por defecto de /vencimientos: lo que vence de hoy a 30 días. */
+export const UPCOMING_WINDOW_DAYS = 30
+
+export interface UpcomingDueInput {
+  recurring: {
+    title: string
+    amount: number
+    currency: string
+    billingDay: number
+    billingFrequency: BillingFrequency
+    billingMonth: number | null
+  }[]
+  installments: {
+    description: string
+    totalAmount: number
+    installmentsCount: number
+    firstInstallmentDate: string
+    paidInstallmentNumbers: number[]
+  }[]
+  debts: {
+    description: string
+    remainingAmount: number
+    currency: string
+    dueDate: string | null
+    debtType: 'debo' | 'me_deben'
+  }[]
+  today?: Date
+  windowDays?: number
+}
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function toIsoDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function clampToLastDayOfMonth(year: number, month: number, day: number): number {
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  return Math.min(day, lastDay)
+}
+
+/**
+ * Próxima fecha de facturación de un gasto recurrente — replica
+ * src/lib/recurringBilling.ts (daysUntilNextBilling), pero devolviendo
+ * la fecha en vez de los días que faltan.
+ */
+export function nextBillingDate(
+  billingDay: number,
+  frequency: BillingFrequency = 'monthly',
+  billingMonth: number | null = null,
+  today: Date = new Date()
+): Date {
+  const start = startOfDay(today)
+
+  if (frequency === 'annual' && billingMonth) {
+    const monthIndex = billingMonth - 1
+    const year = start.getFullYear()
+    let next = new Date(year, monthIndex, clampToLastDayOfMonth(year, monthIndex, billingDay))
+    if (next < start) {
+      next = new Date(year + 1, monthIndex, clampToLastDayOfMonth(year + 1, monthIndex, billingDay))
+    }
+    return next
+  }
+
+  const year = start.getFullYear()
+  const month = start.getMonth()
+  let next = new Date(year, month, clampToLastDayOfMonth(year, month, billingDay))
+  if (next < start) {
+    next = new Date(year, month + 1, clampToLastDayOfMonth(year, month + 1, billingDay))
+  }
+  return next
+}
+
+export interface InstallmentScheduleItem {
+  installmentNumber: number
+  dueDate: Date
+  amount: number
+}
+
+/**
+ * Plan de cuotas — replica src/lib/installments.ts (computeInstallmentSchedule):
+ * cuotas mensuales desde la primera fecha, con el resto del redondeo en
+ * la última para que la suma dé exactamente el total.
+ */
+export function computeInstallmentScheduleItems(
+  totalAmount: number,
+  installmentsCount: number,
+  firstInstallmentDate: Date
+): InstallmentScheduleItem[] {
+  if (installmentsCount <= 0) return []
+
+  const baseAmount = Math.floor((totalAmount / installmentsCount) * 100) / 100
+  const schedule: InstallmentScheduleItem[] = []
+  let accumulated = 0
+
+  for (let i = 1; i <= installmentsCount; i++) {
+    const isLast = i === installmentsCount
+    const amount = isLast ? Math.round((totalAmount - accumulated) * 100) / 100 : baseAmount
+    accumulated += amount
+
+    const dueDate = new Date(firstInstallmentDate)
+    dueDate.setMonth(dueDate.getMonth() + (i - 1))
+
+    schedule.push({ installmentNumber: i, dueDate, amount })
+  }
+
+  return schedule
+}
+
+/**
+ * Consolida los vencimientos que caen dentro de la ventana (de hoy a
+ * windowDays) y los ordena por fecha:
+ * - fijos recurrentes activos: su próxima facturación.
+ * - cuotas impagas: las cuotas que vencen en la ventana.
+ * - deudas tipo "debo" con fecha de vencimiento: solo las que vencen.
+ */
+export function computeUpcomingDueItems(input: UpcomingDueInput): DueItem[] {
+  const today = startOfDay(input.today ?? new Date())
+  const windowDays = input.windowDays ?? UPCOMING_WINDOW_DAYS
+  const items: DueItem[] = []
+
+  for (const r of input.recurring) {
+    const next = nextBillingDate(r.billingDay, r.billingFrequency, r.billingMonth, today)
+    const days = daysBetween(today, next)
+    if (days >= 0 && days <= windowDays) {
+      items.push({
+        description: r.title,
+        dueDate: toIsoDate(next),
+        amount: r.amount,
+        currency: r.currency,
+        kind: 'fijo',
+      })
+    }
+  }
+
+  for (const p of input.installments) {
+    const first = new Date(`${p.firstInstallmentDate}T00:00:00`)
+    const schedule = computeInstallmentScheduleItems(p.totalAmount, p.installmentsCount, first)
+    const paid = new Set(p.paidInstallmentNumbers)
+    for (const item of schedule) {
+      if (paid.has(item.installmentNumber)) continue
+      const days = daysBetween(today, item.dueDate)
+      if (days >= 0 && days <= windowDays) {
+        items.push({
+          description: p.description,
+          dueDate: toIsoDate(item.dueDate),
+          amount: item.amount,
+          currency: 'ARS',
+          kind: 'cuota',
+          detail: `cuota ${item.installmentNumber}/${p.installmentsCount}`,
+        })
+      }
+    }
+  }
+
+  for (const d of input.debts) {
+    if (d.debtType !== 'debo' || d.remainingAmount <= 0 || !d.dueDate) continue
+    const days = daysBetween(today, new Date(`${d.dueDate}T00:00:00`))
+    if (days >= 0 && days <= windowDays) {
+      items.push({
+        description: d.description,
+        dueDate: d.dueDate,
+        amount: d.remainingAmount,
+        currency: d.currency,
+        kind: 'deuda',
+      })
+    }
+  }
+
+  return items.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+}
+
+export function formatDateShort(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  if (!year || !month || !day) return isoDate
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
+}
+
+export function buildVencimientosReply(items: DueItem[], windowDays: number = UPCOMING_WINDOW_DAYS): string {
+  if (items.length === 0) {
+    return `No tenés vencimientos en los próximos ${windowDays} días.`
+  }
+
+  const lines = items.map((item) => {
+    const kindLabel = item.kind === 'fijo' ? 'fijo' : item.kind === 'cuota' ? 'cuota' : 'deuda'
+    const detail = item.detail ? `, ${item.detail}` : ''
+    return `• ${formatDateShort(item.dueDate)} — ${item.description}${detail} — ${formatMoney(item.amount, item.currency)} [${kindLabel}]`
+  })
+
+  const totalArs = items.filter((i) => i.currency !== 'USD').reduce((acc, i) => acc + i.amount, 0)
+  const totalUsd = items.filter((i) => i.currency === 'USD').reduce((acc, i) => acc + i.amount, 0)
+
+  const totalLines = [`Total a pagar: ${formatArs(totalArs)}`]
+  if (totalUsd > 0) totalLines.push(` + ${formatMoney(totalUsd, 'USD')}`)
+
+  return [`Tus próximos vencimientos (${windowDays} días):`, ...lines, '', ...totalLines].join('\n')
 }

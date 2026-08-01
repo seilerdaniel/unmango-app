@@ -23,6 +23,8 @@ export type TelegramCommand =
   | 'fijos'
   | 'consejos'
   | 'hogar'
+  | 'billeteras'
+  | 'vencimientos'
 
 export type ParsedTelegramMessage =
   | { kind: 'link_code'; code: string }
@@ -51,6 +53,8 @@ const KNOWN_COMMANDS: Record<string, TelegramCommand> = {
   fijos: 'fijos',
   consejos: 'consejos',
   hogar: 'hogar',
+  billeteras: 'billeteras',
+  vencimientos: 'vencimientos',
 }
 
 function extractAmount(text: string): number | null {
@@ -223,11 +227,12 @@ function parseSavingsGoal(text: string): ParsedTelegramMessage | null {
 /**
  * Interpreta un mensaje entrante del bot: puede ser un comando
  * (/saldo, /gastado, /safetospend, /score, /deudas, /cuotas, /metas,
- * /fijos, /consejos, /hogar, /ayuda), un código de vinculación
- * (6 dígitos, con o sin "/start" adelante) o una intención en texto
- * libre: gasto ("Gasto 4500 café"), deuda ("Debo 5000 a Juan"),
- * cuotas ("Heladera 200000 en 12 cuotas"), gasto fijo/suscripción
- * ("Suscripción 5000 Netflix") o meta de ahorro ("Meta Vacaciones 200000").
+ * /fijos, /consejos, /hogar, /billeteras, /vencimientos, /ayuda), un
+ * código de vinculación (6 dígitos, con o sin "/start" adelante) o una
+ * intención en texto libre: gasto ("Gasto 4500 café"), deuda
+ * ("Debo 5000 a Juan"), cuotas ("Heladera 200000 en 12 cuotas"), gasto
+ * fijo/suscripción ("Suscripción 5000 Netflix") o meta de ahorro
+ * ("Meta Vacaciones 200000").
  */
 export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   const trimmed = text.trim()
