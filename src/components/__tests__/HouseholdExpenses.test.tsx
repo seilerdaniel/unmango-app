@@ -47,6 +47,10 @@ function baseConfig() {
     tableResults: {
       household_links: { data: [ACTIVE_LINK], error: null },
       household_expenses: { data: EXPENSES, error: null },
+      user_payment_details: {
+        data: [{ user_id: 'user-1', payment_details: 'juan.perez', updated_at: '2026-07-01T00:00:00.000Z' }],
+        error: null,
+      },
     },
     rpcResults: {
       get_household_partner_email: { data: 'pareja@b.com', error: null },
@@ -67,6 +71,11 @@ function renderWithProviders() {
 describe('HouseholdExpenses', () => {
   beforeEach(() => {
     Object.assign(supabaseMock, baseConfig())
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    })
+    vi.spyOn(window, 'open').mockImplementation(() => null)
   })
 
   it('muestra el balance cuando la pareja me debe plata (pagué más de la mitad)', async () => {
@@ -187,5 +196,47 @@ describe('HouseholdExpenses', () => {
     expect(await screen.findByText(/Error al registrar el gasto/)).toBeTruthy()
     expect((screen.getByPlaceholderText(/¿Qué gasto es\?/) as HTMLInputElement).value).toBe('Expensas')
     expect((screen.getByPlaceholderText('Monto') as HTMLInputElement).value).toBe('15000')
+  })
+
+  it('"Cobrar por WhatsApp" copia la tarjeta (con datos de cobro) y abre wa.me cuando me deben', async () => {
+    renderWithProviders()
+    await waitFor(() => expect(screen.getByText('Alquiler')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cobrar por WhatsApp' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalled()
+    })
+
+    const copied = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    expect(copied).toContain('"Gastos de hogar"')
+    expect(copied).toContain('Datos para transferir: juan.perez')
+
+    expect(window.open).toHaveBeenCalledWith(expect.stringContaining('https://wa.me/?text='), '_blank')
+  })
+
+  it('no muestra "Cobrar por WhatsApp" si yo le debo a la pareja', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        user: { id: 'user-1', email: 'me@b.com' },
+        tableResults: {
+          household_links: { data: [ACTIVE_LINK], error: null },
+          household_expenses: {
+            data: [
+              { ...EXPENSES[0], paid_by_user_id: 'user-2' },
+              { ...EXPENSES[1], paid_by_user_id: 'user-1' },
+            ],
+            error: null,
+          },
+        },
+        rpcResults: { get_household_partner_email: { data: 'pareja@b.com', error: null } },
+      })
+    )
+
+    renderWithProviders()
+    await waitFor(() => expect(screen.getByText('Alquiler')).toBeTruthy())
+
+    expect(screen.queryByRole('button', { name: 'Cobrar por WhatsApp' })).toBeNull()
   })
 })

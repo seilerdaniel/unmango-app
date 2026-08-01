@@ -9,8 +9,10 @@ import { useToast } from '@/context/ToastContext'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeHouseholdBalance } from '@/lib/householdBalance'
 import { computeHouseholdSettlement } from '@/lib/householdSettlement'
+import { generateWhatsAppSplitText } from '@/lib/whatsappSplitter'
+import { usePaymentDetails } from '@/context/PaymentDetailsContext'
 import { HouseholdExpense } from '@/types'
-import { Home, Plus, Trash2, Scale } from 'lucide-react'
+import { Home, Plus, Trash2, Scale, MessageCircle } from 'lucide-react'
 
 function getPaidTotals(expenses: HouseholdExpense[], myUserId?: string) {
   return {
@@ -25,6 +27,7 @@ export default function HouseholdExpenses() {
   const { formatAmount } = usePrivacy()
   const { user } = useUser()
   const { householdId, partnerEmail } = useHousehold()
+  const { paymentDetails } = usePaymentDetails()
   const { toast, confirmDialog } = useToast()
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -115,6 +118,29 @@ export default function HouseholdExpenses() {
     }
   }
 
+  async function handleShareWhatsApp() {
+    if (!expenses || !user) return
+    const { totalPaidByMe, totalPaidByPartner } = getPaidTotals(expenses, user.id)
+    const settlement = computeHouseholdSettlement(totalPaidByMe, totalPaidByPartner)
+    // Solo se cobra cuando la otra persona me debe plata.
+    if (settlement.iOwe) return
+
+    const result = generateWhatsAppSplitText({
+      title: 'Gastos de hogar',
+      totalAmount: totalPaidByMe + totalPaidByPartner,
+      participantsCount: 2,
+      paymentDetails: paymentDetails || undefined,
+    })
+
+    try {
+      await navigator.clipboard.writeText(result.message)
+      toast.success('Tarjeta de cobro copiada — abriendo WhatsApp')
+    } catch {
+      toast.info('Abriendo WhatsApp')
+    }
+    window.open(result.url, '_blank')
+  }
+
   if (loading) return null
 
   // Si no hay hogar vinculado, esta tarjeta no se muestra — la
@@ -143,20 +169,30 @@ export default function HouseholdExpenses() {
 
       {balance.totalHouseholdExpenses > 0 && (
         <div
-          className={`p-3.5 rounded-xl border flex items-center gap-2.5 ${
+          className={`p-3.5 rounded-xl border flex flex-col gap-2.5 ${
             balance.netBalanceForMe >= 0
               ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900'
               : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900'
           }`}
         >
-          <Scale size={18} className={balance.netBalanceForMe >= 0 ? 'text-emerald-600' : 'text-amber-600'} />
-          <p className="text-xs font-bold text-gray-800 dark:text-gray-100">
-            {balance.netBalanceForMe === 0
-              ? 'Están a mano — pagaron lo mismo.'
-              : balance.netBalanceForMe > 0
-                ? `${partnerEmail || 'Tu pareja'} te debe ${formatAmount(balance.netBalanceForMe)}`
-                : `Le debés a ${partnerEmail || 'tu pareja'} ${formatAmount(Math.abs(balance.netBalanceForMe))}`}
-          </p>
+          <div className="flex items-center gap-2.5">
+            <Scale size={18} className={balance.netBalanceForMe >= 0 ? 'text-emerald-600' : 'text-amber-600'} />
+            <p className="text-xs font-bold text-gray-800 dark:text-gray-100">
+              {balance.netBalanceForMe === 0
+                ? 'Están a mano — pagaron lo mismo.'
+                : balance.netBalanceForMe > 0
+                  ? `${partnerEmail || 'Tu pareja'} te debe ${formatAmount(balance.netBalanceForMe)}`
+                  : `Le debés a ${partnerEmail || 'tu pareja'} ${formatAmount(Math.abs(balance.netBalanceForMe))}`}
+            </p>
+          </div>
+          {balance.netBalanceForMe > 0 && (
+            <button
+              onClick={handleShareWhatsApp}
+              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+            >
+              <MessageCircle size={14} /> Cobrar por WhatsApp
+            </button>
+          )}
         </div>
       )}
 

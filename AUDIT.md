@@ -2615,3 +2615,65 @@ hogar, gastos, balance y liquidación). Hallazgos que se corrigen acá:
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**64 archivos, 537 tests**,
 todos pasando — 516 previos + 21 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 8 — WhatsApp Splitter (Dividir gasto y cobrar por WhatsApp)
+
+Feature para armar la tarjeta de cobro de un gasto dividido y abrir
+WhatsApp con el mensaje precargado (o copiarlo al portapapeles), usando
+los datos de transferencia del usuario (alias/CBU/link MP) configurados
+una sola vez.
+
+### `src/lib/whatsappSplitter.ts` (nuevo)
+- `generateWhatsAppSplitText({ title, totalAmount, participantsCount, paymentDetails?, phone? })`
+  → `{ perPersonAmount, exactDivision, message, url }`. Función pura:
+  - Calcula el monto por persona redondeado a 2 decimales y detecta si
+    la división es exacta (`exactDivision`); si no, el mensaje lo aclara
+    ("Montos redondeados a 2 decimales").
+  - Arma el mensaje de texto plano con emojis (`💰 Total`, `👥 Entre N`,
+    `💳 Datos para transferir`, `📲 Transferime tu parte`).
+  - Devuelve la URL `https://wa.me/?text=<encoded>` (o con teléfono si se
+    pasa) reutilizando `buildWhatsAppLink` de `splitExpense.ts` (fuente
+    única de la URL). `participantsCount <= 0` se trata como 1.
+- `formatArs()` exportado para que tests y mensajes usen el mismo formato
+  es-AR (`$ 100.000,00`) sin duplicar el `Intl.NumberFormat`.
+
+### `supabase/user_payment_details.sql` (nuevo) + tipos
+- Tabla 1:1 con el usuario (mismo patrón que `user_work_settings`):
+  `user_id` PK, `payment_details` text, `updated_at`. RLS de
+  select/insert/update propias. Tipos agregados a `src/types/database.ts`
+  (Row/Insert/Update).
+
+### `src/context/PaymentDetailsContext.tsx` (nuevo)
+- Cachea los datos de cobro del usuario (un solo select, criterio Fase 1f)
+  y expone `{ paymentDetails, loading, save }`. `save` hace
+  `upsert(..., { onConflict: 'user_id' })` (guardar o borrar con '').
+  No apaga `loading` con sesión nula para que la UI no parpadee con un
+  estado vacío antes de resolverse el usuario.
+
+### Integración en UI
+- **`PaymentDetailsSettings.tsx`** (nuevo): card en Configuración para
+  cargar alias/CBU/link MP. Pre-carga el valor guardado sin pisar lo que
+  escriba el usuario (guard `userEdited`).
+- **`HouseholdExpenses.tsx`**: botón "Cobrar por WhatsApp" en la tarjeta
+  de balance cuando la pareja me debe plata — arma la tarjeta con el
+  total del hogar entre 2 + datos de cobro guardados, copia al
+  portapapeles (toast de confirmación) y abre el link de wa.me.
+- **`SplitExpenseTool.tsx`**: ahora usa `generateWhatsAppSplitText`
+  (mensaje más completo), copia al portapapeles con toast y pre-carga el
+  campo de alias desde la configuración guardada (una sola vez).
+
+### Tests (15 nuevos, 552 totales)
+- `whatsappSplitter.test.ts` (nuevo): 10 tests — división exacta,
+  inexacta (con aviso de redondeo), centavos, datos de transferencia
+  incluidos/omitidos, emojis presentes, URL genérica con mensaje
+  codificado, URL con teléfono, participantes 0/negativos → 1, y título
+  vacío con default.
+- `PaymentDetailsSettings.test.tsx` (nuevo): 3 tests — pre-carga del
+  valor guardado, upsert con `payment_details` correcto, y error si falla.
+- `HouseholdExpenses.test.tsx`: 2 nuevos — "Cobrar por WhatsApp" copia la
+  tarjeta (con los datos de cobro) y abre wa.me cuando me deben; y no
+  muestra el botón cuando yo le debo a la pareja.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**66 archivos, 552 tests**,
+todos pasando — 537 previos + 15 nuevos), `npm run build` (OK).

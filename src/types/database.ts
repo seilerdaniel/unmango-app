@@ -549,6 +549,24 @@ export interface Database {
         }
         Relationships: []
       }
+      user_payment_details: {
+        Row: {
+          user_id: string
+          payment_details: string | null
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          payment_details?: string | null
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          payment_details?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       google_calendar_tokens: {
         Row: {
           id: string

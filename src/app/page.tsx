@@ -16,6 +16,7 @@ import TelegramLink from "@/components/TelegramLink";
 import GoogleCalendarLink from "@/components/GoogleCalendarLink";
 import WorkSettings from "@/components/WorkSettings";
 import HouseholdLink from "@/components/HouseholdLink";
+import PaymentDetailsSettings from "@/components/PaymentDetailsSettings";
 import HouseholdExpenses from "@/components/HouseholdExpenses";
 import TransactionFilters from "@/components/TransactionFilters";
 import { usePrivacy } from "@/context/PrivacyContext";
@@ -590,6 +591,7 @@ export default function Home() {
         <GoogleCalendarLink />
         <WorkSettings />
         <HouseholdLink />
+        <PaymentDetailsSettings />
       </SettingsPanel>
 
       <OfflineSyncManager onSynced={fetchTransactions} />

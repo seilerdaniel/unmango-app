@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { UserProvider } from "@/context/UserContext";
 import { HouseholdProvider } from "@/context/HouseholdContext";
+import { PaymentDetailsProvider } from "@/context/PaymentDetailsContext";
 import { PrivacyProvider } from "@/context/PrivacyContext";
 import { CategoriesProvider } from "@/context/CategoriesContext";
 import { WalletsProvider } from "@/context/WalletsContext";
@@ -86,13 +87,15 @@ export default function RootLayout({
           <UserProvider>
             <PrivacyProvider>
               <HouseholdProvider>
-                <CategoriesProvider>
-                  <WalletsProvider>
-                    <DashboardDataProvider>
-                      <ToastProvider>{children}</ToastProvider>
-                    </DashboardDataProvider>
-                  </WalletsProvider>
-                </CategoriesProvider>
+                <PaymentDetailsProvider>
+                  <CategoriesProvider>
+                    <WalletsProvider>
+                      <DashboardDataProvider>
+                        <ToastProvider>{children}</ToastProvider>
+                      </DashboardDataProvider>
+                    </WalletsProvider>
+                  </CategoriesProvider>
+                </PaymentDetailsProvider>
               </HouseholdProvider>
             </PrivacyProvider>
           </UserProvider>

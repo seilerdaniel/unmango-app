@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useToast } from '@/context/ToastContext'
-import { computeSplitShare, buildSplitExpenseMessage, buildWhatsAppLink } from '@/lib/splitExpense'
+import { usePaymentDetails } from '@/context/PaymentDetailsContext'
+import { computeSplitShare } from '@/lib/splitExpense'
+import { generateWhatsAppSplitText } from '@/lib/whatsappSplitter'
 import { Users, X, MessageCircle } from 'lucide-react'
 
 interface SplitExpenseToolProps {
@@ -23,6 +25,7 @@ export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProp
   const { user } = useUser()
   const { formatAmount } = usePrivacy()
   const { toast } = useToast()
+  const { paymentDetails: savedPaymentDetails } = usePaymentDetails()
   const [isOpen, setIsOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
@@ -31,6 +34,17 @@ export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProp
   const [bankAlias, setBankAlias] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedMessage, setSavedMessage] = useState<string | null>(null)
+  const prefilledRef = useRef(false)
+
+  // Si el usuario tiene datos de cobro guardados en Configuración
+  // (PaymentDetailsSettings), se precargan en el campo del alias — solo
+  // una vez, sin pisar lo que escriba el usuario después.
+  useEffect(() => {
+    if (savedPaymentDetails && !prefilledRef.current) {
+      prefilledRef.current = true
+      setBankAlias(savedPaymentDetails)
+    }
+  }, [savedPaymentDetails])
 
   const share =
     Number(totalAmount) > 0 && Number(peopleCount) > 0 ? computeSplitShare(Number(totalAmount), Number(peopleCount)) : null
@@ -77,10 +91,23 @@ export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProp
     }
   }
 
-  function handleSendWhatsApp() {
+  async function handleSendWhatsApp() {
     if (share === null) return
-    const message = buildSplitExpenseMessage(description || 'gasto compartido', formatAmount(share), bankAlias || undefined)
-    window.open(buildWhatsAppLink(message), '_blank')
+
+    const result = generateWhatsAppSplitText({
+      title: description.trim() || 'gasto compartido',
+      totalAmount: Number(totalAmount),
+      participantsCount: Number(peopleCount),
+      paymentDetails: bankAlias || savedPaymentDetails || undefined,
+    })
+
+    try {
+      await navigator.clipboard.writeText(result.message)
+      toast.success('Tarjeta de cobro copiada — abriendo WhatsApp')
+    } catch {
+      toast.info('Abriendo WhatsApp')
+    }
+    window.open(result.url, '_blank')
   }
 
   return (
