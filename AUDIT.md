@@ -83,6 +83,54 @@ cada widget) y que **6 componentes** repetían la misma carga de
   `SpeedDialFab` — que renderiza `VoiceExpenseInput`).
   Verificado: `tsc --noEmit` 0 errores, 293/293 tests pasando, `next build` OK.
 
+## ✅ Fase 1d — Hook `useAsyncData` (item #4 de la auditoría)
+
+Los contextos compartidos (`DashboardDataContext`, `WalletsContext`)
+repetían exactamente el mismo andamiaje de manejo asíncrono (estado
+`data`/`loading`/`error` + `refresh` con `try/catch/finally` + efecto de
+carga al montar), y `FinancialAdviceWidget` tenía uno propio además.
+Se unificó en un solo hook:
+
+- [x] **`src/hooks/useAsyncData.ts`** — `useAsyncData<T>(loader, errorMessage)`
+  devuelve `{ data, loading, error, refetch }`:
+  - `loading` arranca en `true` y se apaga tras la primera carga; los
+    `refetch()` siguientes corren en background SIN re-encenderlo (los
+    refrescos por `dataVersion` no hacen parpadear la UI).
+  - En un fallo se conservan los datos previos (`data` no se vacía) y se
+    setea `error`; se limpia al volver a cargar.
+  - El `loader` debe ser estable (`useCallback`); si depende de datos que
+    cambian (ej. el dashboard), el hook recarga automáticamente al
+    cambiar, igual que un `useEffect` con deps.
+- [x] **`DashboardDataContext` y `WalletsContext` reescritos sobre el hook**:
+  los dos ahora solo definen el `loader` (el `Promise.all` de consultas) y
+  derivan el resto. API pública sin cambios (`data`/`loading`/`error`/
+  `refresh`), así que ningún consumidor se tocó por esto. `totalBalance`
+  pasó a derivarse con `useMemo` (el array vacío mantiene identidad
+  estable entre renders).
+- [x] **`FinancialAdviceWidget` reescrito sobre el hook**: se eliminaron
+  los estados locales `advice`/`noData`/`loading` y el `useEffect` con
+  `load()` — el loader del hook ejecuta las mismas señales propias
+  (precios, presupuestos, deuda, metas, categorías, hogar) y vuelve a
+  correr cuando cambia `dashboard` o `wallets` (equivalentes a las deps
+  del efecto anterior).
+- [x] **Revisión de los demás widgets de Inicio**: `FinancialHealthScoreWidget`,
+  `ZeroSpendStreak`, `MonthEndProjection` y `SafeToSpendWidget` derivan
+  todo de forma síncrona del contexto — no tienen manejo asíncrono
+  propio que deduplicar, así que no se les tocó nada. `page.tsx` tampoco
+  (su `loading` es bootstrap de sesión + paginación manual, un caso
+  distinto). El patrón `error`/`refetch` queda disponible de forma
+  uniforme vía el hook para cuando se quiera agregar una UI de reintento
+  en los widgets.
+- [x] Test nuevo: `src/hooks/__tests__/useAsyncData.test.tsx` (6 tests —
+  carga inicial, loader que devuelve null, error, refetch en background,
+  recarga automática al cambiar el loader, y conservación de datos en
+  error).
+
+Verificado: `tsc --noEmit` 0 errores, 299/299 tests pasando (293 + 6 del
+hook), `next build` OK, `eslint` bajó de 20 a **19 errores** (todos del
+patrón pre-existente `react-hooks/set-state-in-effect`, ahora concentrado
+en un solo lugar).
+
 ## 🟠 Fase 2 — Bugs menores y UX
 
 - [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada

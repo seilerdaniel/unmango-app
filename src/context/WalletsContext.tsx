@@ -1,8 +1,9 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { WalletWithBalance } from '@/types'
+import { useAsyncData } from '@/hooks/useAsyncData'
 
 interface WalletsContextType {
   wallets: WalletWithBalance[]
@@ -23,19 +24,10 @@ const WalletsContext = createContext<WalletsContextType | undefined>(undefined)
  * alta/baja/edición (ver AUDIT.md, refactor #2).
  */
 export function WalletsProvider({ children }: { children: React.ReactNode }) {
-  const [wallets, setWallets] = useState<WalletWithBalance[]>([])
-  const [totalBalance, setTotalBalance] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    try {
+  const { data, loading, error, refetch } = useAsyncData<WalletWithBalance[]>(
+    useCallback(async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setWallets([])
-        setTotalBalance(0)
-        return
-      }
+      if (!user) return null
 
       const [{ data: walletsData, error: walletsError }, { data: balancesData, error: balancesError }] =
         await Promise.all([
@@ -51,28 +43,22 @@ export function WalletsProvider({ children }: { children: React.ReactNode }) {
         balanceByWallet[row.wallet_id] = Number(row.balance) || 0
       }
 
-      const combined: WalletWithBalance[] = (walletsData ?? []).map((w) => ({
+      return (walletsData ?? []).map((w) => ({
         ...w,
         balance: balanceByWallet[w.id] ?? (Number(w.initial_balance) || 0),
       }))
+    }, []),
+    'No se pudieron cargar las billeteras.'
+  )
 
-      setWallets(combined)
-      setTotalBalance(combined.reduce((acc, w) => acc + w.balance, 0))
-      setError(null)
-    } catch (err) {
-      console.error('Error cargando billeteras:', err)
-      setError('No se pudieron cargar las billeteras.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
+  // `useMemo` para que el array vacío (mientras no hay datos) tenga la
+  // misma identidad entre renders — los efectos que dependen de `wallets`
+  // no deben dispararse sin necesidad.
+  const wallets = useMemo(() => data ?? [], [data])
+  const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0)
 
   return (
-    <WalletsContext.Provider value={{ wallets, totalBalance, loading, error, refresh }}>
+    <WalletsContext.Provider value={{ wallets, totalBalance, loading, error, refresh: refetch }}>
       {children}
     </WalletsContext.Provider>
   )

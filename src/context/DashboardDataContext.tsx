@@ -1,7 +1,8 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useAsyncData } from '@/hooks/useAsyncData'
 
 export interface DashboardMonthExpense {
   description: string | null
@@ -56,17 +57,10 @@ const DashboardDataContext = createContext<DashboardDataContextType | undefined>
  * cambia `dataVersion` en page.tsx (ver AUDIT.md, refactor #1).
  */
 export function DashboardDataProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    try {
+  const { data, loading, error, refetch } = useAsyncData<DashboardData>(
+    useCallback(async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setData(null)
-        return
-      }
+      if (!user) return null
 
       const now = new Date()
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -97,7 +91,7 @@ export function DashboardDataProvider({ children }: { children: React.ReactNode 
       if (installmentsResult.error) throw installmentsResult.error
       if (totalsResult.error) throw totalsResult.error
 
-      setData({
+      return {
         userId: user.id,
         monthStart,
         monthlyIncome: Number(trendResult.data?.[0]?.total_income) || 0,
@@ -119,22 +113,13 @@ export function DashboardDataProvider({ children }: { children: React.ReactNode 
         })),
         totalIncome: Number(totalsResult.data?.[0]?.total_income) || 0,
         totalExpense: Number(totalsResult.data?.[0]?.total_expense) || 0,
-      })
-      setError(null)
-    } catch (err) {
-      console.error('Error cargando los datos del dashboard:', err)
-      setError('No se pudieron cargar los datos del panel.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
+      }
+    }, []),
+    'No se pudieron cargar los datos del panel.'
+  )
 
   return (
-    <DashboardDataContext.Provider value={{ data, loading, error, refresh }}>
+    <DashboardDataContext.Provider value={{ data, loading, error, refresh: refetch }}>
       {children}
     </DashboardDataContext.Provider>
   )

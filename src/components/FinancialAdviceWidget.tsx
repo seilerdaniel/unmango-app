@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useDashboardData } from '@/context/DashboardDataContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeFinancialHealthScore, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { generateFinancialAdvice, AdviceItem } from '@/lib/financialAdvice'
 import { detectAntExpenses } from '@/lib/antExpenses'
@@ -26,187 +27,185 @@ const SEVERITY_STYLES: Record<AdviceItem['severity'], { icon: typeof Lightbulb; 
   info: { icon: Info, className: 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900 text-blue-800 dark:text-blue-300' },
 }
 
+interface AdviceLoadResult {
+  advice: AdviceItem[]
+  noData: boolean
+}
+
 /**
  * Consejos en texto conectando los mismos 4 pilares del Un Mango Score
  * (que solo muestra números/barras) con reglas simples — no es IA, es
  * un conjunto de umbrales sobre datos que la app ya calcula en otro
  * lado, reutilizados acá para que los consejos no contradigan lo que
  * ya se ve en el Score.
+ *
+ * La carga usa `useAsyncData`: la base (tendencia del mes, gastos,
+ * recurrentes, cuotas y billeteras) ya la trae DashboardDataContext /
+ * WalletsContext una sola vez para todos los widgets de Inicio; acá el
+ * loader solo pide las señales propias de las recomendaciones y se
+ * vuelve a ejecutar cuando cambian esos contextos (ver AUDIT.md, #4).
  */
 export default function FinancialAdviceWidget({
   onNavigate,
 }: {
   onNavigate: (target: { tab?: TabId; sectionId?: string; openSettings?: boolean }) => void
 }) {
-  const [advice, setAdvice] = useState<AdviceItem[] | null>(null)
-  const [noData, setNoData] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  const { data } = useDashboardData()
+  const { data: dashboard } = useDashboardData()
   const { wallets } = useWallets()
 
-  useEffect(() => {
-    if (!data) return
-    const dashboard = data
+  const { data: loadResult, loading } = useAsyncData<AdviceLoadResult>(
+    useCallback(async () => {
+      if (!dashboard) return null
 
-    async function load() {
-      try {
-        const now = new Date()
-        const dayOfMonth = now.getDate()
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-        const daysRemaining = daysInMonth - dayOfMonth + 1
+      const now = new Date()
+      const dayOfMonth = now.getDate()
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      const daysRemaining = daysInMonth - dayOfMonth + 1
 
-        // La base (tendencia del mes, gastos, recurrentes, cuotas y
-        // billeteras) ya la trae DashboardDataContext una sola vez para
-        // todos los widgets de Inicio; acá solo quedan las señales
-        // propias de las recomendaciones.
-        const [priceChangesResult, budgetsResult, categorySpendResult, debtsResult, goalsResult, categoriesResult] =
-          await Promise.all([
-            supabase.rpc('get_recurring_price_changes'),
-            supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
-            supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
-            supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
-            supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
-            supabase.from('categories').select('id').eq('user_id', dashboard.userId),
-          ])
+      const [priceChangesResult, budgetsResult, categorySpendResult, debtsResult, goalsResult, categoriesResult] =
+        await Promise.all([
+          supabase.rpc('get_recurring_price_changes'),
+          supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
+          supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
+          supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
+          supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
+          supabase.from('categories').select('id').eq('user_id', dashboard.userId),
+        ])
 
-        const monthlyIncome = dashboard.monthlyIncome
-        const monthlyExpense = dashboard.monthlyExpense
+      const monthlyIncome = dashboard.monthlyIncome
+      const monthlyExpense = dashboard.monthlyExpense
 
-        const fixedCommitments = dashboard.recurring
-          .filter((r) => r.currency === 'ARS')
-          .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
+      const fixedCommitments = dashboard.recurring
+        .filter((r) => r.currency === 'ARS')
+        .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
 
-        const installmentsMonthlyObligation = dashboard.installments.reduce(
-          (acc, p) => acc + Number(p.total_amount) / p.installments_count,
-          0
-        )
+      const installmentsMonthlyObligation = dashboard.installments.reduce(
+        (acc, p) => acc + Number(p.total_amount) / p.installments_count,
+        0
+      )
 
-        const emergencyFundBalance = wallets.reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
+      const emergencyFundBalance = wallets.reduce((acc, w) => acc + (Number(w.balance) || 0), 0)
 
-        const savedThreshold = typeof window !== 'undefined' ? localStorage.getItem(ANT_THRESHOLD_STORAGE_KEY) : null
-        const threshold = savedThreshold ? Number(savedThreshold) || DEFAULT_ANT_THRESHOLD : DEFAULT_ANT_THRESHOLD
-        const antExpenses = detectAntExpenses(
-          dashboard.monthExpenses.map((t) => ({ amount: Number(t.amount_ars) })),
-          threshold
-        )
+      const savedThreshold = typeof window !== 'undefined' ? localStorage.getItem(ANT_THRESHOLD_STORAGE_KEY) : null
+      const threshold = savedThreshold ? Number(savedThreshold) || DEFAULT_ANT_THRESHOLD : DEFAULT_ANT_THRESHOLD
+      const antExpenses = detectAntExpenses(
+        dashboard.monthExpenses.map((t) => ({ amount: Number(t.amount_ars) })),
+        threshold
+      )
 
-        const healthScore = computeFinancialHealthScore({
-          monthlyIncome,
-          monthlyExpense,
-          monthlyDebtPayments: fixedCommitments + installmentsMonthlyObligation,
-          emergencyFundBalance,
-          antExpensesTotal: antExpenses.total,
-        })
+      const healthScore = computeFinancialHealthScore({
+        monthlyIncome,
+        monthlyExpense,
+        monthlyDebtPayments: fixedCommitments + installmentsMonthlyObligation,
+        emergencyFundBalance,
+        antExpensesTotal: antExpenses.total,
+      })
 
-        const priceChanges = (priceChangesResult.data ?? []).map((row) => ({
-          recurringExpenseId: row.recurring_expense_id,
-          currentAmount: Number(row.current_amount),
-          previousAmount: row.previous_amount !== null ? Number(row.previous_amount) : null,
-          currency: row.currency,
-        }))
-        const hasSubscriptionPriceIncrease = detectPriceIncreases(priceChanges).length > 0
+      const priceChanges = (priceChangesResult.data ?? []).map((row) => ({
+        recurringExpenseId: row.recurring_expense_id,
+        currentAmount: Number(row.current_amount),
+        previousAmount: row.previous_amount !== null ? Number(row.previous_amount) : null,
+        currency: row.currency,
+      }))
+      const hasSubscriptionPriceIncrease = detectPriceIncreases(priceChanges).length > 0
 
-        const safeToSpendToday =
-          monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedCommitments, daysRemaining) : null
+      const safeToSpendToday =
+        monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedCommitments, daysRemaining) : null
 
-        // Presupuesto excedido: cruzamos el límite de cada categoría con
-        // lo gastado ese mes (misma función que ya usa BudgetManager).
-        const spendByCategory = new Map((categorySpendResult.data ?? []).map((row) => [row.category_id, Number(row.spent)]))
-        const exceededBudgetCategoryNames = (budgetsResult.data ?? [])
-          .filter((b) => (spendByCategory.get(b.category_id) ?? 0) > Number(b.monthly_limit))
-          .map((b) => (b.categories as { name: string } | null)?.name)
-          .filter((name): name is string => !!name)
+      // Presupuesto excedido: cruzamos el límite de cada categoría con
+      // lo gastado ese mes (misma función que ya usa BudgetManager).
+      const spendByCategory = new Map((categorySpendResult.data ?? []).map((row) => [row.category_id, Number(row.spent)]))
+      const exceededBudgetCategoryNames = (budgetsResult.data ?? [])
+        .filter((b) => (spendByCategory.get(b.category_id) ?? 0) > Number(b.monthly_limit))
+        .map((b) => (b.categories as { name: string } | null)?.name)
+        .filter((name): name is string => !!name)
 
-        // Deuda con interés: cualquier deuda "debo" activa con interés > 0.
-        const hasHighInterestDebt = (debtsResult.data ?? []).some(
-          (d) => d.debt_type === 'debo' && Number(d.remaining_amount) > 0 && Number(d.interest_rate) > 0
-        )
+      // Deuda con interés: cualquier deuda "debo" activa con interés > 0.
+      const hasHighInterestDebt = (debtsResult.data ?? []).some(
+        (d) => d.debt_type === 'debo' && Number(d.remaining_amount) > 0 && Number(d.interest_rate) > 0
+      )
 
-        // Cuota grande: la primera compra cuya cuota mensual supere el
-        // 20% del ingreso mensual (si no hay ingreso registrado, no se
-        // puede evaluar "grande respecto a qué", se omite el aviso).
-        const largeInstallment =
-          monthlyIncome > 0
-            ? dashboard.installments.find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)
-            : undefined
-        const largeInstallmentDescription = largeInstallment?.description ?? null
+      // Cuota grande: la primera compra cuya cuota mensual supere el
+      // 20% del ingreso mensual (si no hay ingreso registrado, no se
+      // puede evaluar "grande respecto a qué", se omite el aviso).
+      const largeInstallment =
+        monthlyIncome > 0
+          ? dashboard.installments.find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)
+          : undefined
+      const largeInstallmentDescription = largeInstallment?.description ?? null
 
-        // Racha de gastos rota: mismo criterio que ZeroSpendStreak.tsx.
-        const expenseDayNumbers = dashboard.monthExpenses.map((t) => new Date(t.created_at).getDate())
-        const brokenStreakDays = computeStreakBreak(expenseDayNumbers, now)
+      // Racha de gastos rota: mismo criterio que ZeroSpendStreak.tsx.
+      const expenseDayNumbers = dashboard.monthExpenses.map((t) => new Date(t.created_at).getDate())
+      const brokenStreakDays = computeStreakBreak(expenseDayNumbers, now)
 
-        // Metas de ahorro estancadas.
-        const stalledGoalNames = (goalsResult.data ?? [])
-          .filter((g) => isGoalStalled(Number(g.current_amount), g.created_at, now))
-          .map((g) => g.name)
+      // Metas de ahorro estancadas.
+      const stalledGoalNames = (goalsResult.data ?? [])
+        .filter((g) => isGoalStalled(Number(g.current_amount), g.created_at, now))
+        .map((g) => g.name)
 
-        // Sin categorías creadas.
-        const hasNoCategories = (categoriesResult.data ?? []).length === 0
+      // Sin categorías creadas.
+      const hasNoCategories = (categoriesResult.data ?? []).length === 0
 
-        // Gastos este mes pero ningún ingreso registrado.
-        const hasExpensesButNoIncome = monthlyIncome === 0 && monthlyExpense > 0
+      // Gastos este mes pero ningún ingreso registrado.
+      const hasExpensesButNoIncome = monthlyIncome === 0 && monthlyExpense > 0
 
-        // Balance de Hogar sin saldar hace tiempo — consulta aparte
-        // porque primero hace falta saber el household_id (no se puede
-        // resolver en el mismo Promise.all de arriba).
-        let householdUnsettledDays: number | null = null
-        const { data: householdLink } = await supabase
-          .from('household_links')
-          .select('id')
-          .eq('status', 'active')
-          .or(`user_a_id.eq.${dashboard.userId},user_b_id.eq.${dashboard.userId}`)
-          .maybeSingle()
+      // Balance de Hogar sin saldar hace tiempo — consulta aparte
+      // porque primero hace falta saber el household_id (no se puede
+      // resolver en el mismo Promise.all de arriba).
+      let householdUnsettledDays: number | null = null
+      const { data: householdLink } = await supabase
+        .from('household_links')
+        .select('id')
+        .eq('status', 'active')
+        .or(`user_a_id.eq.${dashboard.userId},user_b_id.eq.${dashboard.userId}`)
+        .maybeSingle()
 
-        if (householdLink) {
-          const { data: householdExpenses } = await supabase
-            .from('household_expenses')
-            .select('amount, paid_by_user_id, created_at')
-            .eq('household_id', householdLink.id)
-            .order('created_at', { ascending: true })
+      if (householdLink) {
+        const { data: householdExpenses } = await supabase
+          .from('household_expenses')
+          .select('amount, paid_by_user_id, created_at')
+          .eq('household_id', householdLink.id)
+          .order('created_at', { ascending: true })
 
-          if (householdExpenses && householdExpenses.length > 0) {
-            const totalPaidByMe = householdExpenses
-              .filter((e) => e.paid_by_user_id === dashboard.userId)
-              .reduce((acc, e) => acc + Number(e.amount), 0)
-            const totalPaidByPartner = householdExpenses
-              .filter((e) => e.paid_by_user_id !== dashboard.userId)
-              .reduce((acc, e) => acc + Number(e.amount), 0)
-            const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
+        if (householdExpenses && householdExpenses.length > 0) {
+          const totalPaidByMe = householdExpenses
+            .filter((e) => e.paid_by_user_id === dashboard.userId)
+            .reduce((acc, e) => acc + Number(e.amount), 0)
+          const totalPaidByPartner = householdExpenses
+            .filter((e) => e.paid_by_user_id !== dashboard.userId)
+            .reduce((acc, e) => acc + Number(e.amount), 0)
+          const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
 
-            if (householdBalance.netBalanceForMe !== 0) {
-              const oldestExpenseDate = new Date(householdExpenses[0].created_at)
-              householdUnsettledDays = Math.floor((now.getTime() - oldestExpenseDate.getTime()) / (1000 * 60 * 60 * 24))
-            }
+          if (householdBalance.netBalanceForMe !== 0) {
+            const oldestExpenseDate = new Date(householdExpenses[0].created_at)
+            householdUnsettledDays = Math.floor((now.getTime() - oldestExpenseDate.getTime()) / (1000 * 60 * 60 * 24))
           }
         }
-
-        setNoData(hasNoFinancialData(monthlyIncome, monthlyExpense))
-        setAdvice(
-          generateFinancialAdvice({
-            healthScore,
-            hasSubscriptionPriceIncrease,
-            safeToSpendToday,
-            exceededBudgetCategoryNames,
-            hasHighInterestDebt,
-            largeInstallmentDescription,
-            brokenStreakDays,
-            stalledGoalNames,
-            hasNoCategories,
-            hasExpensesButNoIncome,
-            householdUnsettledDays,
-          })
-        )
-      } catch (err) {
-        console.error('Error generando recomendaciones financieras:', err)
-      } finally {
-        setLoading(false)
       }
-    }
-    load()
-  }, [data, wallets])
 
-  if (loading || !data || !advice) return null
+      return {
+        noData: hasNoFinancialData(monthlyIncome, monthlyExpense),
+        advice: generateFinancialAdvice({
+          healthScore,
+          hasSubscriptionPriceIncrease,
+          safeToSpendToday,
+          exceededBudgetCategoryNames,
+          hasHighInterestDebt,
+          largeInstallmentDescription,
+          brokenStreakDays,
+          stalledGoalNames,
+          hasNoCategories,
+          hasExpensesButNoIncome,
+          householdUnsettledDays,
+        }),
+      }
+    }, [dashboard, wallets]),
+    'Error generando recomendaciones financieras'
+  )
+
+  if (loading || !loadResult) return null
+
+  const { advice, noData } = loadResult
 
   if (noData) {
     return (
