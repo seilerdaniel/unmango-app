@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
 import { parseNaturalLanguageExpense } from '@/lib/naturalLanguageExpense'
@@ -55,6 +56,7 @@ interface VoiceExpenseInputProps {
 }
 
 export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded }: VoiceExpenseInputProps) {
+  const { user } = useUser()
   const { categories } = useCategories()
   const { wallets } = useWallets()
   const [isListening, setIsListening] = useState(false)
@@ -168,7 +170,6 @@ export default function VoiceExpenseInput({ isOpen, onClose, onTransactionAdded 
     if (!amount || Number(amount) <= 0 || !description.trim()) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSubmitting(false)
       return

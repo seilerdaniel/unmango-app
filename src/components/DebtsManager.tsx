@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
 import { computeDebtProgress, daysOverdue } from '@/lib/debts'
 import { applyTax } from '@/lib/applyTax'
 import { Debt } from '@/types'
@@ -26,6 +27,7 @@ interface DebtsManagerProps {
 }
 
 export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) {
+  const { user } = useUser()
   const { isPrivate, formatAmount } = usePrivacy()
   const [debts, setDebts] = useState<Debt[]>([])
   const [form, setForm] = useState(emptyForm)
@@ -37,9 +39,8 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
   const [sortAscending, setSortAscending] = useState(true)
   const [filterType, setFilterType] = useState('all')
 
-  async function loadDebts() {
+  const loadDebts = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
@@ -55,18 +56,17 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadDebts()
-  }, [])
+  }, [loadDebts])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.description.trim() || !form.counterpartyName.trim() || !form.totalAmount || Number(form.totalAmount) <= 0) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSubmitting(false)
       return
@@ -121,7 +121,6 @@ export default function DebtsManager({ onTransactionAdded }: DebtsManagerProps) 
     }
 
     setPayingId(debt.id)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setPayingId(null)
       return

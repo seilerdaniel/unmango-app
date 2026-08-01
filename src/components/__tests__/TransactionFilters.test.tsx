@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TransactionFilters from '../TransactionFilters'
 import { CategoriesProvider } from '@/context/CategoriesContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 import type { Transaction } from '@/types'
@@ -80,9 +81,11 @@ describe('TransactionFilters — exportar CSV (regresión Fase 2)', () => {
       })
 
     render(
-      <CategoriesProvider>
-        <TransactionFilters transactions={TRANSACTIONS} onFiltered={() => {}} />
-      </CategoriesProvider>
+      <AppProviders>
+        <CategoriesProvider>
+          <TransactionFilters transactions={TRANSACTIONS} onFiltered={() => {}} />
+        </CategoriesProvider>
+      </AppProviders>
     )
 
     // Filtramos para dejar solo ingresos (1 de las 2 transacciones)
@@ -110,9 +113,11 @@ describe('TransactionFilters — exportar CSV (regresión Fase 2)', () => {
 
   it('exporta a PDF solo las transacciones visibles/filtradas, no todas', async () => {
     render(
-      <CategoriesProvider>
-        <TransactionFilters transactions={TRANSACTIONS} onFiltered={() => {}} />
-      </CategoriesProvider>
+      <AppProviders>
+        <CategoriesProvider>
+          <TransactionFilters transactions={TRANSACTIONS} onFiltered={() => {}} />
+        </CategoriesProvider>
+      </AppProviders>
     )
 
     const typeSelect = await screen.findByDisplayValue('Todos los Tipos')

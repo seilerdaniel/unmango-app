@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
 import { detectPriceIncreases, PriceChange } from '@/lib/priceIncreases'
 import { RecurringExpense } from '@/types'
 import { TrendingUp } from 'lucide-react'
 
 export default function SubscriptionPriceAlerts() {
+  const { user } = useUser()
   const { formatAmount } = usePrivacy()
   const [increases, setIncreases] = useState<
     { title: string; currentAmount: number; previousAmount: number; currency: string; increasePercent: number }[]
@@ -17,7 +19,6 @@ export default function SubscriptionPriceAlerts() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         const [{ data: changesData, error: changesError }, { data: recurringData, error: recurringError }] =
@@ -58,7 +59,7 @@ export default function SubscriptionPriceAlerts() {
       }
     }
     load()
-  }, [])
+  }, [user])
 
   if (loading || increases.length === 0) return null
 

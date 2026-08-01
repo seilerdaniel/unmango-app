@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { Clock, CheckCircle2 } from 'lucide-react'
 
 export default function WorkSettings() {
+  const { user } = useUser()
   const [monthlyIncome, setMonthlyIncome] = useState('')
   const [monthlyWorkHours, setMonthlyWorkHours] = useState('160')
   const [loading, setLoading] = useState(true)
@@ -14,7 +16,6 @@ export default function WorkSettings() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         const { data, error } = await supabase
@@ -35,7 +36,7 @@ export default function WorkSettings() {
       }
     }
     load()
-  }, [])
+  }, [user])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -43,7 +44,6 @@ export default function WorkSettings() {
 
     setSaving(true)
     setSaved(false)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSaving(false)
       return

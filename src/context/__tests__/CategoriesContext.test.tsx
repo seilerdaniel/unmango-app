@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { CategoriesProvider, useCategories } from '../CategoriesContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 
@@ -37,9 +38,11 @@ describe('CategoriesContext (regresión Fase 1)', () => {
 
   it('filtra explícitamente por user_id al pedir categorías (defensa en profundidad además de RLS)', async () => {
     render(
-      <CategoriesProvider>
-        <Probe />
-      </CategoriesProvider>
+      <AppProviders>
+        <CategoriesProvider>
+          <Probe />
+        </CategoriesProvider>
+      </AppProviders>
     )
 
     await waitFor(() => expect(screen.getByText('Comida')).toBeInTheDocument())

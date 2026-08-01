@@ -1,21 +1,36 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SpeedDialFab from '../SpeedDialFab'
 import { CategoriesProvider } from '@/context/CategoriesContext'
 import { WalletsProvider } from '@/context/WalletsContext'
+import { AppProviders } from '@/test-utils/AppProviders'
+import { createSupabaseMock } from '@/test-utils/supabaseMock'
+import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
+
+const { supabaseMock } = vi.hoisted(() => ({
+  supabaseMock: {} as ReturnType<typeof CreateSupabaseMock>,
+}))
+
+vi.mock('@/lib/supabaseClient', () => ({ supabase: supabaseMock }))
 
 function renderFab(onManualEntry = vi.fn()) {
   return render(
-    <CategoriesProvider>
-      <WalletsProvider>
-        <SpeedDialFab onManualEntry={onManualEntry} />
-      </WalletsProvider>
-    </CategoriesProvider>
+    <AppProviders>
+      <CategoriesProvider>
+        <WalletsProvider>
+          <SpeedDialFab onManualEntry={onManualEntry} />
+        </WalletsProvider>
+      </CategoriesProvider>
+    </AppProviders>
   )
 }
 
 describe('SpeedDialFab', () => {
+  beforeEach(() => {
+    Object.assign(supabaseMock, createSupabaseMock())
+  })
+
   it('el menú desplegable arranca cerrado (las opciones están ocultas con aria-hidden)', () => {
     renderFab()
     expect(screen.getByTitle('Cargar por Voz')).toHaveAttribute('aria-hidden', 'true')

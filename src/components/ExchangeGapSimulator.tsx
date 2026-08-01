@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Chart as ChartJS,
   LineElement,
@@ -13,6 +13,7 @@ import {
 import { Line } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
 import { buildExchangeGapSeries, computeGapSummary, NetWorthSnapshot } from '@/lib/exchangeGap'
 import { Scale, RefreshCw } from 'lucide-react'
 
@@ -30,14 +31,14 @@ async function fetchBlueRate(): Promise<number | null> {
 }
 
 export default function ExchangeGapSimulator() {
+  const { user } = useUser()
   const { isPrivate, formatAmount } = usePrivacy()
   const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [takingSnapshot, setTakingSnapshot] = useState(false)
 
-  async function loadSnapshots() {
+  const loadSnapshots = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
@@ -60,16 +61,15 @@ export default function ExchangeGapSimulator() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadSnapshots()
-  }, [])
+  }, [loadSnapshots])
 
   async function handleTakeSnapshot() {
     setTakingSnapshot(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const [{ data: totalsData, error: totalsError }, blueRate] = await Promise.all([

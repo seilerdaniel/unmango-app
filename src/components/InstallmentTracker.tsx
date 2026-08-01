@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
@@ -15,6 +16,7 @@ interface PurchaseWithPayments extends InstallmentPurchase {
 }
 
 export default function InstallmentTracker({ onTransactionAdded }: { onTransactionAdded?: () => void }) {
+  const { user } = useUser()
   const { categories } = useCategories()
   const { isPrivate, formatAmount } = usePrivacy()
 
@@ -31,9 +33,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const [sortField, setSortField] = useState<InstallmentSortField>('name')
   const [sortAscending, setSortAscending] = useState(true)
 
-  async function loadPurchases() {
+  const loadPurchases = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data: purchasesData, error: purchasesError } = await supabase
@@ -69,18 +70,17 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadPurchases()
-  }, [])
+  }, [loadPurchases])
 
   async function handleAddPurchase(e: React.FormEvent) {
     e.preventDefault()
     if (!description.trim() || !totalAmount || !installmentsCount) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
       const { error } = await supabase.from('installment_purchases').insert([
@@ -133,7 +133,6 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     if (!nextItem) return
 
     setPayingId(purchase.id)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setPayingId(null)
       return

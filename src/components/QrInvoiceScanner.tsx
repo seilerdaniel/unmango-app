@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { parseAfipQrUrl } from '@/lib/afipQr'
 import { QrCode, X, CheckCircle2, CameraOff } from 'lucide-react'
@@ -14,6 +15,7 @@ interface QrInvoiceScannerProps {
 }
 
 export default function QrInvoiceScanner({ isOpen, onClose, onTransactionAdded }: QrInvoiceScannerProps) {
+  const { user } = useUser()
   const { categories } = useCategories()
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [scannedAmount, setScannedAmount] = useState<number | null>(null)
@@ -95,7 +97,6 @@ export default function QrInvoiceScanner({ isOpen, onClose, onTransactionAdded }
     if (scannedAmount === null || !description.trim()) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSubmitting(false)
       return

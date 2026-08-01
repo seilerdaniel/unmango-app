@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import SavingsGoals from '../SavingsGoals'
 import { PrivacyProvider } from '@/context/PrivacyContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 
@@ -13,9 +14,11 @@ vi.mock('@/lib/supabaseClient', () => ({ supabase: supabaseMock }))
 
 function renderWithProviders() {
   return render(
-    <PrivacyProvider>
-      <SavingsGoals />
-    </PrivacyProvider>
+    <AppProviders>
+      <PrivacyProvider>
+        <SavingsGoals />
+      </PrivacyProvider>
+    </AppProviders>
   )
 }
 

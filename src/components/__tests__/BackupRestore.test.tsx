@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import BackupRestore from '../BackupRestore'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 
@@ -61,7 +62,11 @@ describe('BackupRestore', () => {
       })
     )
 
-    const { container } = render(<BackupRestore />)
+    const { container } = render(
+      <AppProviders>
+        <BackupRestore />
+      </AppProviders>
+    )
     await restoreFile(container, makePayload(250))
 
     // Espera a que el restore termine (el resumen aparece al final) antes
@@ -96,7 +101,11 @@ describe('BackupRestore', () => {
       })
     )
 
-    const { container } = render(<BackupRestore />)
+    const { container } = render(
+      <AppProviders>
+        <BackupRestore />
+      </AppProviders>
+    )
     await restoreFile(container, makePayload(10))
 
     await waitFor(() =>

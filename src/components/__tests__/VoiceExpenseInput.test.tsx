@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import VoiceExpenseInput from '../VoiceExpenseInput'
 import { CategoriesProvider } from '@/context/CategoriesContext'
 import { WalletsProvider } from '@/context/WalletsContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
@@ -18,11 +19,13 @@ const SUPERMERCADO_CATEGORY = { id: 'cat-1', user_id: 'user-1', name: 'Supermerc
 
 function renderWithProviders(onTransactionAdded = vi.fn()) {
   return render(
-    <CategoriesProvider>
-      <WalletsProvider>
-        <VoiceExpenseInput isOpen={true} onClose={() => {}} onTransactionAdded={onTransactionAdded} />
-      </WalletsProvider>
-    </CategoriesProvider>
+    <AppProviders>
+      <CategoriesProvider>
+        <WalletsProvider>
+          <VoiceExpenseInput isOpen={true} onClose={() => {}} onTransactionAdded={onTransactionAdded} />
+        </WalletsProvider>
+      </CategoriesProvider>
+    </AppProviders>
   )
 }
 

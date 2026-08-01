@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useAsyncData } from '@/hooks/useAsyncData'
 
 export interface DashboardMonthExpense {
@@ -57,9 +58,10 @@ const DashboardDataContext = createContext<DashboardDataContextType | undefined>
  * cambia `dataVersion` en page.tsx (ver AUDIT.md, refactor #1).
  */
 export function DashboardDataProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: userLoading } = useUser()
+
   const { data, loading, error, refetch } = useAsyncData<DashboardData>(
     useCallback(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return null
 
       const now = new Date()
@@ -114,12 +116,12 @@ export function DashboardDataProvider({ children }: { children: React.ReactNode 
         totalIncome: Number(totalsResult.data?.[0]?.total_income) || 0,
         totalExpense: Number(totalsResult.data?.[0]?.total_expense) || 0,
       }
-    }, []),
+    }, [user]),
     'No se pudieron cargar los datos del panel.'
   )
 
   return (
-    <DashboardDataContext.Provider value={{ data, loading, error, refresh: refetch }}>
+    <DashboardDataContext.Provider value={{ data, loading: userLoading || loading, error, refresh: refetch }}>
       {children}
     </DashboardDataContext.Provider>
   )

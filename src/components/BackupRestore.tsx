@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import {
   RESTORE_BATCH_SIZE,
   buildBudgetInsertRows,
@@ -34,6 +35,7 @@ interface RestoreProgress {
 }
 
 export default function BackupRestore() {
+  const { user } = useUser()
   const [exporting, setExporting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [restoreSummary, setRestoreSummary] = useState<string | null>(null)
@@ -43,7 +45,6 @@ export default function BackupRestore() {
   async function handleExport() {
     setExporting(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const tables = ['categories', 'wallets', 'budgets', 'recurring_expenses', 'savings_goals', 'transactions'] as const
@@ -107,7 +108,6 @@ export default function BackupRestore() {
         throw new Error('El archivo no tiene el formato esperado de un backup de UnMango.')
       }
 
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Sesión no válida.')
 
       const totalRows =

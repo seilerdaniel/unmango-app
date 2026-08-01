@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { computeSplitShare, buildSplitExpenseMessage, buildWhatsAppLink } from '@/lib/splitExpense'
 import { Users, X, MessageCircle } from 'lucide-react'
@@ -18,6 +19,7 @@ interface SplitExpenseToolProps {
  * que se pierde.
  */
 export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProps) {
+  const { user } = useUser()
   const { formatAmount } = usePrivacy()
   const [isOpen, setIsOpen] = useState(false)
   const [description, setDescription] = useState('')
@@ -49,7 +51,6 @@ export default function SplitExpenseTool({ onDebtCreated }: SplitExpenseToolProp
     // sin llevar un registro formal).
     if (counterpartyName.trim()) {
       setSaving(true)
-      const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { error } = await supabase.from('debts').insert([
           {

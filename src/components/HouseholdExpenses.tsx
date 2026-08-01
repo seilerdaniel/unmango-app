@@ -1,72 +1,50 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
+import { useHousehold } from '@/context/HouseholdContext'
+import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeHouseholdBalance } from '@/lib/householdBalance'
 import { HouseholdExpense } from '@/types'
 import { Home, Plus, Trash2, Scale } from 'lucide-react'
 
 export default function HouseholdExpenses() {
   const { formatAmount } = usePrivacy()
-  const [householdId, setHouseholdId] = useState<string | null>(null)
-  const [partnerEmail, setPartnerEmail] = useState<string | null>(null)
-  const [myUserId, setMyUserId] = useState<string | null>(null)
-  const [expenses, setExpenses] = useState<HouseholdExpense[]>([])
+  const { user } = useUser()
+  const { householdId, partnerEmail } = useHousehold()
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
-  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  async function loadHousehold() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      setMyUserId(user.id)
-
-      const { data: link } = await supabase
-        .from('household_links')
-        .select('*')
-        .eq('status', 'active')
-        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .maybeSingle()
-
-      if (!link) {
-        setHouseholdId(null)
-        return
-      }
-
-      setHouseholdId(link.id)
-      const { data: email } = await supabase.rpc('get_household_partner_email', { p_household_id: link.id })
-      setPartnerEmail(email)
-
-      const { data: expensesData } = await supabase
+  // La relación de hogar (household_id + email de la pareja) ya la cachea
+  // HouseholdContext; acá solo se piden los gastos una vez que se conoce
+  // el hogar (ver AUDIT.md, Fase 1f).
+  const { data: expenses, loading, refetch } = useAsyncData<HouseholdExpense[]>(
+    useCallback(async () => {
+      if (!householdId) return null
+      const { data, error } = await supabase
         .from('household_expenses')
         .select('*')
-        .eq('household_id', link.id)
+        .eq('household_id', householdId)
         .order('created_at', { ascending: false })
 
-      setExpenses(expensesData ?? [])
-    } catch (err) {
-      console.error('Error cargando gastos de hogar:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadHousehold()
-  }, [])
+      if (error) throw error
+      return data ?? []
+    }, [householdId]),
+    'Error cargando gastos de hogar'
+  )
 
   async function handleAddExpense(e: React.FormEvent) {
     e.preventDefault()
-    if (!householdId || !myUserId || !description.trim() || Number(amount) <= 0) return
+    if (!householdId || !user || !description.trim() || Number(amount) <= 0) return
 
     setSubmitting(true)
     const { error } = await supabase.from('household_expenses').insert([
       {
         household_id: householdId,
-        paid_by_user_id: myUserId,
+        paid_by_user_id: user.id,
         description: description.trim(),
         amount: Number(amount),
       },
@@ -75,7 +53,7 @@ export default function HouseholdExpenses() {
     if (!error) {
       setDescription('')
       setAmount('')
-      await loadHousehold()
+      await refetch()
     } else {
       alert('Error al registrar el gasto: ' + error.message)
       console.error('Error creando gasto de hogar:', error)
@@ -86,7 +64,7 @@ export default function HouseholdExpenses() {
   async function handleDelete(id: string) {
     const { error } = await supabase.from('household_expenses').delete().eq('id', id)
     if (!error) {
-      setExpenses((prev) => prev.filter((e) => e.id !== id))
+      await refetch()
     } else {
       alert('Error al eliminar: ' + error.message)
     }
@@ -98,7 +76,7 @@ export default function HouseholdExpenses() {
 
     const { error } = await supabase.from('household_expenses').delete().eq('household_id', householdId)
     if (!error) {
-      setExpenses([])
+      await refetch()
     } else {
       alert('Error al liquidar: ' + error.message)
     }
@@ -108,8 +86,9 @@ export default function HouseholdExpenses() {
 
   // Si no hay hogar vinculado, esta tarjeta no se muestra — la
   // vinculación se hace desde Configuración (HouseholdLink.tsx).
-  if (!householdId) return null
+  if (!householdId || !user || !expenses) return null
 
+  const myUserId = user.id
   const totalPaidByMe = expenses.filter((e) => e.paid_by_user_id === myUserId).reduce((acc, e) => acc + Number(e.amount), 0)
   const totalPaidByPartner = expenses
     .filter((e) => e.paid_by_user_id !== myUserId)

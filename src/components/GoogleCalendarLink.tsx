@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { CalendarDays, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
 // Scope mínimo necesario: solo crear/editar/borrar eventos, no acceso
@@ -13,15 +14,15 @@ import { CalendarDays, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
 export default function GoogleCalendarLink() {
+  const { user } = useUser()
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [lastSyncMessage, setLastSyncMessage] = useState<string | null>(null)
 
-  async function checkConnection() {
+  const checkConnection = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
@@ -37,11 +38,13 @@ export default function GoogleCalendarLink() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     checkConnection()
+  }, [checkConnection])
 
+  useEffect(() => {
     // Si el usuario vuelve de autenticarse con Google (con el scope de
     // Calendar), Supabase deja el provider_refresh_token en la sesión.
     // Lo capturamos acá y lo guardamos nosotros — Supabase no lo
@@ -89,7 +92,6 @@ export default function GoogleCalendarLink() {
   async function handleDisconnect() {
     if (!confirm('¿Desconectar Google Calendar? Dejamos de crear/actualizar eventos hasta que vuelvas a conectar.')) return
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     const { error } = await supabase.from('google_calendar_tokens').delete().eq('user_id', user.id)

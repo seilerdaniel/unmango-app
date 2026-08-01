@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Chart as ChartJS,
   LineElement,
@@ -13,6 +13,7 @@ import {
 import { Line } from 'react-chartjs-2'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
 import { SavingsGoal } from '@/types'
 import { SUGGESTED_GOALS } from '@/lib/suggestedGoals'
 import { PiggyBank, Plus, Trash2, Pencil, Sparkles } from 'lucide-react'
@@ -57,6 +58,7 @@ function projectGoal(goal: SavingsGoal) {
 }
 
 export default function SavingsGoals() {
+  const { user } = useUser()
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [name, setName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
@@ -79,9 +81,8 @@ export default function SavingsGoals() {
     containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  async function loadGoals() {
+  const loadGoals = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
@@ -99,18 +100,17 @@ export default function SavingsGoals() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadGoals()
-  }, [])
+  }, [loadGoals])
 
   async function handleAddGoal(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim() || !targetAmount || Number(targetAmount) <= 0) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
       const { error } = await supabase.from('savings_goals').insert([

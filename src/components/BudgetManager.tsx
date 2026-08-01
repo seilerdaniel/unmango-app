@@ -5,10 +5,12 @@ import { supabase } from '@/lib/supabaseClient'
 import { Budget } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
+import { useUser } from '@/context/UserContext'
 import { suggestBudgets } from '@/lib/suggestedBudgets'
 import { Target, Plus, Trash2, AlertCircle, Sparkles } from 'lucide-react'
 
 export default function BudgetManager() {
+  const { user } = useUser()
   const { categories } = useCategories()
   const [budgets, setBudgets] = useState<Budget[]>([])
   // Gasto acumulado del mes actual por categoría, calculado en Postgres
@@ -66,7 +68,6 @@ export default function BudgetManager() {
 
     const loadInitialData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         const [{ data: budgetsData }] = await Promise.all([
@@ -95,12 +96,11 @@ export default function BudgetManager() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [user])
 
   // Función aux para recargar presupuestos tras una mutación (guardar/eliminar)
   const reloadData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const [{ data: budgetsData }] = await Promise.all([
@@ -126,7 +126,6 @@ export default function BudgetManager() {
 
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSubmitting(false)
       return

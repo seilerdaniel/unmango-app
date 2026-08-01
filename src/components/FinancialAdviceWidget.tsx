@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useDashboardData } from '@/context/DashboardDataContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useHousehold } from '@/context/HouseholdContext'
 import { useAsyncData } from '@/hooks/useAsyncData'
 import { computeFinancialHealthScore, hasNoFinancialData } from '@/lib/financialHealthScore'
 import { generateFinancialAdvice, AdviceItem } from '@/lib/financialAdvice'
@@ -52,6 +53,7 @@ export default function FinancialAdviceWidget({
 }) {
   const { data: dashboard } = useDashboardData()
   const { wallets } = useWallets()
+  const { householdId } = useHousehold()
 
   const { data: loadResult, loading } = useAsyncData<AdviceLoadResult>(
     useCallback(async () => {
@@ -62,15 +64,35 @@ export default function FinancialAdviceWidget({
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
       const daysRemaining = daysInMonth - dayOfMonth + 1
 
-      const [priceChangesResult, budgetsResult, categorySpendResult, debtsResult, goalsResult, categoriesResult] =
-        await Promise.all([
-          supabase.rpc('get_recurring_price_changes'),
-          supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
-          supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
-          supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
-          supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
-          supabase.from('categories').select('id').eq('user_id', dashboard.userId),
-        ])
+      // El household_id ya viene cacheado de HouseholdContext, así que la
+      // consulta de gastos del hogar se lanza en paralelo con el resto
+      // (antes había un waterfall: primero household_links y después
+      // household_expenses) — ver AUDIT.md, Fase 1f.
+      const householdExpensesPromise = householdId
+        ? supabase
+            .from('household_expenses')
+            .select('amount, paid_by_user_id, created_at')
+            .eq('household_id', householdId)
+            .order('created_at', { ascending: true })
+        : Promise.resolve({ data: null, error: null })
+
+      const [
+        priceChangesResult,
+        budgetsResult,
+        categorySpendResult,
+        debtsResult,
+        goalsResult,
+        categoriesResult,
+        householdExpensesResult,
+      ] = await Promise.all([
+        supabase.rpc('get_recurring_price_changes'),
+        supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
+        supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
+        supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
+        supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
+        supabase.from('categories').select('id').eq('user_id', dashboard.userId),
+        householdExpensesPromise,
+      ])
 
       const monthlyIncome = dashboard.monthlyIncome
       const monthlyExpense = dashboard.monthlyExpense
@@ -149,37 +171,23 @@ export default function FinancialAdviceWidget({
       // Gastos este mes pero ningún ingreso registrado.
       const hasExpensesButNoIncome = monthlyIncome === 0 && monthlyExpense > 0
 
-      // Balance de Hogar sin saldar hace tiempo — consulta aparte
-      // porque primero hace falta saber el household_id (no se puede
-      // resolver en el mismo Promise.all de arriba).
+      // Balance de Hogar sin saldar hace tiempo. El household_id viene del
+      // cache de HouseholdContext y los gastos ya se pidieron en paralelo
+      // arriba; acá solo se procesan.
       let householdUnsettledDays: number | null = null
-      const { data: householdLink } = await supabase
-        .from('household_links')
-        .select('id')
-        .eq('status', 'active')
-        .or(`user_a_id.eq.${dashboard.userId},user_b_id.eq.${dashboard.userId}`)
-        .maybeSingle()
+      if (householdId && householdExpensesResult.data && householdExpensesResult.data.length > 0) {
+        const householdExpenses = householdExpensesResult.data
+        const totalPaidByMe = householdExpenses
+          .filter((e) => e.paid_by_user_id === dashboard.userId)
+          .reduce((acc, e) => acc + Number(e.amount), 0)
+        const totalPaidByPartner = householdExpenses
+          .filter((e) => e.paid_by_user_id !== dashboard.userId)
+          .reduce((acc, e) => acc + Number(e.amount), 0)
+        const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
 
-      if (householdLink) {
-        const { data: householdExpenses } = await supabase
-          .from('household_expenses')
-          .select('amount, paid_by_user_id, created_at')
-          .eq('household_id', householdLink.id)
-          .order('created_at', { ascending: true })
-
-        if (householdExpenses && householdExpenses.length > 0) {
-          const totalPaidByMe = householdExpenses
-            .filter((e) => e.paid_by_user_id === dashboard.userId)
-            .reduce((acc, e) => acc + Number(e.amount), 0)
-          const totalPaidByPartner = householdExpenses
-            .filter((e) => e.paid_by_user_id !== dashboard.userId)
-            .reduce((acc, e) => acc + Number(e.amount), 0)
-          const householdBalance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
-
-          if (householdBalance.netBalanceForMe !== 0) {
-            const oldestExpenseDate = new Date(householdExpenses[0].created_at)
-            householdUnsettledDays = Math.floor((now.getTime() - oldestExpenseDate.getTime()) / (1000 * 60 * 60 * 24))
-          }
+        if (householdBalance.netBalanceForMe !== 0) {
+          const oldestExpenseDate = new Date(householdExpenses[0].created_at)
+          householdUnsettledDays = Math.floor((now.getTime() - oldestExpenseDate.getTime()) / (1000 * 60 * 60 * 24))
         }
       }
 
@@ -199,7 +207,7 @@ export default function FinancialAdviceWidget({
           householdUnsettledDays,
         }),
       }
-    }, [dashboard, wallets]),
+    }, [dashboard, wallets, householdId]),
     'Error generando recomendaciones financieras'
   )
 

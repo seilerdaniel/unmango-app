@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { RecurringExpense, Wallet } from '@/types'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useCategories } from '@/context/CategoriesContext'
@@ -57,6 +58,7 @@ const emptyForm = {
  * sección mostrar).
  */
 export default function RecurringManager({ onTransactionAdded }: RecurringManagerProps) {
+  const { user } = useUser()
   const { categories } = useCategories()
   const { wallets } = useWallets()
   const [items, setItems] = useState<RecurringExpense[]>([])
@@ -78,7 +80,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
 
     const loadData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         const { data: itemsData, error } = await supabase
@@ -100,11 +101,10 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [user])
 
   const reloadData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data: itemsData } = await supabase
@@ -148,7 +148,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     if (!form.title || !form.amount || !form.billingDay || Number(form.amount) <= 0) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSubmitting(false)
       return
@@ -227,7 +226,6 @@ export default function RecurringManager({ onTransactionAdded }: RecurringManage
     }
 
     setImpactingId(item.id)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setImpactingId(null)
       return

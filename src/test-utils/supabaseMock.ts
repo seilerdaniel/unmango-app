@@ -25,18 +25,40 @@ export function makeQueryBuilder(result: { data: unknown; error: unknown }) {
     'gte',
     'lte',
     'single',
+    'maybeSingle',
+    'limit',
+    'or',
+    'not',
   ]
 
   for (const method of chainableMethods) {
     builder[method] = vi.fn(() => builder)
   }
 
+  // `.single()` / `.maybeSingle()` hacen que el resultado sea un objeto o
+  // null (no un array). El flag se lee al resolver el "then".
+  let singleMode = false
+  builder.single = vi.fn(() => {
+    singleMode = true
+    return builder
+  })
+  builder.maybeSingle = vi.fn(() => {
+    singleMode = true
+    return builder
+  })
+
   // Hace que `await supabase.from('x').select().eq(...)` funcione: al ser
   // "thenable", el await resuelve directamente con `result`.
   builder.then = (
     resolve: (value: typeof result) => unknown,
     reject?: (reason: unknown) => unknown
-  ) => Promise.resolve(result).then(resolve, reject)
+  ) => {
+    const finalResult =
+      singleMode && Array.isArray(result.data)
+        ? { ...result, data: result.data.length > 0 ? result.data[0] : null }
+        : result
+    return Promise.resolve(finalResult).then(resolve, reject)
+  }
 
   return builder
 }
@@ -62,11 +84,17 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}) {
   const rpcResults = config.rpcResults ?? {}
 
   const fromCalls: string[] = []
+  const authListeners: Array<(event: string, session: unknown) => void> = []
 
   const mock = {
     auth: {
       getUser: vi.fn(async () => ({ data: { user }, error: null })),
+      getSession: vi.fn(async () => ({ data: { session: user ? { user } : null }, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
+      onAuthStateChange: vi.fn((callback: (event: string, session: unknown) => void) => {
+        authListeners.push(callback)
+        return { data: { subscription: { unsubscribe: vi.fn() } } }
+      }),
     },
     from: vi.fn((table: string) => {
       fromCalls.push(table)
@@ -74,6 +102,10 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}) {
     }),
     rpc: vi.fn(async (fnName: string) => rpcResults[fnName] ?? { data: [], error: null }),
     _fromCalls: fromCalls,
+    /** Emula un evento de onAuthStateChange (p.ej. SIGNED_OUT, SIGNED_IN). */
+    _emitAuthStateChange: (event: string, session: unknown) => {
+      authListeners.forEach((cb) => cb(event, session))
+    },
   }
 
   return mock

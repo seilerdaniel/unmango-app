@@ -2,10 +2,9 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { User } from "@supabase/supabase-js";
 import { Transaction } from "@/types";
 import TransactionForm from "@/components/TransactionForm";
 import CategoryManager from "@/components/CategoryManager";
@@ -21,6 +20,7 @@ import HouseholdExpenses from "@/components/HouseholdExpenses";
 import TransactionFilters from "@/components/TransactionFilters";
 import { usePrivacy } from "@/context/PrivacyContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useUser } from "@/context/UserContext";
 import { useDashboardData } from "@/context/DashboardDataContext";
 import { useWallets } from "@/context/WalletsContext";
 import RecurringManager from "@/components/RecurringManager";
@@ -68,7 +68,6 @@ import {
 const PAGE_SIZE = 50;
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<
     Transaction[]
@@ -85,6 +84,12 @@ export default function Home() {
   // al cerrar Configuración (cubre billeteras y cualquier otro cambio ahí).
   const [dataVersion, setDataVersion] = useState(0);
   const router = useRouter();
+
+  // Sesión cacheada a nivel global (ver AUDIT.md, Fase 1f): UserContext
+  // resuelve user una sola vez y lo mantiene sincronizado con Supabase;
+  // acá ya no se llama supabase.auth.getUser() en cada montaje ni por
+  // cada fetch/paginación.
+  const { user, loading: userLoading } = useUser();
 
   // Consumimos el contexto de privacidad y de tema
   const { isPrivate, togglePrivacy, formatAmount } = usePrivacy();
@@ -116,21 +121,16 @@ export default function Home() {
   }, [dataVersion, refreshDashboard, refreshWallets]);
 
   // Primera página del historial (la más reciente). Se llama al iniciar y
-  // después de cualquier alta/baja de movimiento.
-  async function fetchTransactions() {
-    // Se pide el usuario actual en cada llamada (en vez de usar el estado
-    // `user` del closure) para evitar traer datos antes de que la sesión
-    // esté resuelta. El filtro por user_id es defensa en profundidad además
-    // de las políticas RLS (ver supabase/rls_policies.sql).
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-    if (!currentUser) return;
+  // después de cualquier alta/baja de movimiento. Usa el `user` cacheado
+  // de UserContext (ya resuelto para cuando la app renderiza) en vez de
+  // pedir la sesión a Supabase en cada llamada.
+  const fetchTransactions = useCallback(async () => {
+    if (!user) return;
 
     const { data, error } = await supabase
       .from("transactions")
       .select("*, categories(*)")
-      .eq("user_id", currentUser.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .range(0, PAGE_SIZE - 1);
 
@@ -141,14 +141,11 @@ export default function Home() {
     }
 
     setDataVersion((v) => v + 1);
-  }
+  }, [user]);
 
   // Trae la siguiente página y la agrega al final de lo ya cargado.
   async function loadMoreTransactions() {
-    const {
-      data: { user: currentUser },
-    } = await supabase.auth.getUser();
-    if (!currentUser) return;
+    if (!user) return;
 
     setLoadingMore(true);
     const from = allTransactions.length;
@@ -157,7 +154,7 @@ export default function Home() {
     const { data, error } = await supabase
       .from("transactions")
       .select("*, categories(*)")
-      .eq("user_id", currentUser.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -187,21 +184,19 @@ export default function Home() {
   }
 
   useEffect(() => {
+    // Espera a que UserContext resuelva la sesión antes de decidir si hay
+    // que redirigir a /login o cargar los datos del usuario.
+    if (userLoading) return;
     async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) {
         router.push("/login");
       } else {
-        setUser(user);
         await fetchTransactions();
       }
       setLoading(false);
     }
-
     init();
-  }, [router]);
+  }, [user, userLoading, router, fetchTransactions]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();

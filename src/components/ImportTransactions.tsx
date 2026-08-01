@@ -5,6 +5,7 @@ import Papa from 'papaparse'
 import { supabase } from '@/lib/supabaseClient'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
+import { useUser } from '@/context/UserContext'
 import { Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
 
 interface ImportTransactionsProps {
@@ -62,6 +63,7 @@ export function parseAmount(raw: string): number | null {
 }
 
 export default function ImportTransactions({ onImported }: ImportTransactionsProps) {
+  const { user } = useUser()
   const { categories } = useCategories()
   const { wallets } = useWallets()
   const [headers, setHeaders] = useState<string[]>([])
@@ -133,7 +135,6 @@ export default function ImportTransactions({ onImported }: ImportTransactionsPro
     if (validRows.length === 0) return
     setImporting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setImporting(false)
       return

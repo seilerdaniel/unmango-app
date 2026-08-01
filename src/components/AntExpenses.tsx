@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { usePrivacy } from '@/context/PrivacyContext'
+import { useUser } from '@/context/UserContext'
 import { detectAntExpenses } from '@/lib/antExpenses'
 import { Bug, Pencil } from 'lucide-react'
 
@@ -11,6 +12,7 @@ const DEFAULT_THRESHOLD = 3000
 
 export default function AntExpenses() {
   const { isPrivate, formatAmount } = usePrivacy()
+  const { user } = useUser()
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD)
   const [expenses, setExpenses] = useState<{ amount: number }[]>([])
   const [loading, setLoading] = useState(true)
@@ -23,7 +25,6 @@ export default function AntExpenses() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
         const now = new Date()
@@ -45,7 +46,7 @@ export default function AntExpenses() {
       }
     }
     load()
-  }, [])
+  }, [user])
 
   function handleChangeThreshold() {
     const input = window.prompt('¿A partir de qué monto considerás que YA NO es un gasto hormiga?', String(threshold))

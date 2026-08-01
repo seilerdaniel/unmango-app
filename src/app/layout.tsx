@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { UserProvider } from "@/context/UserContext";
+import { HouseholdProvider } from "@/context/HouseholdContext";
 import { PrivacyProvider } from "@/context/PrivacyContext";
 import { CategoriesProvider } from "@/context/CategoriesContext";
 import { WalletsProvider } from "@/context/WalletsContext";
@@ -80,15 +82,19 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-gray-50 dark:bg-gray-950 transition-colors">
         <ServiceWorkerRegister />
         <ThemeProvider>
-          <PrivacyProvider>
-            <CategoriesProvider>
-              <WalletsProvider>
-                <DashboardDataProvider>
-                  {children}
-                </DashboardDataProvider>
-              </WalletsProvider>
-            </CategoriesProvider>
-          </PrivacyProvider>
+          <UserProvider>
+            <PrivacyProvider>
+              <HouseholdProvider>
+                <CategoriesProvider>
+                  <WalletsProvider>
+                    <DashboardDataProvider>
+                      {children}
+                    </DashboardDataProvider>
+                  </WalletsProvider>
+                </CategoriesProvider>
+              </HouseholdProvider>
+            </PrivacyProvider>
+          </UserProvider>
         </ThemeProvider>
       </body>
     </html>

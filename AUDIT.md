@@ -1873,3 +1873,75 @@ Verificado: `npx tsc --noEmit` (0 errores), `npm run build` (✅ sin
 errores), `npx eslint .` (misma línea base pre-existente de siempre,
 nada nuevo), `npx vitest run` (**53 archivos, 293 tests**, todos
 pasando — antes había 2 fallando).
+
+## ✅ Fase 1f — Sesión centralizada (UserContext) + corte de waterfalls de Hogar (item #5 de la auditoría)
+
+El dashboard consumía la sesión de dos formas problemáticas:
+**~20 componentes** llamaban `supabase.auth.getUser()` cada uno al
+montar (una request de red duplicada por componente, con un estado de
+"loading de sesión" propio en cada uno), y la carga de Hogar encadenaba
+4 consultas secuenciales (getUser → buscar link → email del partner →
+gastos), un waterfall que agregaba latencia de a una request por vez.
+
+- [x] **`src/context/UserContext.tsx`** (`UserProvider` + `useUser()`):
+  única fuente de la sesión. Expone `{ user, session, loading, refreshUser }`.
+  Inicializa con `getSession()` y `getUser()` en **paralelo**
+  (idempotente contra doble-invoke de StrictMode), y un listener de
+  `supabase.auth.onAuthStateChange` mantiene `user`/`session`
+  sincronizados ante login, logout y refresh de token — se eliminó el
+  "cargar usuario por componente". `refreshUser()` re-pide ambas para
+  el flujo de revalidación (ej. después de un OAuth). En `layout.tsx`
+  queda por encima de todo lo que consume `useUser()`.
+- [x] **`src/context/HouseholdContext.tsx`** (`HouseholdProvider` +
+  `useHousehold()`): expone `{ link, householdId, partnerEmail, loading,
+  refresh }`. Consulta el último `household_links` del usuario
+  (`.or(user_a_id/user_b_id).limit(1).maybeSingle()`), solo expone
+  `householdId` si el link está `active`, y trae el email del partner
+  vía la RPC `get_household_partner_email` (security definer). Con esto
+  el Hogar se consulta **una sola vez** y se comparte entre los
+  componentes que lo usan.
+- [x] **Waterfall roto**: `HouseholdExpenses` pasó de
+  getUser→link→email→gastos a `useHousehold()` (link cacheado) +
+  `useAsyncData()` para los gastos. `HouseholdLink` lee/regenera desde
+  `useHousehold()` (`refresh()` tras cada operación). El balance de
+  hogar de `FinancialAdviceWidget` ahora va **dentro del `Promise.all`**
+  principal usando el `householdId` del contexto (se eliminó la consulta
+  secuencial de la última tanda).
+- [x] **Refactor masivo a `useUser()`**: los ~20 componentes que hacían
+  su propio `getUser()` (BackupRestore, AntExpenses, CategoryManager,
+  BudgetManager, DebtsManager, ExchangeGapSimulator, ImportTransactions,
+  SubscriptionPriceAlerts, SavingsGoals, GoogleCalendarLink,
+  InstallmentTracker, RecurringManager, QrInvoiceScanner,
+  SplitExpenseTool, OfflineSyncManager, TelegramLink, VoiceExpenseInput,
+  TransactionForm, WalletManager, WorkSettings) ahora leen `user` del
+  contexto. `page.tsx` también (su `loading` es bootstrap de sesión +
+  paginación manual; redirige a `/login` si no hay user).
+- [x] **Fix de bug real de deps de efectos**: los effects que usan
+  `user` del contexto corren ANTES de que la sesión se resuelva
+  (`user=null` → return temprano → nunca recargan). Se corrigieron las
+  deps (`[user]` o `useCallback` memoizado) en: `page.tsx`
+  (`fetchTransactions`), `AntExpenses`, `BudgetManager`, `SavingsGoals`,
+  `RecurringManager`, `SubscriptionPriceAlerts`, `DebtsManager`,
+  `ExchangeGapSimulator`, `GoogleCalendarLink`, `InstallmentTracker`,
+  `OfflineSyncManager`, `TelegramLink`, `TransactionForm`,
+  `WorkSettings`. `GoogleCalendarLink` dividió su efecto (checkConnection
+  con `[user]` + listener de OAuth una sola vez).
+- [x] **Tests**: `src/context/__tests__/UserContext.test.tsx` (6 tests —
+  expone user, inicializa sesión paralela una vez, logout, login, refresh,
+  error) y `src/context/__tests__/HouseholdContext.test.tsx` (4 tests —
+  link activo cacheado, sin link, loading inicial, se resetea al
+  desloguear). Se amplió `supabaseMock` (`getSession`, `getUser`,
+  `signOut`, `onAuthStateChange` + filtros `or`/`limit`/`maybeSingle`/
+  `single`) y se creó `src/test-utils/AppProviders.tsx` (wrapper
+  `UserProvider + HouseholdProvider`). Los tests de componentes que
+  montan providers ahora usan `AppProviders`.
+- [x] **Fix de mock**: `maybeSingle()`/`single()` del mock resuelven con
+  objeto (o null) y no con array — `HouseholdLink` y otros dependen de
+  eso.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx vitest run`
+(**57 archivos, 328 tests**, todos pasando — 318 previos + 10 nuevos),
+`npx eslint .` (18 errores — los 17 `set-state-in-effect` + 1 `any` de
+la línea base pre-existente, nada nuevo; los warnings de
+`exhaustive-deps` que este refactor introdujo se corrigieron en la misma
+tanda).

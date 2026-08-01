@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import WalletManager from '../WalletManager'
 import { PrivacyProvider } from '@/context/PrivacyContext'
 import { WalletsProvider } from '@/context/WalletsContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 
@@ -25,11 +26,13 @@ const WALLET_ROW = {
 
 function renderWithProviders() {
   return render(
-    <PrivacyProvider>
-      <WalletsProvider>
-        <WalletManager />
-      </WalletsProvider>
-    </PrivacyProvider>
+    <AppProviders>
+      <PrivacyProvider>
+        <WalletsProvider>
+          <WalletManager />
+        </WalletsProvider>
+      </PrivacyProvider>
+    </AppProviders>
   )
 }
 

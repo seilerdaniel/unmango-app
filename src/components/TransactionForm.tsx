@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
 import { useWallets } from '@/context/WalletsContext'
 import { evaluateMathExpression } from '@/lib/basicCalculator'
@@ -14,6 +15,7 @@ interface TransactionFormProps {
 }
 
 export default function TransactionForm({ onTransactionAdded }: TransactionFormProps) {
+  const { user } = useUser()
   const [description, setDescription] = useState('')
   const [amountArs, setAmountArs] = useState('')
   const [type, setType] = useState<'income' | 'expense'>('expense')
@@ -43,7 +45,6 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
 
   useEffect(() => {
     async function loadWorkSettings() {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase
         .from('user_work_settings')
@@ -55,13 +56,12 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
       }
     }
     loadWorkSettings()
-  }, [])
+  }, [user])
 
   async function handleQuickAddWallet() {
     const name = window.prompt('Nombre de la nueva billetera (ej: Mercado Pago, Banco Galicia):')
     if (!name || !name.trim()) return
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     const { data, error } = await supabase
@@ -83,8 +83,6 @@ export default function TransactionForm({ onTransactionAdded }: TransactionFormP
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-
-    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       alert('Sesión no válida')

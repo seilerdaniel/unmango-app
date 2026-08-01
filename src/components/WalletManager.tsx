@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { Wallet, WalletWithBalance } from '@/types'
@@ -37,6 +38,7 @@ function walletIconFor(type: Wallet['type']) {
 }
 
 export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?: () => void }) {
+  const { user } = useUser()
   const { wallets, totalBalance, loading, error } = useWallets()
   const [name, setName] = useState('')
   const [type, setType] = useState<Wallet['type']>('virtual_wallet')
@@ -76,7 +78,6 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     if (!name.trim()) return
 
     setSubmitting(true)
-    const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
       const isCard = type === 'credit_card' || type === 'debit_card'

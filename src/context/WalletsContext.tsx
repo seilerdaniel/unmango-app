@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { WalletWithBalance } from '@/types'
 import { useAsyncData } from '@/hooks/useAsyncData'
 
@@ -24,9 +25,10 @@ const WalletsContext = createContext<WalletsContextType | undefined>(undefined)
  * alta/baja/edición (ver AUDIT.md, refactor #2).
  */
 export function WalletsProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: userLoading } = useUser()
+
   const { data, loading, error, refetch } = useAsyncData<WalletWithBalance[]>(
     useCallback(async () => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return null
 
       const [{ data: walletsData, error: walletsError }, { data: balancesData, error: balancesError }] =
@@ -47,7 +49,7 @@ export function WalletsProvider({ children }: { children: React.ReactNode }) {
         ...w,
         balance: balanceByWallet[w.id] ?? (Number(w.initial_balance) || 0),
       }))
-    }, []),
+    }, [user]),
     'No se pudieron cargar las billeteras.'
   )
 
@@ -58,7 +60,7 @@ export function WalletsProvider({ children }: { children: React.ReactNode }) {
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0)
 
   return (
-    <WalletsContext.Provider value={{ wallets, totalBalance, loading, error, refresh: refetch }}>
+    <WalletsContext.Provider value={{ wallets, totalBalance, loading: userLoading || loading, error, refresh: refetch }}>
       {children}
     </WalletsContext.Provider>
   )

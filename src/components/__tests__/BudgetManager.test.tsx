@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import BudgetManager from '../BudgetManager'
 import { CategoriesProvider } from '@/context/CategoriesContext'
 import { PrivacyProvider } from '@/context/PrivacyContext'
+import { AppProviders } from '@/test-utils/AppProviders'
 import { createSupabaseMock } from '@/test-utils/supabaseMock'
 import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
 
@@ -23,11 +24,13 @@ const BUDGET_ROW = {
 
 function renderWithProviders() {
   return render(
-    <PrivacyProvider>
-      <CategoriesProvider>
-        <BudgetManager />
-      </CategoriesProvider>
-    </PrivacyProvider>
+    <AppProviders>
+      <PrivacyProvider>
+        <CategoriesProvider>
+          <BudgetManager />
+        </CategoriesProvider>
+      </PrivacyProvider>
+    </AppProviders>
   )
 }
 

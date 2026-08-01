@@ -1,19 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { generateLinkingCode } from '@/lib/telegramLinkCode'
 import { Send, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
 export default function TelegramLink() {
+  const { user } = useUser()
   const [loading, setLoading] = useState(true)
   const [code, setCode] = useState<string | null>(null)
   const [linked, setLinked] = useState(false)
   const [generating, setGenerating] = useState(false)
 
-  async function loadStatus() {
+  const loadStatus = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const { data, error } = await supabase
@@ -33,16 +34,15 @@ export default function TelegramLink() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     loadStatus()
-  }, [])
+  }, [loadStatus])
 
   async function handleGenerateCode() {
     setGenerating(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const newCode = generateLinkingCode()
@@ -71,7 +71,6 @@ export default function TelegramLink() {
   async function handleUnlink() {
     if (!confirm('¿Desvincular tu cuenta de Telegram? El bot va a dejar de registrar gastos hasta que vincules de nuevo.')) return
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     const { error } = await supabase.from('telegram_links').delete().eq('user_id', user.id)

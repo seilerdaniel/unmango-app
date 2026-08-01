@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
+import { useHousehold } from '@/context/HouseholdContext'
 import { generateHouseholdInviteCode } from '@/lib/householdInviteCode'
-import { HouseholdLink as HouseholdLinkType } from '@/types'
 import { Home, RefreshCw, CheckCircle2, Unlink } from 'lucide-react'
 
 interface HouseholdLinkProps {
@@ -11,51 +12,20 @@ interface HouseholdLinkProps {
 }
 
 export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
-  const [loading, setLoading] = useState(true)
-  const [link, setLink] = useState<HouseholdLinkType | null>(null)
-  const [partnerEmail, setPartnerEmail] = useState<string | null>(null)
+  const { user } = useUser()
+  const { link, partnerEmail, loading, refresh } = useHousehold()
   const [inviteInput, setInviteInput] = useState('')
   const [generating, setGenerating] = useState(false)
   const [accepting, setAccepting] = useState(false)
 
-  async function loadLink() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error } = await supabase
-        .from('household_links')
-        .select('*')
-        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (error) throw error
-      setLink(data)
-
-      if (data && data.status === 'active') {
-        const { data: email } = await supabase.rpc('get_household_partner_email', { p_household_id: data.id })
-        setPartnerEmail(email)
-      }
-    } catch (err) {
-      console.error('Error cargando el vínculo de hogar:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadLink()
-  }, [])
+  // La relación de hogar ya la cachea HouseholdContext (se recarga al
+  // cambiar la sesión o vía `refresh()`), así que acá no hay llamadas a
+  // supabase.auth.getUser() ni a household_links al montar (ver AUDIT.md,
+  // Fase 1f).
 
   async function handleGenerateCode() {
+    if (!user) return
     setGenerating(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setGenerating(false)
-      return
-    }
 
     const code = generateHouseholdInviteCode()
     const { error } = await supabase.from('household_links').insert([
@@ -63,7 +33,7 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
     ])
 
     if (!error) {
-      await loadLink()
+      await refresh()
     } else {
       alert('Error al generar el código: ' + error.message)
       console.error('Error generando código de hogar:', error)
@@ -80,7 +50,7 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
 
     if (!error) {
       setInviteInput('')
-      await loadLink()
+      await refresh()
       if (onLinkChanged) onLinkChanged()
     } else {
       alert('No se pudo vincular: ' + error.message)
@@ -95,8 +65,7 @@ export default function HouseholdLink({ onLinkChanged }: HouseholdLinkProps) {
 
     const { error } = await supabase.from('household_links').delete().eq('id', link.id)
     if (!error) {
-      setLink(null)
-      setPartnerEmail(null)
+      await refresh()
       if (onLinkChanged) onLinkChanged()
     } else {
       alert('Error al desvincular: ' + error.message)

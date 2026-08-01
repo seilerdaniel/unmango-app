@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import { Category } from '@/types'
 
 interface CategoriesContextType {
@@ -13,19 +14,26 @@ interface CategoriesContextType {
 
 const CategoriesContext = createContext<CategoriesContextType | undefined>(undefined)
 
+/**
+ * Fuente única de verdad para las categorías del usuario. Usa el user
+ * cacheado de UserContext (ver AUDIT.md, Fase 1f) en vez de llamar a
+ * `supabase.auth.getUser()` en cada montaje. Se recarga cuando cambia la
+ * sesión (login/logout) o al invocar `refreshCategories()`.
+ */
 export function CategoriesProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: userLoading } = useUser()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refreshCategories = useCallback(async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setCategories([])
-        return
-      }
+    if (!user) {
+      setCategories([])
+      setLoading(false)
+      return
+    }
 
+    try {
       const { data, error: fetchError } = await supabase
         .from('categories')
         .select('*')
@@ -41,11 +49,12 @@ export function CategoriesProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
-    refreshCategories()
-  }, [refreshCategories])
+    setLoading(userLoading)
+    if (!userLoading) refreshCategories()
+  }, [userLoading, refreshCategories, user])
 
   return (
     <CategoriesContext.Provider value={{ categories, loading, error, refreshCategories }}>

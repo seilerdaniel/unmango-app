@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useUser } from '@/context/UserContext'
 import type { Database } from '@/types/database'
 import { loadPendingQueue, dequeueSynced, countPending } from '@/lib/offlineQueue'
 import { WifiOff, RefreshCw, CloudOff } from 'lucide-react'
@@ -17,16 +18,16 @@ interface OfflineSyncManagerProps {
  * vacía la cola de pendientes al recuperar internet.
  */
 export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps) {
+  const { user } = useUser()
   const [isOnline, setIsOnline] = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
 
-  async function flushQueue() {
+  const flushQueue = useCallback(async () => {
     const queue = loadPendingQueue()
     if (queue.length === 0) return
 
     setSyncing(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setSyncing(false)
       return
@@ -53,7 +54,7 @@ export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps
 
     setPendingCount(countPending())
     setSyncing(false)
-  }
+  }, [user, onSynced])
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -78,8 +79,7 @@ export default function OfflineSyncManager({ onSynced }: OfflineSyncManagerProps
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [flushQueue])
 
   if (isOnline && !syncing && pendingCount === 0) return null
 

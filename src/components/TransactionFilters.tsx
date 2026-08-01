@@ -49,7 +49,7 @@ export default function TransactionFilters({ transactions, onFiltered }: Transac
 
     setVisibleTransactions(result)
     onFiltered(result)
-  }, [searchTerm, typeFilter, categoryFilter, transactions])
+  }, [searchTerm, typeFilter, categoryFilter, transactions, onFiltered])
 
   // Función para exportar los datos filtrados a CSV
   function exportToCSV() {
