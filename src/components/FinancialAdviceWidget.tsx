@@ -89,7 +89,7 @@ export default function FinancialAdviceWidget({
         supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', dashboard.userId),
         supabase.rpc('get_monthly_category_spend', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
         supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', dashboard.userId),
-        supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', dashboard.userId),
+        supabase.from('savings_goals').select('name, current_amount, monthly_contribution, created_at').eq('user_id', dashboard.userId),
         supabase.from('categories').select('id').eq('user_id', dashboard.userId),
         householdExpensesPromise,
       ])
@@ -131,8 +131,24 @@ export default function FinancialAdviceWidget({
       }))
       const hasSubscriptionPriceIncrease = detectPriceIncreases(priceChanges).length > 0
 
+      // Safe-to-Spend diario: balance real de billeteras menos todos los
+      // compromisos del mes (fijos + presupuestos + metas + cuotas),
+      // dividido entre los días que quedan.
       const safeToSpendToday =
-        monthlyIncome > 0 ? computeSafeToSpend(monthlyIncome - monthlyExpense, fixedCommitments, daysRemaining) : null
+        monthlyIncome > 0
+          ? computeSafeToSpend({
+              totalBalance: wallets.reduce((acc, w) => acc + (Number(w.balance) || 0), 0),
+              monthlyFixedCommitments: fixedCommitments,
+              budgetedAllocations: (budgetsResult.data ?? []).reduce((acc, b) => acc + Number(b.monthly_limit), 0),
+              savingsContributions: (goalsResult.data ?? []).reduce((acc, g) => acc + (Number(g.monthly_contribution) || 0), 0),
+              installmentCommitments: dashboard.installments.reduce(
+                (acc, p) => acc + (p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0),
+                0
+              ),
+              monthlyIncome,
+              daysRemaining,
+            }).dailyLimit
+          : null
 
       // Presupuesto excedido: cruzamos el límite de cada categoría con
       // lo gastado ese mes (misma función que ya usa BudgetManager).

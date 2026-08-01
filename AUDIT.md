@@ -1993,3 +1993,58 @@ sin usar. Se llevó la línea base a **0 errores / 0 warnings**:
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**57 archivos, 328 tests**,
 todos pasando), `npm run build` (OK).
+
+## ✅ Safe-to-Spend (Gasto Seguro Diario) — Fase 2 UX/UI y valor de producto
+
+Se rediseñó el widget "Podés gastar hoy" para que descuente **todo** lo
+que ya está comprometido del mes y muestre un límite diario con semáforo
+de estado, en vez del cálculo viejo que solo restaba gastos fijos.
+
+- [x] **`src/lib/safeToSpend.ts`** (rediseñado, función pura):
+  - `computeSafeToSpend(input)` recibe
+    `{ totalBalance, monthlyFixedCommitments, budgetedAllocations,
+    savingsContributions, installmentCommitments, monthlyIncome,
+    daysRemaining }` y devuelve
+    `{ availableBalance, daysRemaining, dailyLimit, status }`.
+  - `availableBalance = totalBalance - (fijos + presupuestos + metas +
+    cuotas del mes)`.
+  - `dailyLimit = max(0, availableBalance / max(1, daysRemaining))` —
+    nunca negativo (los fijos ya superan el balance ⇒ 0).
+  - Semáforo: **Rojo** (`availableBalance ≤ 0`, sobregastado) ·
+    **Amarillo** (`dailyLimit < (monthlyIncome/30) * 0.10`, ajustado —
+    umbral en `tightStatusThreshold`) · **Verde** (seguro, el resto).
+    Documentado que el amarillo usa `<` estricto: en el límite exacto
+    sigue siendo verde.
+  - `getDaysRemainingInMonth(today)`: días que quedan del mes **con
+    hoy incluido** (`díasDelMes - díaActual + 1`), función pura testeada.
+  - Nota de diseño: sumar los límites completos de presupuestos es
+    **conservador** — si un recurrente comparte categoría con un
+    presupuesto cuenta dos veces. Intencional (mejor subestimar que
+    sobreestimar lo que se puede gastar).
+- [x] **`src/context/DashboardDataContext.tsx`**: `DashboardData` suma 3
+  campos — `budgetAllocation` (Σ `budgets.monthly_limit`),
+  `savingsContribution` (Σ `savings_goals.monthly_contribution`) e
+  `installmentCommitments` (Σ `total_amount / installments_count`, **se
+  deriva del array `installments` que el contexto ya traía** — no se
+  agrega una query redundante). En el `Promise.all` se suman 2 consultas
+  ligeras (`budgets`, `savings_goals`) a las 5 existentes.
+- [x] **`src/components/SafeToSpendWidget.tsx`** (rediseñado): consume
+  `useDashboardData()` + `useWallets().totalBalance` (saldo real en
+  billeteras, decisión del usuario) + `usePrivacy()` (formato/privacidad).
+  Muestra el límite diario grande coloreado según el semáforo, badge
+  "Seguro / Ajustado / Sobregastado" con icono, y un desglose con las 4
+  deducciones (fijos, presupuestos, metas, cuotas) + "queda disponible".
+- [x] **`src/components/FinancialAdviceWidget.tsx`**: el `safeToSpendToday`
+  que alimenta las recomendaciones ahora usa la misma fórmula
+  (balance real de billeteras − todos los compromisos, `.dailyLimit`); la
+  query de `savings_goals` trae además `monthly_contribution`.
+- [x] **Tests** (`src/lib/__tests__/safeToSpend.test.ts`, reescritos, 16):
+  descuenta las 4 categorías, divide entre días (incluye hoy), clamp a 0,
+  Verde/Amarillo/Rojo (incluido el límite exacto del umbral), `daysRemaining
+  = 0` no divide por cero, y `getDaysRemainingInMonth` en 1ro/15/31 y
+  febrero.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**57 archivos, 340 tests**,
+todos pasando — 328 previos + 16 nuevos − 4 viejos reemplazados), `npm run
+build` (OK).
