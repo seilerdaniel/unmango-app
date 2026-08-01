@@ -55,7 +55,8 @@ export default function FinancialHealthScoreWidget() {
             .eq('is_active', true),
           supabase
             .from('installment_purchases')
-            .select('total_amount, installments_count'),
+            .select('total_amount, installments_count')
+            .eq('user_id', user.id),
           supabase.rpc('get_wallet_balances'),
         ])
 

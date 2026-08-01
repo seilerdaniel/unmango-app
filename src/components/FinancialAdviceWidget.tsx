@@ -77,7 +77,7 @@ export default function FinancialAdviceWidget({
             .select('amount, currency, billing_frequency')
             .eq('user_id', user.id)
             .eq('is_active', true),
-          supabase.from('installment_purchases').select('description, total_amount, installments_count'),
+          supabase.from('installment_purchases').select('description, total_amount, installments_count').eq('user_id', user.id),
           supabase.rpc('get_wallet_balances'),
           supabase.rpc('get_recurring_price_changes'),
           supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', user.id),

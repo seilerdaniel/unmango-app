@@ -33,6 +33,17 @@ Cambios:
 - [ ] Confirmar que `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` estén seteadas en
   Vercel (producción) y no cayendo en el fallback `placeholder.supabase.co`.
 
+## ✅ Fase 1b — Defensa en profundidad: instalaciones y gastos (resuelto)
+
+- [x] **`installment_purchases` en widgets**: `FinancialAdviceWidget` y
+  `FinancialHealthScoreWidget` consultaban `installment_purchases` sin
+  `.eq('user_id', user.id)`, confiando solo en RLS (como hacía la Fase 1
+  con `categories`, `transactions`, `budgets` y `recurring_expenses`).
+  Ahora ambos filtran explícitamente por `user_id`, alineándose con el
+  resto de la app. Hallado en la auditoría de arquitectura (item #12 de la
+  lista priorizada). Verificado: `tsc --noEmit` 0 errores, 293/293 tests
+  pasando.
+
 ## 🟠 Fase 2 — Bugs menores y UX
 
 - [x] `TransactionFilters.exportToCSV()` ahora exporta la lista filtrada
