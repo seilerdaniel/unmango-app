@@ -114,6 +114,8 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 También podés mandarme texto libre, por ejemplo:
 "Gasto 4500 café" — registra un gasto
 "Debo 5000 a Juan" o "Me debe 3000 Pedro" — registra una deuda
+"Pagué 5000 a Juan" o "Cobré 3000 de Pedro" — registra un pago de deuda
+"Pagué Netflix 5000" o "Pago servicio Netflix 5000" — registra un pago de servicio
 "Heladera 200000 en 12 cuotas" — registra una compra en cuotas
 "Suscripción 5000 Netflix" o "Alquiler 20000" — carga un gasto fijo
 "Meta Vacaciones 200000" — crea una meta de ahorro`
@@ -513,6 +515,40 @@ export function buildRecurringConfirmedReply(description: string, amount: number
 
 export function buildSavingsGoalConfirmedReply(name: string, targetAmount: number): string {
   return `Listo ✅ Creé la meta "${name}" con objetivo ${formatArs(targetAmount)}. Podés sumarle plata desde la app en Metas de Ahorro.`
+}
+
+/**
+ * Confirmación de un pago/cobro de deuda. `remainingAfter` es el saldo
+ * que queda tras el pago: si es 0, la deuda quedó totalmente saldada.
+ */
+export function buildDebtPaymentConfirmedReply(
+  paymentType: 'pay' | 'collect',
+  amount: number,
+  personName: string,
+  remainingAfter: number,
+  currency: string
+): string {
+  const action =
+    paymentType === 'pay'
+      ? `Registré un pago de ${formatMoney(amount, currency)} a ${personName}`
+      : `Registré que cobraste ${formatMoney(amount, currency)} de ${personName}`
+  const remaining = remainingAfter <= 0
+    ? 'La deuda quedó totalmente saldada.'
+    : `Quedan ${formatMoney(remainingAfter, currency)} de deuda.`
+  const movement = paymentType === 'pay' ? 'Lo sumé a tus Gastos.' : 'Lo sumé a tus Ingresos.'
+  return `Listo ✅ ${action}. ${remaining} ${movement}`
+}
+
+export function buildDebtPaymentNotFoundReply(personName: string): string {
+  return `No encontré una deuda con ${personName}. Registrala con algo tipo "Debo 5000 a Juan" o desde la app (Deudas), y volvé a intentar.`
+}
+
+export function buildRecurringPaymentConfirmedReply(serviceName: string, amount: number, currency: string): string {
+  return `Listo ✅ Registré el pago de ${formatMoney(amount, currency)} del servicio "${serviceName}" y lo sumé a tus Gastos.`
+}
+
+export function buildRecurringPaymentNotFoundReply(serviceName: string): string {
+  return `No encontré un servicio llamado "${serviceName}". Registralo con algo tipo "Suscripción 5000 Netflix" o desde la app (Suscripciones), y volvé a intentar.`
 }
 
 export function buildSaveErrorReply(): string {

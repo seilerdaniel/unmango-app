@@ -9,10 +9,12 @@
 // 2. Código de vinculación de 6 dígitos (con o sin "/start" adelante) —
 //    busca ese código en telegram_links y completa el telegram_chat_id.
 // 3. Cualquier otro mensaje con una intención reconocible (ej. "Gasto 4500
-//    café", "Debo 5000 a Juan", "Heladera 200000 en 12 cuotas",
-//    "Suscripción 5000 Netflix", "Meta Vacaciones 200000") — si el chat_id
-//    ya está vinculado, inserta la entidad correspondiente (transacción,
-//    deuda, compra en cuotas, gasto fijo o meta de ahorro) para ese usuario.
+//    café", "Debo 5000 a Juan", "Pagué 5000 a Juan", "Pago servicio
+//    Netflix 5000", "Heladera 200000 en 12 cuotas", "Suscripción 5000
+//    Netflix", "Meta Vacaciones 200000") — si el chat_id ya está
+//    vinculado, inserta la entidad correspondiente (transacción, deuda,
+//    pago de deuda con movimiento, pago de servicio con movimiento,
+//    compra en cuotas, gasto fijo o meta de ahorro) para ese usuario.
 //
 // En todos los casos responde al usuario por Telegram confirmando qué se
 // hizo (o el error), para que no quede la duda de si funcionó.
@@ -35,6 +37,8 @@ import {
   buildConsejosReply,
   buildCuotasReply,
   buildDebtConfirmedReply,
+  buildDebtPaymentConfirmedReply,
+  buildDebtPaymentNotFoundReply,
   buildDebtsReply,
   buildExpenseConfirmedReply,
   buildExpenseErrorReply,
@@ -49,6 +53,8 @@ import {
   buildMetasReply,
   buildNotLinkedReply,
   buildRecurringConfirmedReply,
+  buildRecurringPaymentConfirmedReply,
+  buildRecurringPaymentNotFoundReply,
   buildSafeToSpendReply,
   buildSaldoReply,
   buildSaveErrorReply,
@@ -358,6 +364,124 @@ async function fetchUpcomingDueItems(
       debtType: d.debt_type,
     })),
   })
+}
+
+// Registra un pago de deuda: descuenta el monto del saldo pendiente,
+// crea el movimiento real (gasto si pagás, ingreso si cobrás) y guarda
+// el pago en debt_payments — mismo flujo que DebtsManager del frontend.
+async function handleDebtPayment(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  amount: number,
+  personName: string,
+  paymentType: 'pay' | 'collect'
+): Promise<{ found: boolean; reply: string }> {
+  const searchName = personName.replace(/[%_]/g, '').trim()
+  const { data, error } = await supabase
+    .from('debts')
+    .select('id, description, counterparty_name, debt_type, currency, remaining_amount')
+    .eq('user_id', userId)
+    .ilike('counterparty_name', `%${searchName}%`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  const rows = data ?? []
+  // Preferimos una deuda pendiente coherente con la intención: pagar va
+  // contra deudas "debo" y cobrar contra "me_deben".
+  const typeWanted = paymentType === 'pay' ? 'debo' : 'me_deben'
+  const debt =
+    rows.find((d) => Number(d.remaining_amount) > 0 && d.debt_type === typeWanted) ??
+    rows.find((d) => Number(d.remaining_amount) > 0) ??
+    rows[0]
+
+  if (!debt) {
+    return { found: false, reply: buildDebtPaymentNotFoundReply(personName) }
+  }
+
+  const newRemaining = Math.max(0, Number(debt.remaining_amount) - amount)
+
+  const { error: updateError } = await supabase
+    .from('debts')
+    .update({ remaining_amount: newRemaining })
+    .eq('id', debt.id)
+  if (updateError) throw updateError
+
+  const isUsd = debt.currency === 'USD'
+  const description =
+    paymentType === 'pay'
+      ? `Pago de deuda a ${debt.counterparty_name}`
+      : `Cobro de deuda de ${debt.counterparty_name}`
+
+  const { data: txData, error: txError } = await supabase
+    .from('transactions')
+    .insert([
+      {
+        user_id: userId,
+        type: paymentType === 'pay' ? 'expense' : 'income',
+        description,
+        payment_method: 'Otro (Telegram)',
+        is_usd: isUsd,
+        amount_usd: isUsd ? amount : null,
+        amount_ars: amount,
+        exchange_rate: null,
+        category_id: null,
+      },
+    ])
+    .select('id')
+    .single()
+  if (txError) throw txError
+
+  const { error: paymentError } = await supabase.from('debt_payments').insert([
+    { debt_id: debt.id, user_id: userId, amount, transaction_id: txData.id },
+  ])
+  if (paymentError) throw paymentError
+
+  return {
+    found: true,
+    reply: buildDebtPaymentConfirmedReply(paymentType, amount, debt.counterparty_name, newRemaining, debt.currency),
+  }
+}
+
+// Registra el pago de un servicio/suscripción existente: busca por
+// nombre, crea el movimiento (gasto) con la categoría del servicio —
+// igual que el botón "Pagar" de RecurringManager del frontend.
+async function handleRecurringPayment(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  amount: number,
+  serviceName: string
+): Promise<{ found: boolean; reply: string }> {
+  const searchName = serviceName.replace(/[%_]/g, '').trim()
+  const { data, error } = await supabase
+    .from('recurring_expenses')
+    .select('id, title, category_id, currency')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .ilike('title', `%${searchName}%`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  const service = (data ?? [])[0]
+  if (!service) {
+    return { found: false, reply: buildRecurringPaymentNotFoundReply(serviceName) }
+  }
+
+  const { error: txError } = await supabase.from('transactions').insert([
+    {
+      user_id: userId,
+      type: 'expense',
+      description: `Pago servicio ${service.title}`,
+      payment_method: 'Otro (Telegram)',
+      is_usd: false,
+      amount_usd: null,
+      amount_ars: amount,
+      exchange_rate: null,
+      category_id: service.category_id ?? null,
+    },
+  ])
+  if (txError) throw txError
+
+  return { found: true, reply: buildRecurringPaymentConfirmedReply(service.title, amount, 'ARS') }
 }
 
 interface AdviceData {
@@ -770,9 +894,9 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // Deudas, cuotas, fijos, metas, hogar, billeteras y vencimientos
-  // requieren que el chat esté vinculado — buscamos a qué usuario
-  // corresponde este chat_id.
+  // Deudas, cuotas, fijos, metas, hogar, billeteras, vencimientos y
+  // pagos (deuda/servicio) requieren que el chat esté vinculado —
+  // buscamos a qué usuario corresponde este chat_id.
   const { data: link, error: findError } = await supabaseAdmin
     .from('telegram_links')
     .select('user_id')
@@ -854,6 +978,18 @@ Deno.serve(async (req: Request) => {
       ])
       if (insertError) throw insertError
       await reply(buildRecurringConfirmedReply(parsed.description, parsed.amount, parsed.expenseKind))
+    } else if (parsed.kind === 'debt_payment') {
+      const result = await handleDebtPayment(
+        supabaseAdmin,
+        link.user_id,
+        parsed.amount,
+        parsed.personName,
+        parsed.paymentType
+      )
+      await reply(result.reply)
+    } else if (parsed.kind === 'recurring_payment') {
+      const result = await handleRecurringPayment(supabaseAdmin, link.user_id, parsed.amount, parsed.serviceName)
+      await reply(result.reply)
     } else if (parsed.kind === 'savings_goal') {
       const { error: insertError } = await supabaseAdmin.from('savings_goals').insert([
         {

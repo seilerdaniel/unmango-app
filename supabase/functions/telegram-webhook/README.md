@@ -37,6 +37,13 @@ El bot registra lo que le mandes según cómo lo escribas:
 - **Gasto**: `Gasto 4500 café` o `12000 supermercado`.
 - **Deuda**: `Debo 5000 a Juan` (le debés a Juan) o `Me debe 3000 Pedro`
   (Pedro te debe).
+- **Pago de deuda**: `Pagué 5000 a Juan`, `Pago deuda Silvana 45000`,
+  `Pago 45000 Silvana` (pagás) o `Cobré 3000 de Pedro` (cobrás).
+  Descuenta del saldo pendiente y crea el movimiento en tus Gastos o
+  Ingresos.
+- **Pago de servicio**: `Pago servicio Netflix 5000`, `Pagué Netflix
+  5000` o `Pagué alquiler 20000`. Crea el movimiento en tus Gastos con
+  la categoría del servicio.
 - **Compra en cuotas**: `Heladera 200000 en 12 cuotas` o
   `Compra 200000 12 cuotas`.
 - **Gasto fijo / suscripción**: `Suscripción 5000 Netflix`,
@@ -120,5 +127,5 @@ username que le pusiste y escribile ese número). Te debería responder
 confirmando la vinculación.
 
 Después de eso, cualquier mensaje que le mandes se interpreta según el
-formato (gasto, deuda, cuotas, fijo o meta), y los comandos de consulta
-responden con tus datos reales.
+formato (gasto, deuda, pago de deuda, pago de servicio, cuotas, fijo o
+meta), y los comandos de consulta responden con tus datos reales.

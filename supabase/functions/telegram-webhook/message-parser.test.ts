@@ -107,6 +107,78 @@ describe('parseTelegramMessage: deudas', () => {
   })
 })
 
+describe('parseTelegramMessage: pagos de deudas', () => {
+  it('"Pagué 5000 a Juan" registra un pago de deuda', () => {
+    expect(parseTelegramMessage('Pagué 5000 a Juan')).toEqual({
+      kind: 'debt_payment',
+      amount: 5000,
+      personName: 'Juan',
+      paymentType: 'pay',
+    })
+  })
+
+  it('"Pago deuda Silvana 45000" registra un pago de deuda', () => {
+    expect(parseTelegramMessage('Pago deuda Silvana 45000')).toEqual({
+      kind: 'debt_payment',
+      amount: 45000,
+      personName: 'Silvana',
+      paymentType: 'pay',
+    })
+  })
+
+  it('"Pago 45000 Silvana" registra un pago de deuda', () => {
+    expect(parseTelegramMessage('Pago 45000 Silvana')).toEqual({
+      kind: 'debt_payment',
+      amount: 45000,
+      personName: 'Silvana',
+      paymentType: 'pay',
+    })
+  })
+
+  it('"Cobré 3000 de Pedro" registra un cobro de deuda', () => {
+    expect(parseTelegramMessage('Cobré 3000 de Pedro')).toEqual({
+      kind: 'debt_payment',
+      amount: 3000,
+      personName: 'Pedro',
+      paymentType: 'collect',
+    })
+  })
+})
+
+describe('parseTelegramMessage: pagos de servicios', () => {
+  it('"Pago servicio Netflix 5000" registra un pago de servicio', () => {
+    expect(parseTelegramMessage('Pago servicio Netflix 5000')).toEqual({
+      kind: 'recurring_payment',
+      amount: 5000,
+      serviceName: 'Netflix',
+    })
+  })
+
+  it('"Pagué Netflix 5000" registra un pago de servicio', () => {
+    expect(parseTelegramMessage('Pagué Netflix 5000')).toEqual({
+      kind: 'recurring_payment',
+      amount: 5000,
+      serviceName: 'Netflix',
+    })
+  })
+
+  it('"Pagué alquiler 20000" registra un pago de servicio', () => {
+    expect(parseTelegramMessage('Pagué alquiler 20000')).toEqual({
+      kind: 'recurring_payment',
+      amount: 20000,
+      serviceName: 'alquiler',
+    })
+  })
+
+  it('"Pagué el alquiler 20000" quita el artículo del nombre', () => {
+    expect(parseTelegramMessage('Pagué el alquiler 20000')).toEqual({
+      kind: 'recurring_payment',
+      amount: 20000,
+      serviceName: 'alquiler',
+    })
+  })
+})
+
 describe('parseTelegramMessage: compras en cuotas', () => {
   it('"Heladera 200000 en 12 cuotas" separa descripción y monto', () => {
     expect(parseTelegramMessage('Heladera 200000 en 12 cuotas')).toEqual({
@@ -236,5 +308,9 @@ describe('parseTelegramMessage: el gasto común sigue intacto', () => {
 
   it('"Gasto 20000 alquiler" no se confunde con un gasto fijo', () => {
     expect(parseTelegramMessage('Gasto 20000 alquiler')).toEqual({ kind: 'expense', amount: 20000, description: 'alquiler' })
+  })
+
+  it('"Pagué 4500 café" sigue siendo un gasto común (el monto va primero)', () => {
+    expect(parseTelegramMessage('Pagué 4500 café')).toEqual({ kind: 'expense', amount: 4500, description: 'café' })
   })
 })

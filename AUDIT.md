@@ -2387,3 +2387,63 @@ de la Tanda 4.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 478 tests**,
 todos pasando — 465 previos + 13 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 6 — Registro de pagos de deudas y servicios/suscripciones
+
+El bot ahora registra pagos sobre entidades existentes y crea el
+movimiento real en `transactions` (antes solo creaba entidades nuevas).
+
+### `message-parser.ts` — dos intenciones nuevas
+- `debt_payment` (`amount`, `personName`, `paymentType`):
+  - `Pagué 5000 a Juan`, `Pago deuda Silvana 45000`, `Pago 45000 Silvana`
+    → `paymentType: 'pay'`.
+  - `Cobré 3000 de Pedro` → `paymentType: 'collect'`.
+- `recurring_payment` (`amount`, `serviceName`):
+  - `Pago servicio Netflix 5000`, `Pagué Netflix 5000`,
+    `Pagué alquiler 20000` (y `Pagué el alquiler 20000`, que quita el
+    artículo). El servicio va ANTES del monto para no confundirse con un
+    gasto común ("Pagué 4500 café" sigue siendo un gasto, el monto va
+    primero — guardado por un test de regresión).
+
+### `index.ts` — lógica de negocio y base de datos
+- `handleDebtPayment`: busca `debts` por `user_id` +
+  `counterparty_name ilike` (prefiriendo deudas pendientes y del tipo
+  coherente: `pay`→"debo", `collect`→"me_deben"), descuenta
+  `remaining_amount` (`max(0, saldo - monto)`) y — mismo flujo que
+  `DebtsManager` del frontend — inserta en `transactions`
+  (`expense` si pagás, `income` si cobrás, descripción "Pago de deuda a
+  X" / "Cobro de deuda de X") y guarda el pago en `debt_payments`
+  vinculado al `transaction_id`.
+- `handleRecurringPayment`: busca `recurring_expenses` activos por
+  `user_id` + `title ilike` e inserta en `transactions` tipo `expense`
+  con descripción "Pago servicio X" y la `category_id` del servicio
+  (igual que el botón "Pagar" de `RecurringManager`).
+
+### `reply-builder.ts` — respuestas
+- `buildDebtPaymentConfirmedReply`: confirma el pago/cobro, el saldo
+  restante (o "quedó totalmente saldada") y que se sumó a Gastos o
+  Ingresos.
+- `buildRecurringPaymentConfirmedReply`: confirma el pago y que se sumó
+  a Gastos.
+- `buildDebtPaymentNotFoundReply` / `buildRecurringPaymentNotFoundReply`:
+  avisan si no existe la deuda/servicio con ese nombre y cómo cargarlo.
+- `HELP_TEXT` y README documentan los nuevos ejemplos de texto libre.
+
+### Tests (15 nuevos, 493 totales)
+- `message-parser.test.ts`: 44 tests (9 nuevos) — los 4 formatos de
+  pago de deuda, 4 formatos de pago de servicio y la regresión
+  "Pagué 4500 café" = gasto.
+- `reply-builder.test.ts`: 76 tests (6 nuevos) — confirmaciones
+  (pay/collect, saldo restante, saldada, Ingresos/Gastos), not-found y
+  el `HELP_TEXT` con los nuevos ejemplos.
+
+### Fuera de scope (consciente)
+- El pago de servicio se registra siempre en ARS (el bot no pide
+  cotización para servicios en USD, a diferencia del frontend).
+- El parser no ejecuta la transacción a nivel DB en un `BEGIN/COMMIT`:
+  si falla un paso intermedio queda el error y el usuario reintenta
+  (igual que el resto de inserts del bot).
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 493 tests**,
+todos pasando — 478 previos + 15 nuevos), `npm run build` (OK).

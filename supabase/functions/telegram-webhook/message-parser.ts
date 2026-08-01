@@ -30,6 +30,8 @@ export type ParsedTelegramMessage =
   | { kind: 'link_code'; code: string }
   | { kind: 'expense'; amount: number; description: string }
   | { kind: 'debt'; debtType: 'debo' | 'me_deben'; amount: number; counterpartyName: string }
+  | { kind: 'debt_payment'; amount: number; personName: string; paymentType: 'pay' | 'collect' }
+  | { kind: 'recurring_payment'; amount: number; serviceName: string }
   | { kind: 'installment'; description: string; totalAmount: number; installmentsCount: number }
   | { kind: 'recurring'; description: string; amount: number; expenseKind: 'subscription' | 'utility_rent' }
   | { kind: 'savings_goal'; name: string; targetAmount: number }
@@ -118,6 +120,85 @@ function parseDebt(text: string): ParsedTelegramMessage | null {
     if (amount === null || amount <= 0) return null
     const name = cleanName(stripAmount(meDebeMatch[1]))
     return { kind: 'debt', debtType: 'me_deben', amount, counterpartyName: name || 'la otra persona' }
+  }
+
+  return null
+}
+
+function cleanPersonName(raw: string): string {
+  return cleanName(raw).replace(/^(?:a|de)\s+/i, '')
+}
+
+/**
+ * "Pagué 5000 a Juan", "Cobré 5000 de Juan", "Pago deuda Silvana 45000"
+ * o "Pago 45000 Silvana" — registra un pago (o cobro) sobre una deuda
+ * existente. El monto y el nombre de la persona se extraen según el
+ * formato; el tipo de pago (pay/collect) sale del verbo.
+ */
+function parseDebtPayment(text: string): ParsedTelegramMessage | null {
+  const payToMatch = text.match(/^pagu[eé]\s+(.+?)\s+a\s+(.+)$/i)
+  if (payToMatch) {
+    const amount = extractAmount(payToMatch[1])
+    if (amount === null || amount <= 0) return null
+    return { kind: 'debt_payment', amount, personName: cleanName(payToMatch[2]), paymentType: 'pay' }
+  }
+
+  const collectMatch = text.match(/^cobr[eé]\s+(.+?)\s+de\s+(.+)$/i)
+  if (collectMatch) {
+    const amount = extractAmount(collectMatch[1])
+    if (amount === null || amount <= 0) return null
+    return { kind: 'debt_payment', amount, personName: cleanName(collectMatch[2]), paymentType: 'collect' }
+  }
+
+  const deudaMatch = text.match(/^pago\s+deuda\s+(.+)$/i)
+  if (deudaMatch) {
+    const amount = extractAmount(deudaMatch[1])
+    if (amount === null || amount <= 0) return null
+    const personName = cleanPersonName(stripAmount(deudaMatch[1]))
+    if (!personName) return null
+    return { kind: 'debt_payment', amount, personName, paymentType: 'pay' }
+  }
+
+  const pagoMatch = text.match(/^pago\s+(?!servicio|deuda)(.+)$/i)
+  if (pagoMatch) {
+    const amount = extractAmount(pagoMatch[1])
+    if (amount === null || amount <= 0) return null
+    const personName = cleanPersonName(stripAmount(pagoMatch[1]))
+    if (!personName) return null
+    return { kind: 'debt_payment', amount, personName, paymentType: 'pay' }
+  }
+
+  return null
+}
+
+function cleanServiceName(raw: string): string {
+  return cleanName(raw).replace(/^(?:el|la|los|las)\s+/i, '')
+}
+
+/**
+ * "Pago servicio Netflix 5000", "Pagué Netflix 5000" o "Pagué alquiler
+ * 20000" — registra el pago de un servicio/suscripción existente. El
+ * nombre del servicio va ANTES del monto ("Pagué Netflix 5000") para no
+ * confundirse con un gasto común, donde el monto va primero ("Pagué
+ * 4500 café").
+ */
+function parseRecurringPayment(text: string): ParsedTelegramMessage | null {
+  const servicioMatch = text.match(/^pago\s+servicio\s+(.+)$/i)
+  if (servicioMatch) {
+    const amount = extractAmount(servicioMatch[1])
+    if (amount === null || amount <= 0) return null
+    const serviceName = cleanServiceName(stripAmount(servicioMatch[1]))
+    if (!serviceName) return null
+    return { kind: 'recurring_payment', amount, serviceName }
+  }
+
+  const pagueMatch = text.match(/^pagu[eé]\s+(?!\d)(.+)$/i)
+  if (pagueMatch) {
+    const amount = extractAmount(pagueMatch[1])
+    if (amount === null || amount <= 0) return null
+    const serviceName = cleanServiceName(stripAmount(pagueMatch[1]))
+    if (!serviceName) return null
+    return { kind: 'recurring_payment', amount, serviceName }
   }
 
   return null
@@ -230,7 +311,9 @@ function parseSavingsGoal(text: string): ParsedTelegramMessage | null {
  * /fijos, /consejos, /hogar, /billeteras, /vencimientos, /ayuda), un
  * código de vinculación (6 dígitos, con o sin "/start" adelante) o una
  * intención en texto libre: gasto ("Gasto 4500 café"), deuda
- * ("Debo 5000 a Juan"), cuotas ("Heladera 200000 en 12 cuotas"), gasto
+ * ("Debo 5000 a Juan"), pago de deuda ("Pagué 5000 a Juan", "Cobré
+ * 3000 de Pedro"), pago de servicio ("Pago servicio Netflix 5000",
+ * "Pagué Netflix 5000"), cuotas ("Heladera 200000 en 12 cuotas"), gasto
  * fijo/suscripción ("Suscripción 5000 Netflix") o meta de ahorro
  * ("Meta Vacaciones 200000").
  */
@@ -259,11 +342,20 @@ export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   }
 
   // Las intenciones en texto libre se evalúan ANTES del gasto genérico:
-  // deuda ("Debo... a..." / "Me debe..."), cuotas ("... en N cuotas"),
-  // fijos/suscripciones ("Suscripción...", "Alquiler...", "... mensual")
-  // y metas ("Meta...", "Ahorrar... para...").
+  // deuda ("Debo... a..." / "Me debe..."), pagos de deudas ("Pagué X a
+  // Y", "Cobré X de Y", "Pago deuda...", "Pago X Y"), pagos de
+  // servicios ("Pago servicio...", "Pagué <servicio> <monto>"), cuotas
+  // ("... en N cuotas"), fijos/suscripciones ("Suscripción...",
+  // "Alquiler...", "... mensual") y metas ("Meta...", "Ahorrar...
+  // para...").
   const debt = parseDebt(trimmed)
   if (debt) return debt
+
+  const debtPayment = parseDebtPayment(trimmed)
+  if (debtPayment) return debtPayment
+
+  const recurringPayment = parseRecurringPayment(trimmed)
+  if (recurringPayment) return recurringPayment
 
   const installment = parseInstallment(trimmed)
   if (installment) return installment

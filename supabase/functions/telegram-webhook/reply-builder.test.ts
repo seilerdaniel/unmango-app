@@ -4,6 +4,8 @@ import {
   buildConsejosReply,
   buildCuotasReply,
   buildDebtConfirmedReply,
+  buildDebtPaymentConfirmedReply,
+  buildDebtPaymentNotFoundReply,
   buildDebtsReply,
   buildExpenseConfirmedReply,
   buildFijosReply,
@@ -17,6 +19,8 @@ import {
   buildMetasReply,
   buildNotLinkedReply,
   buildRecurringConfirmedReply,
+  buildRecurringPaymentConfirmedReply,
+  buildRecurringPaymentNotFoundReply,
   buildSafeToSpendReply,
   buildSaldoReply,
   buildSaveErrorReply,
@@ -218,6 +222,8 @@ describe('mensajes de texto', () => {
     expect(help).toContain('/hogar')
     expect(help).toContain('/billeteras')
     expect(help).toContain('/vencimientos')
+    expect(help).toContain('Pagué 5000 a Juan')
+    expect(help).toContain('Pago servicio Netflix 5000')
   })
 })
 
@@ -612,5 +618,42 @@ describe('vencimientos', () => {
 
   it('buildVencimientosReply informa cuando no hay vencimientos', () => {
     expect(buildVencimientosReply([])).toContain('No tenés vencimientos')
+  })
+})
+
+describe('confirmaciones de pagos', () => {
+  it('buildDebtPaymentConfirmedReply para pago (pay) con saldo restante', () => {
+    const reply = buildDebtPaymentConfirmedReply('pay', 10000, 'Silvana', 25000, 'ARS')
+    expect(reply).toContain('un pago de $10.000 a Silvana')
+    expect(reply).toContain('Quedan $25.000 de deuda')
+    expect(reply).toContain('Lo sumé a tus Gastos')
+  })
+
+  it('buildDebtPaymentConfirmedReply avisa cuando la deuda quedó saldada', () => {
+    const reply = buildDebtPaymentConfirmedReply('pay', 10000, 'Silvana', 0, 'ARS')
+    expect(reply).toContain('totalmente saldada')
+  })
+
+  it('buildDebtPaymentConfirmedReply para cobro (collect) suma a Ingresos', () => {
+    const reply = buildDebtPaymentConfirmedReply('collect', 5000, 'Pedro', 0, 'ARS')
+    expect(reply).toContain('cobraste $5.000 de Pedro')
+    expect(reply).toContain('Lo sumé a tus Ingresos')
+  })
+
+  it('buildDebtPaymentNotFoundReply avisa si no hay deuda con esa persona', () => {
+    expect(buildDebtPaymentNotFoundReply('Silvana')).toContain('Silvana')
+    expect(buildDebtPaymentNotFoundReply('Silvana')).toContain('No encontré')
+  })
+
+  it('buildRecurringPaymentConfirmedReply confirma y suma a Gastos', () => {
+    const reply = buildRecurringPaymentConfirmedReply('Netflix', 5000, 'ARS')
+    expect(reply).toContain('$5.000')
+    expect(reply).toContain('"Netflix"')
+    expect(reply).toContain('lo sumé a tus Gastos')
+  })
+
+  it('buildRecurringPaymentNotFoundReply avisa si no hay servicio con ese nombre', () => {
+    expect(buildRecurringPaymentNotFoundReply('Netflix')).toContain('Netflix')
+    expect(buildRecurringPaymentNotFoundReply('Netflix')).toContain('No encontré')
   })
 })
