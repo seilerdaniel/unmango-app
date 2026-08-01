@@ -1,21 +1,45 @@
-# Bot de Telegram para cargar gastos
+# Bot de Telegram para controlar tus finanzas
 
 Mandale un mensaje al bot tipo `Gasto 4500 café` y UnMango lo registra
-automáticamente. No pude hacer estos pasos por vos porque requieren que
-crees tu propio bot en Telegram (gratis, pero es una cuenta/token que
-solo vos podés generar).
+automáticamente. También entendé deudas, cuotas, gastos fijos y metas de
+ahorro en texto libre, y responde comandos de consulta (/score, /deudas,
+/cuotas, /metas, /fijos, /consejos, /hogar). No pude hacer estos pasos
+por vos porque requieren que crees tu propio bot en Telegram (gratis,
+pero es una cuenta/token que solo vos podés generar).
 
 ## Comandos del bot
 
-Una vez vinculado, además de mandar gastos en texto libre (`Gasto 4500
-café`, `12000 supermercado`) entendés estos comandos:
+Una vez vinculado, además de mandar intenciones en texto libre entendés
+estos comandos:
 
 - `/saldo` — tu saldo total en billeteras.
 - `/gastado` — cuánto gastaste este mes y qué porcentaje de tu ingreso
   representa.
 - `/safetospend` — cuánto podés gastar hoy sin romper tus compromisos
   (gastos fijos, presupuestos, metas de ahorro y cuotas del mes).
+- `/score` — tu Un Mango Score (salud financiera del mes, 4 pilares).
+- `/deudas` — lista de tus deudas pendientes.
+- `/cuotas` — lista de tus compras en cuotas (con progreso de pagos).
+- `/metas` — lista de tus metas de ahorro (con progreso).
+- `/fijos` — lista de tus suscripciones y gastos fijos activos.
+- `/consejos` — recomendaciones según tus números.
+- `/hogar` — balance de gastos de hogar con tu pareja.
 - `/ayuda` — lista de comandos.
+
+## Intenciones en texto libre
+
+El bot registra lo que le mandes según cómo lo escribas:
+
+- **Gasto**: `Gasto 4500 café` o `12000 supermercado`.
+- **Deuda**: `Debo 5000 a Juan` (le debés a Juan) o `Me debe 3000 Pedro`
+  (Pedro te debe).
+- **Compra en cuotas**: `Heladera 200000 en 12 cuotas` o
+  `Compra 200000 12 cuotas`.
+- **Gasto fijo / suscripción**: `Suscripción 5000 Netflix`,
+  `Alquiler 20000`, `Servicio 3000 luz`, `Cable 3000 mensual` o
+  `Fijo 2000 cable`.
+- **Meta de ahorro**: `Meta Vacaciones 200000`, `Meta 200000 para
+  Vacaciones` o `Ahorrar 50000 para viaje`.
 
 ## Paso 1 — Crear el bot con BotFather
 
@@ -91,6 +115,6 @@ número de 6 dígitos. Mandaselo al bot en Telegram (buscá tu bot por el
 username que le pusiste y escribile ese número). Te debería responder
 confirmando la vinculación.
 
-Después de eso, cualquier mensaje tipo `Gasto 4500 café` que le mandes
-va a registrarse como un gasto real en tu cuenta, y los comandos
-`/saldo`, `/gastado` y `/safetospend` van a responder con tus datos.
+Después de eso, cualquier mensaje que le mandes se interpreta según el
+formato (gasto, deuda, cuotas, fijo o meta), y los comandos de consulta
+responden con tus datos reales.

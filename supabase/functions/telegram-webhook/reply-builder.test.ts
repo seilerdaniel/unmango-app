@@ -1,19 +1,39 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildConsejosReply,
+  buildCuotasReply,
+  buildDebtConfirmedReply,
+  buildDebtsReply,
   buildExpenseConfirmedReply,
+  buildFijosReply,
   buildGastadoReply,
   buildHelpReply,
+  buildHogarReply,
+  buildInstallmentConfirmedReply,
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
+  buildMetasReply,
   buildNotLinkedReply,
+  buildRecurringConfirmedReply,
   buildSafeToSpendReply,
   buildSaldoReply,
+  buildSaveErrorReply,
+  buildSavingsGoalConfirmedReply,
+  buildScoreReply,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
+  computeFinancialHealthScore,
+  computeHouseholdBalance,
   computeSafeToSpend,
+  computeStreakBreak,
+  detectAntExpenses,
   formatArs,
+  formatMoney,
+  generateAdviceMessages,
   getDaysRemainingInMonth,
+  hasNoFinancialData,
+  isGoalStalled,
   monthlyEquivalentAmount,
 } from './reply-builder'
 
@@ -179,5 +199,303 @@ describe('mensajes de texto', () => {
     expect(buildLinkErrorReply()).toContain('error')
     expect(buildNotLinkedReply()).toContain('no vinculaste')
     expect(buildUnrecognizedReply()).toContain('No entendí')
+  })
+
+  it('buildHelpReply lista los comandos nuevos', () => {
+    const help = buildHelpReply()
+    expect(help).toContain('/score')
+    expect(help).toContain('/deudas')
+    expect(help).toContain('/cuotas')
+    expect(help).toContain('/metas')
+    expect(help).toContain('/fijos')
+    expect(help).toContain('/consejos')
+    expect(help).toContain('/hogar')
+  })
+})
+
+describe('formatMoney', () => {
+  it('formatea ARS con formato local', () => {
+    expect(formatMoney(4500, 'ARS')).toBe('$4.500')
+  })
+
+  it('formatea USD con prefijo US$', () => {
+    expect(formatMoney(1500, 'USD')).toBe('US$1,500')
+  })
+})
+
+describe('computeFinancialHealthScore', () => {
+  it('calcula un score equilibrado', () => {
+    const result = computeFinancialHealthScore({
+      monthlyIncome: 300000,
+      monthlyExpense: 150000,
+      monthlyDebtPayments: 30000,
+      emergencyFundBalance: 600000,
+      antExpensesTotal: 0,
+    })
+    // Ahorro 50, Deuda 90, Fondo 67 (4 meses = 66.67 → 67), Hormiga 100 → (50+90+67+100)/4 = 76.75 → 77
+    expect(result.totalScore).toBe(77)
+    expect(result.pillars.savings.score).toBe(50)
+    expect(result.pillars.debt.score).toBe(90)
+    expect(result.pillars.emergencyFund.score).toBe(67)
+    expect(result.pillars.antExpenses.score).toBe(100)
+  })
+
+  it('deja el score bajo cuando los gastos superan el ingreso', () => {
+    const result = computeFinancialHealthScore({
+      monthlyIncome: 100000,
+      monthlyExpense: 200000,
+      monthlyDebtPayments: 50000,
+      emergencyFundBalance: 0,
+      antExpensesTotal: 10000,
+    })
+    // Ahorro 0, Deuda 50, Fondo 0, Hormiga 50 → (0+50+0+50)/4 = 25
+    expect(result.totalScore).toBe(25)
+    expect(result.pillars.savings.score).toBe(0)
+  })
+})
+
+describe('hasNoFinancialData', () => {
+  it('true si no hay ingreso ni gasto', () => {
+    expect(hasNoFinancialData(0, 0)).toBe(true)
+    expect(hasNoFinancialData(1000, 0)).toBe(false)
+  })
+})
+
+describe('computeHouseholdBalance', () => {
+  it('calcula quién le debe a quién', () => {
+    const balance = computeHouseholdBalance(200000, 100000)
+    expect(balance.netBalanceForMe).toBe(50000)
+    expect(balance.totalHouseholdExpenses).toBe(300000)
+  })
+
+  it('están a mano si pagaron lo mismo', () => {
+    expect(computeHouseholdBalance(150000, 150000).netBalanceForMe).toBe(0)
+  })
+})
+
+describe('detectAntExpenses', () => {
+  it('suma solo los gastos por debajo del umbral', () => {
+    const result = detectAntExpenses([{ amount: 500 }, { amount: 2000 }, { amount: 5000 }], 3000)
+    expect(result.count).toBe(2)
+    expect(result.total).toBe(2500)
+  })
+})
+
+describe('isGoalStalled', () => {
+  it('true si sigue en $0 después de 60 días', () => {
+    const old = new Date()
+    old.setDate(old.getDate() - 61)
+    expect(isGoalStalled(0, old.toISOString(), new Date())).toBe(true)
+  })
+
+  it('false si tiene plata o si es reciente', () => {
+    const old = new Date()
+    old.setDate(old.getDate() - 61)
+    expect(isGoalStalled(100, old.toISOString(), new Date())).toBe(false)
+    expect(isGoalStalled(0, new Date().toISOString(), new Date())).toBe(false)
+  })
+})
+
+describe('computeStreakBreak', () => {
+  it('devuelve los días de racha previa si hoy se cortó', () => {
+    const today = new Date(2026, 0, 10)
+    // hubo gastos los días 3 y 10 → racha de 3-9 (6 días, sin contar el 10) rota el 10.
+    expect(computeStreakBreak([3, 10], today)).toBe(6)
+  })
+
+  it('null si hoy no hubo gasto', () => {
+    expect(computeStreakBreak([3], new Date(2026, 0, 10))).toBe(null)
+  })
+})
+
+describe('generateAdviceMessages', () => {
+  const healthyScore = computeFinancialHealthScore({
+    monthlyIncome: 300000,
+    monthlyExpense: 90000,
+    monthlyDebtPayments: 60000,
+    emergencyFundBalance: 450000,
+    antExpensesTotal: 10000,
+  })
+
+  it('no genera mensajes cuando todo está en rango', () => {
+    // Ahorro 70, Deuda 80, Fondo 83, Hormiga 83 → ningún umbral se dispara.
+    const messages = generateAdviceMessages({
+      healthScore: healthyScore,
+      safeToSpendToday: 5000,
+      hasSubscriptionPriceIncrease: false,
+      exceededBudgetCategoryNames: [],
+      hasHighInterestDebt: false,
+      largeInstallmentDescription: null,
+      brokenStreakDays: null,
+      stalledGoalNames: [],
+      hasNoCategories: false,
+      hasExpensesButNoIncome: false,
+      householdUnsettledDays: null,
+    })
+    expect(messages).toEqual([])
+  })
+
+  it('avisa cuando el ahorro está bajo', () => {
+    const lowSavings = computeFinancialHealthScore({
+      monthlyIncome: 100000,
+      monthlyExpense: 95000,
+      monthlyDebtPayments: 0,
+      emergencyFundBalance: 0,
+      antExpensesTotal: 0,
+    })
+    const messages = generateAdviceMessages({
+      healthScore: lowSavings,
+      safeToSpendToday: null,
+      hasSubscriptionPriceIncrease: false,
+      exceededBudgetCategoryNames: [],
+      hasHighInterestDebt: false,
+      largeInstallmentDescription: null,
+      brokenStreakDays: null,
+      stalledGoalNames: [],
+      hasNoCategories: false,
+      hasExpensesButNoIncome: false,
+      householdUnsettledDays: null,
+    })
+    expect(messages.join('\n')).toContain('Estás gastando casi todo lo que ganás')
+  })
+})
+
+describe('buildScoreReply', () => {
+  it('arma el mensaje con los 4 pilares', () => {
+    const result = computeFinancialHealthScore({
+      monthlyIncome: 300000,
+      monthlyExpense: 150000,
+      monthlyDebtPayments: 30000,
+      emergencyFundBalance: 600000,
+      antExpensesTotal: 0,
+    })
+    const reply = buildScoreReply(result, false)
+    expect(reply).toContain('77/100')
+    expect(reply).toContain('Ahorro')
+    expect(reply).toContain('Fondo de Emergencia')
+    expect(reply).toContain('Gasto Hormiga')
+  })
+
+  it('avisa si no hay datos', () => {
+    expect(buildScoreReply(computeFinancialHealthScore({
+      monthlyIncome: 0,
+      monthlyExpense: 0,
+      monthlyDebtPayments: 0,
+      emergencyFundBalance: 0,
+      antExpensesTotal: 0,
+    }), true)).toContain('no hay Score para calcular')
+  })
+})
+
+describe('buildDebtsReply', () => {
+  it('muestra las deudas con quien corresponde', () => {
+    const reply = buildDebtsReply([
+      { description: 'Deuda con Juan', counterpartyName: 'Juan', debtType: 'debo', totalAmount: 5000, remainingAmount: 5000, currency: 'ARS' },
+      { description: 'Deuda con Pedro', counterpartyName: 'Pedro', debtType: 'me_deben', totalAmount: 3000, remainingAmount: 1000, currency: 'ARS' },
+    ])
+    expect(reply).toContain('le debés $5.000')
+    expect(reply).toContain('te debe $3.000')
+    expect(reply).toContain('quedan $1.000')
+  })
+
+  it('mensaje vacío si no hay deudas', () => {
+    expect(buildDebtsReply([])).toContain('No tenés deudas')
+  })
+})
+
+describe('buildCuotasReply', () => {
+  it('muestra el detalle de cada compra', () => {
+    const reply = buildCuotasReply([
+      { description: 'Heladera', totalAmount: 200000, installmentsCount: 12, paidCount: 3, monthlyAmount: 16666.67 },
+    ])
+    expect(reply).toContain('Heladera')
+    expect(reply).toContain('$200.000 en 12 cuotas')
+    expect(reply).toContain('pagadas 3/12')
+  })
+
+  it('mensaje vacío si no hay cuotas', () => {
+    expect(buildCuotasReply([])).toContain('No tenés compras en cuotas')
+  })
+})
+
+describe('buildMetasReply', () => {
+  it('muestra progreso y aporte mensual', () => {
+    const reply = buildMetasReply([
+      { name: 'Vacaciones', targetAmount: 200000, currentAmount: 50000, monthlyContribution: 10000 },
+    ])
+    expect(reply).toContain('Vacaciones')
+    expect(reply).toContain('$50.000 de $200.000')
+    expect(reply).toContain('(25%)')
+    expect(reply).toContain('$10.000/mes')
+  })
+})
+
+describe('buildFijosReply', () => {
+  it('etiqueta suscripciones y gastos fijos', () => {
+    const reply = buildFijosReply([
+      { title: 'Netflix', amount: 5000, currency: 'ARS', expenseKind: 'subscription', billingFrequency: 'monthly', billingDay: 5 },
+      { title: 'Alquiler', amount: 20000, currency: 'ARS', expenseKind: 'utility_rent', billingFrequency: 'monthly', billingDay: 1 },
+    ])
+    expect(reply).toContain('Netflix')
+    expect(reply).toContain('[Suscripción]')
+    expect(reply).toContain('[Gasto fijo]')
+    expect(reply).toContain('vence el 5')
+  })
+})
+
+describe('buildConsejosReply', () => {
+  it('arma la lista de recomendaciones', () => {
+    const reply = buildConsejosReply(['⚠️ Tu margen de ahorro es bajo.'], false)
+    expect(reply).toContain('Tus recomendaciones')
+    expect(reply).toContain('Tu margen de ahorro es bajo')
+  })
+
+  it('mensaje tranquilo si no hay alertas', () => {
+    expect(buildConsejosReply([], false)).toContain('ninguna alerta puntual')
+  })
+
+  it('avisa si no hay datos', () => {
+    expect(buildConsejosReply([], true)).toContain('no hay mucho para recomendar')
+  })
+})
+
+describe('buildHogarReply', () => {
+  it('sin hogar vinculado sugiere vincular', () => {
+    expect(buildHogarReply(null, null)).toContain('Modo Hogar')
+  })
+
+  it('muestra quién le debe a quién', () => {
+    const reply = buildHogarReply(
+      computeHouseholdBalance(200000, 100000),
+      45
+    )
+    expect(reply).toContain('Tu pareja te debe $50.000')
+    expect(reply).toContain('Gastos de la casa')
+    expect(reply).toContain('45 días')
+  })
+})
+
+describe('confirmaciones nuevas', () => {
+  it('buildDebtConfirmedReply según el tipo', () => {
+    expect(buildDebtConfirmedReply('debo', 5000, 'Juan')).toBe('Listo ✅ Registré que le debés $5.000 a Juan.')
+    expect(buildDebtConfirmedReply('me_deben', 3000, 'Pedro')).toBe('Listo ✅ Registré que Pedro te debe $3.000.')
+  })
+
+  it('buildInstallmentConfirmedReply muestra monto y cuota', () => {
+    expect(buildInstallmentConfirmedReply('Heladera', 200000, 12)).toContain('12 cuotas de $16.666,67')
+  })
+
+  it('buildRecurringConfirmedReply según el tipo', () => {
+    expect(buildRecurringConfirmedReply('Netflix', 5000, 'subscription')).toContain('suscripción "Netflix"')
+    expect(buildRecurringConfirmedReply('Alquiler', 20000, 'utility_rent')).toContain('gasto fijo "Alquiler"')
+  })
+
+  it('buildSavingsGoalConfirmedReply confirma la meta', () => {
+    expect(buildSavingsGoalConfirmedReply('Vacaciones', 200000)).toContain('"Vacaciones"')
+    expect(buildSavingsGoalConfirmedReply('Vacaciones', 200000)).toContain('$200.000')
+  })
+
+  it('buildSaveErrorReply existe', () => {
+    expect(buildSaveErrorReply()).toContain('error')
   })
 })

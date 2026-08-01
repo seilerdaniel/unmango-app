@@ -3,13 +3,16 @@
 // Qué hace: recibe los mensajes que le llegan al bot de Telegram
 // (webhook configurado con setWebhook, ver README.md). Casos:
 //
-// 1. Comandos (/saldo, /gastado, /safetospend, /ayuda) — si el chat ya
-//    está vinculado, consulta los datos del usuario y responde.
+// 1. Comandos (/saldo, /gastado, /safetospend, /score, /deudas, /cuotas,
+//    /metas, /fijos, /consejos, /hogar, /ayuda) — si el chat ya está
+//    vinculado, consulta los datos del usuario y responde.
 // 2. Código de vinculación de 6 dígitos (con o sin "/start" adelante) —
 //    busca ese código en telegram_links y completa el telegram_chat_id.
-// 3. Cualquier otro mensaje con un monto reconocible (ej. "Gasto 4500
-//    café") — si el chat_id ya está vinculado, inserta una transacción
-//    de gasto para ese usuario.
+// 3. Cualquier otro mensaje con una intención reconocible (ej. "Gasto 4500
+//    café", "Debo 5000 a Juan", "Heladera 200000 en 12 cuotas",
+//    "Suscripción 5000 Netflix", "Meta Vacaciones 200000") — si el chat_id
+//    ya está vinculado, inserta la entidad correspondiente (transacción,
+//    deuda, compra en cuotas, gasto fijo o meta de ahorro) para ese usuario.
 //
 // En todos los casos responde al usuario por Telegram confirmando qué se
 // hizo (o el error), para que no quede la duda de si funcionó.
@@ -28,20 +31,39 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { parseTelegramMessage } from './message-parser.ts'
 import {
+  buildConsejosReply,
+  buildCuotasReply,
+  buildDebtConfirmedReply,
+  buildDebtsReply,
   buildExpenseConfirmedReply,
   buildExpenseErrorReply,
+  buildFijosReply,
   buildGastadoReply,
   buildHelpReply,
+  buildHogarReply,
+  buildInstallmentConfirmedReply,
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
+  buildMetasReply,
   buildNotLinkedReply,
+  buildRecurringConfirmedReply,
   buildSafeToSpendReply,
   buildSaldoReply,
+  buildSaveErrorReply,
+  buildSavingsGoalConfirmedReply,
+  buildScoreReply,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
+  computeFinancialHealthScore,
+  computeHouseholdBalance,
   computeSafeToSpend,
+  computeStreakBreak,
+  detectAntExpenses,
+  generateAdviceMessages,
   getDaysRemainingInMonth,
+  hasNoFinancialData,
+  isGoalStalled,
   monthlyEquivalentAmount,
 } from './reply-builder.ts'
 
@@ -76,6 +98,10 @@ interface FinancialSummary {
   monthlyExpense: number
   monthlyIncome: number
   walletCount: number
+  /** Montos de los gastos del mes (para gastos hormiga). */
+  monthlyExpenseAmounts: number[]
+  /** Días del mes (1-31) en los que hubo al menos un gasto (para la racha). */
+  monthlyExpenseDays: number[]
 }
 
 // El bot usa la service role key (no hay sesión de usuario en un
@@ -107,6 +133,8 @@ async function fetchFinancialSummary(
   let totalExpense = 0
   let monthlyExpense = 0
   let monthlyIncome = 0
+  const monthlyExpenseAmounts: number[] = []
+  const monthlyExpenseDays: number[] = []
 
   for (const t of transactions) {
     const amount = Number(t.amount_ars) || 0
@@ -115,7 +143,11 @@ async function fetchFinancialSummary(
       if (t.created_at && new Date(t.created_at).getTime() >= monthStart) monthlyIncome += amount
     } else {
       totalExpense += amount
-      if (t.created_at && new Date(t.created_at).getTime() >= monthStart) monthlyExpense += amount
+      if (t.created_at && new Date(t.created_at).getTime() >= monthStart) {
+        monthlyExpense += amount
+        monthlyExpenseAmounts.push(amount)
+        monthlyExpenseDays.push(new Date(t.created_at).getDate())
+      }
     }
   }
 
@@ -124,6 +156,8 @@ async function fetchFinancialSummary(
     monthlyExpense,
     monthlyIncome,
     walletCount: walletsResult.data?.length ?? 0,
+    monthlyExpenseAmounts,
+    monthlyExpenseDays,
   }
 }
 
@@ -169,6 +203,230 @@ async function fetchSafeToSpendData(
       (acc, p) => acc + (p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0),
       0
     ),
+  }
+}
+
+interface HouseholdData {
+  balance: ReturnType<typeof computeHouseholdBalance> | null
+  /** Días sin saldar (desde el gasto más viejo) si el balance no está a mano. */
+  unsettledDays: number | null
+}
+
+async function fetchHouseholdData(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  now: Date = new Date()
+): Promise<HouseholdData> {
+  const { data: link, error: linkError } = await supabase
+    .from('household_links')
+    .select('id')
+    .eq('status', 'active')
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+    .maybeSingle()
+
+  if (linkError) throw linkError
+  if (!link) return { balance: null, unsettledDays: null }
+
+  const { data: expenses, error: expensesError } = await supabase
+    .from('household_expenses')
+    .select('amount, paid_by_user_id, created_at')
+    .eq('household_id', link.id)
+    .order('created_at', { ascending: true })
+
+  if (expensesError) throw expensesError
+
+  const rows = expenses ?? []
+  const totalPaidByMe = rows
+    .filter((e) => e.paid_by_user_id === userId)
+    .reduce((acc, e) => acc + (Number(e.amount) || 0), 0)
+  const totalPaidByPartner = rows
+    .filter((e) => e.paid_by_user_id !== userId)
+    .reduce((acc, e) => acc + (Number(e.amount) || 0), 0)
+
+  const balance = computeHouseholdBalance(totalPaidByMe, totalPaidByPartner)
+
+  let unsettledDays: number | null = null
+  if (balance.netBalanceForMe !== 0 && rows.length > 0) {
+    const oldest = new Date(rows[0].created_at)
+    unsettledDays = Math.floor((now.getTime() - oldest.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  return { balance, unsettledDays }
+}
+
+interface AdviceData {
+  healthScore: ReturnType<typeof computeFinancialHealthScore>
+  noData: boolean
+  safeToSpendToday: number | null
+  hasSubscriptionPriceIncrease: boolean
+  exceededBudgetCategoryNames: string[]
+  hasHighInterestDebt: boolean
+  largeInstallmentDescription: string | null
+  brokenStreakDays: number | null
+  stalledGoalNames: string[]
+  hasNoCategories: boolean
+  hasExpensesButNoIncome: boolean
+  householdUnsettledDays: number | null
+}
+
+// Mismos insumos que FinancialAdviceWidget del frontend, pero con
+// consultas directas por user_id (las RPCs de la app filtran por
+// auth.uid() y no sirven con la service role key).
+async function fetchAdviceData(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<AdviceData> {
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const daysRemaining = getDaysRemainingInMonth(now)
+
+  const [
+    summary,
+    safeData,
+    budgetsResult,
+    monthTransactions,
+    debtsResult,
+    installmentsResult,
+    goalsResult,
+    categoriesResult,
+    priceHistoryResult,
+    household,
+  ] = await Promise.all([
+    fetchFinancialSummary(supabase, userId),
+    fetchSafeToSpendData(supabase, userId),
+    supabase.from('budgets').select('category_id, monthly_limit, categories(name)').eq('user_id', userId),
+    supabase
+      .from('transactions')
+      .select('category_id, amount_ars, type, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', monthStart),
+    supabase.from('debts').select('interest_rate, remaining_amount, debt_type').eq('user_id', userId),
+    supabase
+      .from('installment_purchases')
+      .select('description, total_amount, installments_count')
+      .eq('user_id', userId),
+    supabase.from('savings_goals').select('name, current_amount, created_at').eq('user_id', userId),
+    supabase.from('categories').select('id').eq('user_id', userId),
+    supabase
+      .from('recurring_expense_price_history')
+      .select('recurring_expense_id, amount, recorded_at')
+      .eq('user_id', userId)
+      .order('recorded_at', { ascending: true }),
+    fetchHouseholdData(supabase, userId, now),
+  ])
+
+  const results = [
+    summary,
+    safeData,
+    budgetsResult,
+    monthTransactions,
+    debtsResult,
+    installmentsResult,
+    goalsResult,
+    categoriesResult,
+    priceHistoryResult,
+    household,
+  ]
+  for (const r of results) {
+    const error = 'error' in r ? r.error : null
+    if (error) throw error
+  }
+
+  const monthlyIncome = summary.monthlyIncome
+  const monthlyExpense = summary.monthlyExpense
+
+  // Presupuestos excedidos: cruzamos el límite de cada categoría con lo
+  // gastado este mes (mismo criterio que BudgetManager).
+  const spendByCategory = new Map<string, number>()
+  for (const t of monthTransactions.data ?? []) {
+    if (t.type === 'expense') {
+      const key = t.category_id ?? ''
+      spendByCategory.set(key, (spendByCategory.get(key) ?? 0) + (Number(t.amount_ars) || 0))
+    }
+  }
+  const exceededBudgetCategoryNames = (budgetsResult.data ?? [])
+    .filter((b) => (spendByCategory.get(b.category_id ?? '') ?? 0) > Number(b.monthly_limit))
+    .map((b) => (b.categories as { name: string } | null)?.name)
+    .filter((name): name is string => !!name)
+
+  const hasHighInterestDebt = (debtsResult.data ?? []).some(
+    (d) => d.debt_type === 'debo' && Number(d.remaining_amount) > 0 && Number(d.interest_rate) > 0
+  )
+
+  const largeInstallmentDescription =
+    monthlyIncome > 0
+      ? (installmentsResult.data ?? []).find((p) => Number(p.total_amount) / p.installments_count / monthlyIncome > 0.2)?.description ?? null
+      : null
+
+  const stalledGoalNames = (goalsResult.data ?? [])
+    .filter((g) => isGoalStalled(Number(g.current_amount), g.created_at, now))
+    .map((g) => g.name)
+
+  const hasNoCategories = (categoriesResult.data ?? []).length === 0
+  const hasExpensesButNoIncome = monthlyIncome === 0 && monthlyExpense > 0
+
+  // Aumento de suscripción: mismo criterio que detectPriceIncreases —
+  // el historial viene ordenado de viejo a nuevo, comparamos los últimos
+  // dos snapshots de cada suscripción.
+  let hasSubscriptionPriceIncrease = false
+  const historyByExpense = new Map<string, number[]>()
+  for (const h of priceHistoryResult.data ?? []) {
+    const amounts = historyByExpense.get(h.recurring_expense_id) ?? []
+    amounts.push(Number(h.amount) || 0)
+    historyByExpense.set(h.recurring_expense_id, amounts)
+  }
+  for (const amounts of historyByExpense.values()) {
+    if (amounts.length >= 2) {
+      const current = amounts[amounts.length - 1]
+      const previous = amounts[amounts.length - 2]
+      if (current > previous) {
+        hasSubscriptionPriceIncrease = true
+        break
+      }
+    }
+  }
+
+  const safeToSpendToday =
+    monthlyIncome > 0
+      ? computeSafeToSpend({
+          totalBalance: summary.totalBalance,
+          monthlyFixedCommitments: safeData.monthlyFixedCommitments,
+          budgetedAllocations: safeData.budgetedAllocations,
+          savingsContributions: safeData.savingsContributions,
+          installmentCommitments: safeData.installmentCommitments,
+          monthlyIncome,
+          daysRemaining,
+        }).dailyLimit
+      : null
+
+  const antExpensesTotal = detectAntExpenses(
+    summary.monthlyExpenseAmounts.map((amount) => ({ amount })),
+    3000
+  ).total
+
+  const brokenStreakDays = computeStreakBreak(summary.monthlyExpenseDays, now)
+
+  const healthScore = computeFinancialHealthScore({
+    monthlyIncome,
+    monthlyExpense,
+    monthlyDebtPayments: safeData.monthlyFixedCommitments + safeData.installmentCommitments,
+    emergencyFundBalance: summary.totalBalance,
+    antExpensesTotal,
+  })
+
+  return {
+    healthScore,
+    noData: hasNoFinancialData(monthlyIncome, monthlyExpense),
+    safeToSpendToday,
+    hasSubscriptionPriceIncrease,
+    exceededBudgetCategoryNames,
+    hasHighInterestDebt,
+    largeInstallmentDescription,
+    brokenStreakDays,
+    stalledGoalNames,
+    hasNoCategories,
+    hasExpensesButNoIncome,
+    householdUnsettledDays: household.unsettledDays,
   }
 }
 
@@ -253,6 +511,109 @@ Deno.serve(async (req: Request) => {
           daysRemaining: getDaysRemainingInMonth(new Date()),
         })
         await reply(buildSafeToSpendReply(result, summary.totalBalance))
+      } else if (parsed.command === 'score') {
+        const data = await fetchAdviceData(supabaseAdmin, link.user_id)
+        await reply(buildScoreReply(data.healthScore, data.noData))
+      } else if (parsed.command === 'consejos') {
+        const data = await fetchAdviceData(supabaseAdmin, link.user_id)
+        const messages = generateAdviceMessages({
+          healthScore: data.healthScore,
+          safeToSpendToday: data.safeToSpendToday,
+          hasSubscriptionPriceIncrease: data.hasSubscriptionPriceIncrease,
+          exceededBudgetCategoryNames: data.exceededBudgetCategoryNames,
+          hasHighInterestDebt: data.hasHighInterestDebt,
+          largeInstallmentDescription: data.largeInstallmentDescription,
+          brokenStreakDays: data.brokenStreakDays,
+          stalledGoalNames: data.stalledGoalNames,
+          hasNoCategories: data.hasNoCategories,
+          hasExpensesButNoIncome: data.hasExpensesButNoIncome,
+          householdUnsettledDays: data.householdUnsettledDays,
+        })
+        await reply(buildConsejosReply(messages, data.noData))
+      } else if (parsed.command === 'deudas') {
+        const { data, error } = await supabaseAdmin
+          .from('debts')
+          .select('description, counterparty_name, debt_type, total_amount, remaining_amount, currency')
+          .eq('user_id', link.user_id)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        await reply(
+          buildDebtsReply(
+            (data ?? []).map((d) => ({
+              description: d.description,
+              counterpartyName: d.counterparty_name,
+              debtType: d.debt_type,
+              totalAmount: Number(d.total_amount),
+              remainingAmount: Number(d.remaining_amount),
+              currency: d.currency,
+            }))
+          )
+        )
+      } else if (parsed.command === 'cuotas') {
+        const [purchases, payments] = await Promise.all([
+          supabaseAdmin
+            .from('installment_purchases')
+            .select('id, description, total_amount, installments_count')
+            .eq('user_id', link.user_id)
+            .order('created_at', { ascending: false }),
+          supabaseAdmin.from('installment_payments').select('installment_purchase_id').eq('user_id', link.user_id),
+        ])
+        if (purchases.error || payments.error) throw purchases.error || payments.error
+        const paidCountByPurchase = new Map<string, number>()
+        for (const p of payments.data ?? []) {
+          paidCountByPurchase.set(p.installment_purchase_id, (paidCountByPurchase.get(p.installment_purchase_id) ?? 0) + 1)
+        }
+        await reply(
+          buildCuotasReply(
+            (purchases.data ?? []).map((p) => ({
+              description: p.description,
+              totalAmount: Number(p.total_amount),
+              installmentsCount: p.installments_count,
+              paidCount: paidCountByPurchase.get(p.id) ?? 0,
+              monthlyAmount: p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0,
+            }))
+          )
+        )
+      } else if (parsed.command === 'metas') {
+        const { data, error } = await supabaseAdmin
+          .from('savings_goals')
+          .select('name, target_amount, current_amount, monthly_contribution')
+          .eq('user_id', link.user_id)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        await reply(
+          buildMetasReply(
+            (data ?? []).map((g) => ({
+              name: g.name,
+              targetAmount: Number(g.target_amount),
+              currentAmount: Number(g.current_amount),
+              monthlyContribution: Number(g.monthly_contribution),
+            }))
+          )
+        )
+      } else if (parsed.command === 'fijos') {
+        const { data, error } = await supabaseAdmin
+          .from('recurring_expenses')
+          .select('title, amount, currency, expense_kind, billing_frequency, billing_day')
+          .eq('user_id', link.user_id)
+          .eq('is_active', true)
+          .order('billing_day', { ascending: true })
+        if (error) throw error
+        await reply(
+          buildFijosReply(
+            (data ?? []).map((r) => ({
+              title: r.title,
+              amount: Number(r.amount),
+              currency: r.currency,
+              expenseKind: r.expense_kind,
+              billingFrequency: r.billing_frequency,
+              billingDay: r.billing_day,
+            }))
+          )
+        )
+      } else if (parsed.command === 'hogar') {
+        const household = await fetchHouseholdData(supabaseAdmin, link.user_id)
+        await reply(buildHogarReply(household.balance, household.unsettledDays))
       }
     } catch (err) {
       console.error('Error consultando datos para el bot:', err)
@@ -297,7 +658,8 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // parsed.kind === 'expense' — buscamos a qué usuario corresponde este chat_id.
+  // Expensas, deudas, cuotas, fijos y metas requieren que el chat esté
+  // vinculado — buscamos a qué usuario corresponde este chat_id.
   const { data: link, error: findError } = await supabaseAdmin
     .from('telegram_links')
     .select('user_id')
@@ -309,25 +671,94 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  const { error: insertError } = await supabaseAdmin.from('transactions').insert([
-    {
-      user_id: link.user_id,
-      type: 'expense',
-      description: parsed.description,
-      payment_method: 'Otro (Telegram)',
-      is_usd: false,
-      amount_usd: null,
-      amount_ars: parsed.amount,
-      exchange_rate: null,
-      category_id: null,
-    },
-  ])
-
-  if (insertError) {
-    console.error('Error insertando transacción desde Telegram:', insertError)
-    await reply(buildExpenseErrorReply())
-  } else {
-    await reply(buildExpenseConfirmedReply(parsed.amount, parsed.description))
+  try {
+    if (parsed.kind === 'expense') {
+      const { error: insertError } = await supabaseAdmin.from('transactions').insert([
+        {
+          user_id: link.user_id,
+          type: 'expense',
+          description: parsed.description,
+          payment_method: 'Otro (Telegram)',
+          is_usd: false,
+          amount_usd: null,
+          amount_ars: parsed.amount,
+          exchange_rate: null,
+          category_id: null,
+        },
+      ])
+      if (insertError) throw insertError
+      await reply(buildExpenseConfirmedReply(parsed.amount, parsed.description))
+    } else if (parsed.kind === 'debt') {
+      const { error: insertError } = await supabaseAdmin.from('debts').insert([
+        {
+          user_id: link.user_id,
+          description: `Deuda con ${parsed.counterpartyName}`,
+          counterparty_name: parsed.counterpartyName,
+          debt_type: parsed.debtType,
+          currency: 'ARS',
+          total_amount: parsed.amount,
+          remaining_amount: parsed.amount,
+          interest_rate: 0,
+          due_date: null,
+          notes: null,
+        },
+      ])
+      if (insertError) throw insertError
+      await reply(buildDebtConfirmedReply(parsed.debtType, parsed.amount, parsed.counterpartyName))
+    } else if (parsed.kind === 'installment') {
+      const { error: insertError } = await supabaseAdmin.from('installment_purchases').insert([
+        {
+          user_id: link.user_id,
+          description: parsed.description,
+          total_amount: parsed.totalAmount,
+          installments_count: parsed.installmentsCount,
+          first_installment_date: new Date().toISOString().slice(0, 10),
+          category_id: null,
+          payment_method: null,
+          notes: null,
+        },
+      ])
+      if (insertError) throw insertError
+      await reply(buildInstallmentConfirmedReply(parsed.description, parsed.totalAmount, parsed.installmentsCount))
+    } else if (parsed.kind === 'recurring') {
+      const { error: insertError } = await supabaseAdmin.from('recurring_expenses').insert([
+        {
+          user_id: link.user_id,
+          title: parsed.description,
+          amount: parsed.amount,
+          currency: 'ARS',
+          billing_day: new Date().getDate(),
+          billing_frequency: 'monthly',
+          billing_month: null,
+          expense_kind: parsed.expenseKind,
+          category_id: null,
+          payment_method: null,
+          wallet_id: null,
+          membership_type: null,
+          tax_percentage: 0,
+          is_active: true,
+        },
+      ])
+      if (insertError) throw insertError
+      await reply(buildRecurringConfirmedReply(parsed.description, parsed.amount, parsed.expenseKind))
+    } else if (parsed.kind === 'savings_goal') {
+      const { error: insertError } = await supabaseAdmin.from('savings_goals').insert([
+        {
+          user_id: link.user_id,
+          name: parsed.name,
+          target_amount: parsed.targetAmount,
+          current_amount: 0,
+          monthly_contribution: 0,
+          monthly_interest_rate: 0,
+          color: null,
+        },
+      ])
+      if (insertError) throw insertError
+      await reply(buildSavingsGoalConfirmedReply(parsed.name, parsed.targetAmount))
+    }
+  } catch (err) {
+    console.error('Error insertando desde Telegram:', err)
+    await reply(parsed.kind === 'expense' ? buildExpenseErrorReply() : buildSaveErrorReply())
   }
 
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })

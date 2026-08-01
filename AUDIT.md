@@ -2250,3 +2250,88 @@ sincronice sola.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 413 tests**,
 todos pasando — 388 previos + 25 nuevos), `npm run build` (OK).
+
+---
+
+## Bot de Telegram 360° — Score, listas y texto libre para todo (Tanda 4)
+
+El bot pasó de registrar solo gastos a ser un control remoto completo de
+la app: entiende deudas, cuotas, gastos fijos y metas de ahorro en texto
+libre, inserta la entidad correcta y responde 7 comandos de consulta
+nuevos. Todo el procesamiento sigue en lógica pura (Deno aparte del
+build de Next.js), con las fórmulas del frontend replicadas en
+`reply-builder.ts` (nota de duplicación en el encabezado de ese archivo).
+
+### Comandos nuevos
+- `/score` — Un Mango Score (4 pilares) calculado con los mismos números
+  que el frontend: ingreso/gasto del mes, fijos + cuotas como "deuda",
+  total en billeteras como colchón y gastos hormiga (< $3.000, mismo
+  umbral por defecto que la app).
+- `/deudas`, `/cuotas`, `/metas`, `/fijos` — listas de cada tabla con
+  progreso (cuotas pagadas/total, % de meta, día de vencimiento).
+- `/consejos` — la misma lógica de umbrales de `financialAdvice.ts`,
+  pero en texto (sin acciones de navegación, que no aplican en Telegram).
+- `/hogar` — balance de gastos de hogar (replica de `householdBalance.ts`).
+
+### Texto libre nuevo (message-parser.ts)
+- `Debo 5000 a Juan` / `Le debo 1500 a María` → deuda tipo "debo".
+- `Me debe 3000 Pedro` → deuda tipo "me_deben" (nombre opcional, si
+  falta usa "la otra persona").
+- `Heladera 200000 en 12 cuotas` o `Compra 200000 12 cuotas` → compra en
+  cuotas (sin descripción usa "Compra en cuotas").
+- `Suscripción 5000 Netflix`, `Alquiler 20000`, `Servicio 3000 luz`,
+  `Cable 3000 mensual`, `Fijo 2000 cable` → gasto fijo. Un "Gasto 20000
+  alquiler" explícito sigue siendo gasto: el verbo de gasto común le gana
+  al keyword del medio (test dedicado).
+- `Meta Vacaciones 200000`, `Meta 200000 para Vacaciones`,
+  `Ahorrar 50000 para viaje` → meta de ahorro.
+- El gasto común (`Gasto 4500 café`) y los comandos viejos no cambian.
+
+### Insert de cada entidad (index.ts)
+El bot usa la service role key, así que inserta directo por `user_id`
+(también las RPCs del frontend filtran por `auth.uid()`):
+- `transactions` — igual que antes.
+- `debts` — `debt_type`, `currency='ARS'`, `total_amount=remaining`,
+  `interest_rate=0`, `description="Deuda con X"` (la tabla exige
+  description y counterparty_name, los dos not null).
+- `installment_purchases` — `first_installment_date=hoy`,
+  `category_id/payment_method/notes=null`.
+- `recurring_expenses` — `billing_day=hoy`, `billing_frequency='monthly'`,
+  `expense_kind` según el parseo, `is_active=true` (el trigger de
+  `recurring_expense_price_history` ya registra el snapshot automático).
+- `savings_goals` — `current_amount=0`, aporte e interés mensual en 0.
+
+### Datos de /consejos: consultas directas, sin RPCs
+`fetchAdviceData` replica los insumos de `FinancialAdviceWidget` con
+queries por `user_id`:
+- Presupuestos excedidos: cruza `budgets.monthly_limit` con lo gastado
+  por categoría del mes (sumando `transactions` del mes).
+- Aumento de suscripción: compara los últimos 2 snapshots de cada
+  suscripción en `recurring_expense_price_history` (mismo criterio que
+  `detectPriceIncreases`, ya que `get_recurring_price_changes()` no sirve
+  con service role).
+- Racha rota (`computeStreakBreak`), metas estancadas (`isGoalStalled`),
+  deuda con interés, cuota grande (>20% del ingreso), sin categorías,
+  gastos sin ingreso, y hogar sin saldar (30+ días) desde los datos que
+  ya se vienen calculando.
+- `fetchFinancialSummary` ahora también devuelve `monthlyExpenseAmounts`
+  (gastos hormiga) y `monthlyExpenseDays` (racha).
+
+### Tests (52 nuevos, 465 totales)
+- `message-parser.test.ts`: 34 tests (15 → 34) — deudas, cuotas, fijos,
+  metas, comandos nuevos y la regresión del gasto común.
+- `reply-builder.test.ts`: 58 tests (25 → 58) — fórmulas replicadas
+  (score, hogar, hormiga, meta estancada, racha), builders de listas y
+  confirmaciones, `generateAdviceMessages` y `buildConsejosReply`.
+- El score del test usa los valores exactos de la fórmula del frontend
+  (p. ej. fondo de emergencia con 4 meses de gastos = 67/100, no 100).
+
+### Fuera de scope (consciente)
+- No hay alta de gastos de hogar desde Telegram (la tabla pide
+  `household_id` y los gastos van asociados al hogar, no al usuario).
+- `/score` y `/consejos` usan el total en billeteras como colchón de
+  emergencia (igual que el bot calcula el saldo), no `get_wallet_balances`.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 465 tests**,
+todos pasando — 413 previos + 52 nuevos), `npm run build` (OK).

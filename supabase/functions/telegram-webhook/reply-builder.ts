@@ -7,6 +7,14 @@
 // build de Next.js — no se puede importar el archivo del frontend. Si
 // cambiás la fórmula de safe-to-spend, replicá el cambio en ambos lados
 // (y en SafeToSpendWidget.tsx).
+//
+// Lo mismo aplica para lo demás que se replica acá desde el frontend:
+// computeFinancialHealthScore / hasNoFinancialData
+// (src/lib/financialHealthScore.ts), computeHouseholdBalance
+// (src/lib/householdBalance.ts), detectAntExpenses
+// (src/lib/antExpenses.ts), isGoalStalled (src/lib/savingsGoalStall.ts),
+// computeStreakBreak (src/lib/zeroSpendStats.ts) y generateAdviceMessages
+// (versión en texto de src/lib/financialAdvice.ts).
 
 export type SafeToSpendStatus = 'safe' | 'tight' | 'over'
 
@@ -88,10 +96,21 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 /saldo — tu saldo total en billeteras
 /gastado — cuánto gastaste este mes
 /safetospend — cuánto podés gastar hoy sin romper tus compromisos
+/score — tu Un Mango Score (salud financiera del mes)
+/deudas — tus deudas pendientes
+/cuotas — tus compras en cuotas
+/metas — tus metas de ahorro
+/fijos — tus suscripciones y gastos fijos
+/consejos — recomendaciones según tus números
+/hogar — balance de gastos de hogar con tu pareja
 /ayuda — este mensaje
 
-También podés mandarme gastos en texto libre, por ejemplo:
-"Gasto 4500 café" o "12000 supermercado".`
+También podés mandarme texto libre, por ejemplo:
+"Gasto 4500 café" — registra un gasto
+"Debo 5000 a Juan" o "Me debe 3000 Pedro" — registra una deuda
+"Heladera 200000 en 12 cuotas" — registra una compra en cuotas
+"Suscripción 5000 Netflix" o "Alquiler 20000" — carga un gasto fijo
+"Meta Vacaciones 200000" — crea una meta de ahorro`
 
 export function buildHelpReply(): string {
   return HELP_TEXT
@@ -169,5 +188,429 @@ export function buildSafeToSpendReply(
     lines.push('Tus compromisos del mes ya superan el balance disponible.')
   }
 
+  return lines.join('\n')
+}
+
+/**
+ * Formatea un monto según moneda: ARS usa el formato local ($1.234,5),
+ * USD un formato simple con prefijo US$ (los gastos del bot se cargan en
+ * ARS, pero las deudas y los fijos pueden estar en USD).
+ */
+export function formatMoney(amount: number, currency: string): string {
+  if (currency === 'USD') {
+    return `US$${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+  }
+  return formatArs(amount)
+}
+
+// ---------------- Un Mango Score (replica de src/lib/financialHealthScore.ts) ----------------
+
+export interface FinancialHealthPillar {
+  label: string
+  score: number
+}
+
+export interface FinancialHealthResult {
+  totalScore: number
+  pillars: {
+    savings: FinancialHealthPillar
+    debt: FinancialHealthPillar
+    emergencyFund: FinancialHealthPillar
+    antExpenses: FinancialHealthPillar
+  }
+}
+
+export interface FinancialHealthInputs {
+  monthlyIncome: number
+  monthlyExpense: number
+  /** Suma de cuotas, deudas y gastos fijos comprometidos del mes. */
+  monthlyDebtPayments: number
+  /** Plata "de colchón" disponible — se usa el total en billeteras. */
+  emergencyFundBalance: number
+  /** Total gastado del mes en compras chicas (gastos hormiga). */
+  antExpensesTotal: number
+}
+
+function clampScore(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+export function hasNoFinancialData(monthlyIncome: number, monthlyExpense: number): boolean {
+  return monthlyIncome === 0 && monthlyExpense === 0
+}
+
+export function computeFinancialHealthScore(inputs: FinancialHealthInputs): FinancialHealthResult {
+  const { monthlyIncome, monthlyExpense, monthlyDebtPayments, emergencyFundBalance, antExpensesTotal } = inputs
+
+  const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpense) / monthlyIncome) * 100 : 0
+  const savingsScore = clampScore(savingsRate, 0, 100)
+
+  const debtRatio = monthlyIncome > 0 ? (monthlyDebtPayments / monthlyIncome) * 100 : 100
+  const debtScore = clampScore(100 - debtRatio, 0, 100)
+
+  const monthsCovered = monthlyExpense > 0 ? emergencyFundBalance / monthlyExpense : 0
+  const emergencyFundScore = clampScore((monthsCovered / 6) * 100, 0, 100)
+
+  const antRatio = monthlyIncome > 0 ? (antExpensesTotal / monthlyIncome) * 100 : 0
+  const antExpensesScore = clampScore(100 - antRatio * 5, 0, 100)
+
+  const totalScore = Math.round((savingsScore + debtScore + emergencyFundScore + antExpensesScore) / 4)
+
+  return {
+    totalScore,
+    pillars: {
+      savings: { label: 'Ahorro', score: Math.round(savingsScore) },
+      debt: { label: 'Deuda', score: Math.round(debtScore) },
+      emergencyFund: { label: 'Fondo de Emergencia', score: Math.round(emergencyFundScore) },
+      antExpenses: { label: 'Gasto Hormiga', score: Math.round(antExpensesScore) },
+    },
+  }
+}
+
+// ---------------- Balance de hogar (replica de src/lib/householdBalance.ts) ----------------
+
+export interface HouseholdBalance {
+  /** Positivo: la otra persona te debe esto. Negativo: vos le debés esto a la otra persona. */
+  netBalanceForMe: number
+  totalPaidByMe: number
+  totalPaidByPartner: number
+  totalHouseholdExpenses: number
+}
+
+export function computeHouseholdBalance(totalPaidByMe: number, totalPaidByPartner: number): HouseholdBalance {
+  const totalHouseholdExpenses = totalPaidByMe + totalPaidByPartner
+  const fairShare = totalHouseholdExpenses / 2
+  const netBalanceForMe = totalPaidByMe - fairShare
+
+  return {
+    netBalanceForMe,
+    totalPaidByMe,
+    totalPaidByPartner,
+    totalHouseholdExpenses,
+  }
+}
+
+// ---------------- Gastos hormiga (replica de src/lib/antExpenses.ts) ----------------
+
+export interface AntExpense {
+  amount: number
+}
+
+export interface AntExpensesResult {
+  count: number
+  total: number
+  averageAmount: number
+}
+
+export function detectAntExpenses(expenses: AntExpense[], threshold: number): AntExpensesResult {
+  const small = expenses.filter((e) => e.amount > 0 && e.amount < threshold)
+  const total = small.reduce((acc, e) => acc + e.amount, 0)
+
+  return {
+    count: small.length,
+    total,
+    averageAmount: small.length > 0 ? total / small.length : 0,
+  }
+}
+
+// ---------------- Metas estancadas (replica de src/lib/savingsGoalStall.ts) ----------------
+
+const STALLED_THRESHOLD_DAYS = 60
+
+export function isGoalStalled(currentAmount: number, createdAt: string, today: Date = new Date()): boolean {
+  if (currentAmount > 0) return false
+
+  const created = new Date(createdAt)
+  const daysSinceCreated = Math.floor((today.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
+  return daysSinceCreated >= STALLED_THRESHOLD_DAYS
+}
+
+// ---------------- Racha rota (replica de src/lib/zeroSpendStats.ts) ----------------
+
+export function computeStreakBreak(expenseDayNumbers: number[], today: Date = new Date()): number | null {
+  const todayDayOfMonth = today.getDate()
+  const expenseDaysSet = new Set(expenseDayNumbers)
+
+  if (!expenseDaysSet.has(todayDayOfMonth)) return null
+
+  let streakBeforeToday = 0
+  for (let day = todayDayOfMonth - 1; day >= 1; day--) {
+    if (expenseDaysSet.has(day)) break
+    streakBeforeToday++
+  }
+  return streakBeforeToday > 0 ? streakBeforeToday : null
+}
+
+// ---------------- Consejos (versión en texto de src/lib/financialAdvice.ts) ----------------
+
+export interface TelegramAdviceInputs {
+  healthScore: FinancialHealthResult
+  safeToSpendToday: number | null
+  hasSubscriptionPriceIncrease: boolean
+  exceededBudgetCategoryNames: string[]
+  hasHighInterestDebt: boolean
+  largeInstallmentDescription: string | null
+  brokenStreakDays: number | null
+  stalledGoalNames: string[]
+  hasNoCategories: boolean
+  hasExpensesButNoIncome: boolean
+  householdUnsettledDays: number | null
+}
+
+/**
+ * Los mismos umbrales de generateFinancialAdvice del frontend, pero
+ * devolviendo solo el texto del consejo (sin acciones de navegación,
+ * que no aplican en Telegram). Función pura para poder testearla.
+ */
+export function generateAdviceMessages(inputs: TelegramAdviceInputs): string[] {
+  const {
+    healthScore,
+    safeToSpendToday,
+    hasSubscriptionPriceIncrease,
+    exceededBudgetCategoryNames,
+    hasHighInterestDebt,
+    largeInstallmentDescription,
+    brokenStreakDays,
+    stalledGoalNames,
+    hasNoCategories,
+    hasExpensesButNoIncome,
+    householdUnsettledDays,
+  } = inputs
+  const messages: string[] = []
+  const { savings, debt, emergencyFund, antExpenses } = healthScore.pillars
+
+  if (savings.score < 30) {
+    messages.push('⛔ Estás gastando casi todo lo que ganás (o más). Intentá guardar aunque sea un 5-10% este mes.')
+  } else if (savings.score < 60) {
+    messages.push('⚠️ Tu margen de ahorro es bajo. Revisá si hay algún gasto que puedas recortar para guardar un poco más.')
+  } else if (savings.score >= 80) {
+    messages.push('✅ Estás ahorrando una parte importante de tu ingreso — vas bien.')
+  }
+
+  if (debt.score < 30) {
+    messages.push('⛔ Tus cuotas y gastos fijos comprometidos se están comiendo una parte muy grande de tu ingreso. Pensalo dos veces antes de sumar una cuota más.')
+  } else if (debt.score < 60) {
+    messages.push('⚠️ Tenés bastante comprometido en cuotas y gastos fijos. Andá con cuidado antes de agregar más compromisos mensuales.')
+  }
+
+  if (emergencyFund.score < 20) {
+    messages.push('⛔ Prácticamente no tenés colchón de emergencia. Un imprevisto (rotura, salud) te puede complicar bastante ahora mismo.')
+  } else if (emergencyFund.score < 60) {
+    messages.push('⚠️ Tu fondo de emergencia cubre menos de 3 meses de gastos. Si podés, sumá una Meta de Ahorro para ir agrandándolo.')
+  } else if (emergencyFund.score >= 90) {
+    messages.push('✅ Tenés un buen colchón de emergencia armado.')
+  }
+
+  if (antExpenses.score < 40) {
+    messages.push('⚠️ Los gastos chicos del día a día (cafés, kiosco, delivery) están pesando bastante en tu mes — revisalos, capaz hay margen ahí.')
+  }
+
+  if (hasSubscriptionPriceIncrease) {
+    messages.push('ℹ️ Alguna de tus suscripciones subió de precio este último tiempo — revisá si te sigue conviniendo.')
+  }
+
+  if (safeToSpendToday !== null && safeToSpendToday <= 0) {
+    messages.push('⛔ Con el ritmo actual, ya no te queda margen para gastar este mes sin tocar tus gastos fijos comprometidos.')
+  }
+
+  if (exceededBudgetCategoryNames.length > 0) {
+    const names = exceededBudgetCategoryNames.slice(0, 2).join(' y ')
+    const extra = exceededBudgetCategoryNames.length > 2 ? ` (y ${exceededBudgetCategoryNames.length - 2} más)` : ''
+    messages.push(`⚠️ Superaste el presupuesto de ${names}${extra} este mes.`)
+  }
+
+  if (hasHighInterestDebt) {
+    messages.push('⚠️ Tenés una deuda con interés — priorizarla antes que ahorrar suele convenir más (el interés que pagás normalmente es mayor a lo que rendiría guardar esa plata).')
+  }
+
+  if (largeInstallmentDescription) {
+    messages.push(`⚠️ La cuota de "${largeInstallmentDescription}" pesa bastante sobre tu ingreso mensual.`)
+  }
+
+  if (brokenStreakDays !== null && brokenStreakDays >= 3) {
+    messages.push(`ℹ️ Veías ${brokenStreakDays} días seguidos sin gastos y hoy se cortó — no pasa nada, a retomarla.`)
+  }
+
+  if (stalledGoalNames.length > 0) {
+    const names = stalledGoalNames.slice(0, 2).join(' y ')
+    messages.push(`ℹ️ Tu meta "${names}" sigue en $0 desde hace bastante — ¿le sumamos algo este mes?`)
+  }
+
+  if (hasNoCategories) {
+    messages.push('ℹ️ Todavía no creaste ninguna categoría — con categorías vas a poder ver en qué se te va la plata.')
+  }
+
+  if (hasExpensesButNoIncome) {
+    messages.push('ℹ️ Tenés gastos cargados este mes pero ningún ingreso — el Score y el límite de gasto diario van a ser menos precisos hasta que lo cargues.')
+  }
+
+  if (householdUnsettledDays !== null && householdUnsettledDays >= 30) {
+    messages.push(`ℹ️ Tenés gastos de hogar sin saldar desde hace ${householdUnsettledDays} días — puede ser buen momento para arreglar cuentas.`)
+  }
+
+  return messages
+}
+
+// ---------------- Items para las respuestas de listas ----------------
+
+export interface DebtListItem {
+  description: string
+  counterpartyName: string
+  debtType: 'debo' | 'me_deben'
+  totalAmount: number
+  remainingAmount: number
+  currency: 'ARS' | 'USD'
+}
+
+export interface InstallmentListItem {
+  description: string
+  totalAmount: number
+  installmentsCount: number
+  paidCount: number
+  monthlyAmount: number
+}
+
+export interface GoalListItem {
+  name: string
+  targetAmount: number
+  currentAmount: number
+  monthlyContribution: number
+}
+
+export interface RecurringListItem {
+  title: string
+  amount: number
+  currency: string
+  expenseKind: 'subscription' | 'utility_rent'
+  billingFrequency: BillingFrequency
+  billingDay: number | null
+}
+
+// ---------------- Builders nuevos ----------------
+
+export function buildDebtConfirmedReply(debtType: 'debo' | 'me_deben', amount: number, counterpartyName: string): string {
+  if (debtType === 'debo') {
+    return `Listo ✅ Registré que le debés ${formatArs(amount)} a ${counterpartyName}.`
+  }
+  return `Listo ✅ Registré que ${counterpartyName} te debe ${formatArs(amount)}.`
+}
+
+export function buildInstallmentConfirmedReply(description: string, totalAmount: number, installmentsCount: number): string {
+  const monthlyAmount = installmentsCount > 0 ? totalAmount / installmentsCount : 0
+  return `Listo ✅ Registré "${description}" por ${formatArs(totalAmount)} en ${installmentsCount} cuotas de ${formatArs(monthlyAmount)}.`
+}
+
+export function buildRecurringConfirmedReply(description: string, amount: number, expenseKind: 'subscription' | 'utility_rent'): string {
+  const kindLabel = expenseKind === 'subscription' ? 'suscripción' : 'gasto fijo'
+  return `Listo ✅ Cargué ${kindLabel} "${description}" por ${formatArs(amount)}/mes. Se agrega como gasto fijo mensual.`
+}
+
+export function buildSavingsGoalConfirmedReply(name: string, targetAmount: number): string {
+  return `Listo ✅ Creé la meta "${name}" con objetivo ${formatArs(targetAmount)}. Podés sumarle plata desde la app en Metas de Ahorro.`
+}
+
+export function buildSaveErrorReply(): string {
+  return 'Hubo un error registrando eso. Probá de nuevo.'
+}
+
+export function buildScoreReply(result: FinancialHealthResult, noData: boolean): string {
+  if (noData) {
+    return 'Todavía no cargaste ningún ingreso ni gasto este mes — así que no hay Score para calcular. Cargá movimientos desde la app y volvé a preguntarme /score.'
+  }
+  const { savings, debt, emergencyFund, antExpenses } = result.pillars
+  const emojiFor = (score: number) => (score < 40 ? '⛔' : score < 70 ? '⚠️' : '✅')
+  return [
+    `Tu Un Mango Score es ${result.totalScore}/100.`,
+    '',
+    `${emojiFor(savings.score)} Ahorro: ${savings.score}/100`,
+    `${emojiFor(debt.score)} Deuda: ${debt.score}/100`,
+    `${emojiFor(emergencyFund.score)} Fondo de Emergencia: ${emergencyFund.score}/100`,
+    `${emojiFor(antExpenses.score)} Gasto Hormiga: ${antExpenses.score}/100`,
+    '',
+    'Cada pilar vale un cuarto del Score. Mandame /consejos para ver qué mejorar.',
+  ].join('\n')
+}
+
+export function buildDebtsReply(items: DebtListItem[]): string {
+  if (items.length === 0) {
+    return 'No tenés deudas cargadas. Mandame algo tipo "Debo 5000 a Juan" para registrar una.'
+  }
+  const lines = items.map((d) => {
+    const base =
+      d.debtType === 'debo'
+        ? `A ${d.counterpartyName}: le debés ${formatMoney(d.totalAmount, d.currency)}`
+        : `${d.counterpartyName}: te debe ${formatMoney(d.totalAmount, d.currency)}`
+    const pending = d.remainingAmount > 0 && d.remainingAmount !== d.totalAmount ? ` (quedan ${formatMoney(d.remainingAmount, d.currency)})` : ''
+    return `• ${base}${pending}`
+  })
+  return ['Tus deudas:', ...lines].join('\n')
+}
+
+export function buildCuotasReply(items: InstallmentListItem[]): string {
+  if (items.length === 0) {
+    return 'No tenés compras en cuotas. Mandame algo tipo "Heladera 200000 en 12 cuotas" para registrar una.'
+  }
+  const lines = items.map((p) => {
+    const progress = p.paidCount > 0 ? ` (pagadas ${p.paidCount}/${p.installmentsCount})` : ''
+    return `• ${p.description} — ${formatArs(p.totalAmount)} en ${p.installmentsCount} cuotas de ${formatArs(p.monthlyAmount)}${progress}`
+  })
+  return ['Tus compras en cuotas:', ...lines].join('\n')
+}
+
+export function buildMetasReply(items: GoalListItem[]): string {
+  if (items.length === 0) {
+    return 'No tenés metas de ahorro. Mandame algo tipo "Meta Vacaciones 200000" para crear una.'
+  }
+  const lines = items.map((g) => {
+    const progress = g.targetAmount > 0 ? Math.round((g.currentAmount / g.targetAmount) * 100) : 0
+    const contribution = g.monthlyContribution > 0 ? `, aportando ${formatArs(g.monthlyContribution)}/mes` : ''
+    return `• ${g.name} — ${formatArs(g.currentAmount)} de ${formatArs(g.targetAmount)} (${progress}%)${contribution}`
+  })
+  return ['Tus metas de ahorro:', ...lines].join('\n')
+}
+
+export function buildFijosReply(items: RecurringListItem[]): string {
+  if (items.length === 0) {
+    return 'No tenés suscripciones ni gastos fijos activos. Mandame algo tipo "Suscripción 5000 Netflix" o "Alquiler 20000" para cargar uno.'
+  }
+  const lines = items.map((r) => {
+    const kindLabel = r.expenseKind === 'subscription' ? 'Suscripción' : 'Gasto fijo'
+    const freq = r.billingFrequency === 'annual' ? ' (anual)' : ''
+    const day = r.billingDay ? `, vence el ${r.billingDay}` : ''
+    return `• ${r.title} — ${formatMoney(r.amount, r.currency)}${freq}${day} [${kindLabel}]`
+  })
+  return ['Tus suscripciones y gastos fijos:', ...lines].join('\n')
+}
+
+export function buildConsejosReply(messages: string[], noData: boolean): string {
+  if (noData) {
+    return 'Todavía no hay nada cargado este mes, así que no hay mucho para recomendar — cargá tu primer ingreso o gasto y los consejos se arman solos.'
+  }
+  if (messages.length === 0) {
+    return 'Por ahora no hay ninguna alerta puntual — tus números están en un rango razonable en los 4 pilares del Un Mango Score.'
+  }
+  return ['Tus recomendaciones:', '', ...messages].join('\n')
+}
+
+export function buildHogarReply(balance: HouseholdBalance | null, unsettledDays: number | null): string {
+  if (balance === null) {
+    return 'Todavía no vinculaste el Modo Hogar. Generá un código de invitación desde la app (Configuración → Modo Hogar) y vinculá a tu pareja para llevar los gastos de la casa.'
+  }
+  const lines: string[] = []
+  if (balance.netBalanceForMe === 0) {
+    lines.push('Están a mano — pagaron lo mismo en gastos de hogar.')
+  } else if (balance.netBalanceForMe > 0) {
+    lines.push(`Tu pareja te debe ${formatArs(balance.netBalanceForMe)} por los gastos de hogar.`)
+  } else {
+    lines.push(`Le debés a tu pareja ${formatArs(Math.abs(balance.netBalanceForMe))} por los gastos de hogar.`)
+  }
+  if (balance.totalHouseholdExpenses > 0) {
+    lines.push(
+      `Gastos de la casa: ${formatArs(balance.totalHouseholdExpenses)} (vos ${formatArs(balance.totalPaidByMe)}, tu pareja ${formatArs(balance.totalPaidByPartner)}).`
+    )
+  }
+  if (unsettledDays !== null && unsettledDays >= 30) {
+    lines.push(`Hace ${unsettledDays} días que está sin saldar — puede ser buen momento para arreglar cuentas.`)
+  }
   return lines.join('\n')
 }
