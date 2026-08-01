@@ -10,11 +10,12 @@
 //    busca ese código en telegram_links y completa el telegram_chat_id.
 // 3. Cualquier otro mensaje con una intención reconocible (ej. "Gasto 4500
 //    café", "Debo 5000 a Juan", "Pagué 5000 a Juan", "Pago servicio
-//    Netflix 5000", "Heladera 200000 en 12 cuotas", "Suscripción 5000
-//    Netflix", "Meta Vacaciones 200000") — si el chat_id ya está
-//    vinculado, inserta la entidad correspondiente (transacción, deuda,
-//    pago de deuda con movimiento, pago de servicio con movimiento,
-//    compra en cuotas, gasto fijo o meta de ahorro) para ese usuario.
+//    Netflix 5000", "Pago 1 cuota Heladera", "Heladera 200000 en 12 cuotas",
+//    "Suscripción 5000 Netflix", "Meta Vacaciones 200000") — si el chat_id
+//    ya está vinculado, inserta la entidad correspondiente (transacción,
+//    deuda, pago de deuda con movimiento, pago de servicio con movimiento,
+//    pago de cuota con movimiento, compra en cuotas, gasto fijo o meta de
+//    ahorro) para ese usuario.
 //
 // En todos los casos responde al usuario por Telegram confirmando qué se
 // hizo (o el error), para que no quede la duda de si funcionó.
@@ -47,6 +48,9 @@ import {
   buildHelpReply,
   buildHogarReply,
   buildInstallmentConfirmedReply,
+  buildInstallmentPaymentAlreadyPaidReply,
+  buildInstallmentPaymentConfirmedReply,
+  buildInstallmentPaymentNotFoundReply,
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
@@ -65,6 +69,7 @@ import {
   buildVencimientosReply,
   computeFinancialHealthScore,
   computeHouseholdBalance,
+  computeInstallmentScheduleItems,
   computeSafeToSpend,
   computeStreakBreak,
   computeUpcomingDueItems,
@@ -482,6 +487,106 @@ async function handleRecurringPayment(
   if (txError) throw txError
 
   return { found: true, reply: buildRecurringPaymentConfirmedReply(service.title, amount, 'ARS') }
+}
+
+// Registra el pago de una cuota de una compra en cuotas existente: busca
+// la compra por descripción, marca la cuota como pagada (mismo mecanismo
+// que el botón "Pagar cuota" de InstallmentTracker: un registro en
+// installment_payments con el número de la cuota, sin superar el total
+// del plan) y crea el movimiento real en transactions.
+async function handleInstallmentPayment(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  purchaseName: string,
+  amount: number | null,
+  installmentNumber: number | null
+): Promise<{ found: boolean; reply: string }> {
+  const searchName = purchaseName.replace(/[%_]/g, '').trim()
+  const { data, error } = await supabase
+    .from('installment_purchases')
+    .select('id, description, total_amount, installments_count, first_installment_date, category_id')
+    .eq('user_id', userId)
+    .ilike('description', `%${searchName}%`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  const purchase = (data ?? [])[0]
+  if (!purchase) {
+    return { found: false, reply: buildInstallmentPaymentNotFoundReply(purchaseName) }
+  }
+
+  const { data: payments, error: paymentsError } = await supabase
+    .from('installment_payments')
+    .select('installment_number')
+    .eq('user_id', userId)
+    .eq('installment_purchase_id', purchase.id)
+  if (paymentsError) throw paymentsError
+
+  const paidNumbers = new Set((payments ?? []).map((p) => p.installment_number))
+  const schedule = computeInstallmentScheduleItems(
+    Number(purchase.total_amount) || 0,
+    purchase.installments_count,
+    new Date(`${purchase.first_installment_date}T00:00:00`)
+  )
+
+  // Si viene un número de cuota específico y todavía no está pagada, esa
+  // es la que se paga; si no, la próxima impaga del plan.
+  let target = schedule.find((item) => !paidNumbers.has(item.installmentNumber))
+  if (installmentNumber !== null) {
+    const requested = schedule.find((item) => item.installmentNumber === installmentNumber)
+    if (requested && !paidNumbers.has(requested.installmentNumber)) target = requested
+  }
+
+  if (!target) {
+    return { found: true, reply: buildInstallmentPaymentAlreadyPaidReply(purchase.description, purchase.installments_count) }
+  }
+
+  const paymentAmount = amount ?? target.amount
+  const description = `Pago cuota ${target.installmentNumber}/${purchase.installments_count} - ${purchase.description}`
+
+  const { data: txData, error: txError } = await supabase
+    .from('transactions')
+    .insert([
+      {
+        user_id: userId,
+        type: 'expense',
+        description,
+        payment_method: 'Otro (Telegram)',
+        is_usd: false,
+        amount_usd: null,
+        amount_ars: paymentAmount,
+        exchange_rate: null,
+        category_id: purchase.category_id ?? null,
+      },
+    ])
+    .select('id')
+    .single()
+  if (txError) throw txError
+
+  const { error: paymentError } = await supabase.from('installment_payments').insert([
+    {
+      installment_purchase_id: purchase.id,
+      user_id: userId,
+      installment_number: target.installmentNumber,
+      transaction_id: txData.id,
+    },
+  ])
+  if (paymentError) throw paymentError
+
+  const fullyPaid = schedule.every(
+    (item) => paidNumbers.has(item.installmentNumber) || item.installmentNumber === target?.installmentNumber
+  )
+
+  return {
+    found: true,
+    reply: buildInstallmentPaymentConfirmedReply(
+      purchase.description,
+      target.installmentNumber,
+      purchase.installments_count,
+      paymentAmount,
+      fullyPaid
+    ),
+  }
 }
 
 interface AdviceData {
@@ -989,6 +1094,15 @@ Deno.serve(async (req: Request) => {
       await reply(result.reply)
     } else if (parsed.kind === 'recurring_payment') {
       const result = await handleRecurringPayment(supabaseAdmin, link.user_id, parsed.amount, parsed.serviceName)
+      await reply(result.reply)
+    } else if (parsed.kind === 'installment_payment') {
+      const result = await handleInstallmentPayment(
+        supabaseAdmin,
+        link.user_id,
+        parsed.purchaseName,
+        parsed.amount,
+        parsed.installmentNumber
+      )
       await reply(result.reply)
     } else if (parsed.kind === 'savings_goal') {
       const { error: insertError } = await supabaseAdmin.from('savings_goals').insert([

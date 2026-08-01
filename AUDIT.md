@@ -2500,3 +2500,59 @@ ya estaba preparada (enum `source_table` aceptaba
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 504 tests**,
 todos pasando — 493 previos + 11 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 6c — Bot de Telegram: cuotas flexibles y pago de cuotas
+
+### `message-parser.ts` — creación de cuotas más flexible
+- Nueva `INSTALLMENT_NO_EN_PATTERN`: reconoce compras **sin** el conector
+  "en": `Heladera 200000 12 cuotas` → `{ description: 'Heladera',
+  totalAmount: 200000, installmentsCount: 12 }`. También admite
+  descripción con verbo adelante (`Compra TV 450000 6 cuotas` → le quita
+  el verbo y queda `description: 'TV'`). Los formatos viejos
+  (`... en N cuotas` y `Compra N M cuotas`) se siguen evaluando primero
+  y no cambian.
+- Nueva intención `installment_payment` (se evalúa ANTES que el pago de
+  deuda/servicio para no pisarse): `{ kind: 'installment_payment',
+  amount: number | null, purchaseName: string, installmentNumber: number | null }`.
+  - `Pagué cuota Galicia 150000` → amount 150000, purchase "Galicia".
+  - `Pago cuota Prestamo Provincia` → sin monto (amount null, el handler
+    usa el monto de la cuota según el plan).
+  - `Pagué 150000 cuota Galicia` → monto antes de "cuota".
+  - `Pago 1 cuota Heladera` / `Pago 3 cuota Heladera` → el número
+    chico (≤ 60, entero) se interpreta como número de cuota a pagar; un
+    número grande (`Pago 150000 cuota Galicia`) se interpreta como monto.
+
+### `index.ts` — `handleInstallmentPayment`
+- Busca la compra por `user_id` + `description ilike`.
+- Calcula el plan con `computeInstallmentScheduleItems` (replica de
+  `src/lib/installments.ts` ya exportada por reply-builder) y las cuotas
+  ya pagadas desde `installment_payments`.
+- Marca la cuota pagada insertando en `installment_payments` con el
+  `installment_number` pedido (o la próxima impaga), validando que no
+  supere `installments_count` — el equivalente en este schema al
+  contador `paid_installments` del pedido (la tabla no tiene esa
+  columna; el mecanismo real del app es la tabla `installment_payments`,
+  igual que el botón "Pagar cuota" de `InstallmentTracker`).
+- Inserta el movimiento en `transactions` (tipo `expense`, descripción
+  `Pago cuota N/M - Título`, monto = el pasado o el del plan).
+- Si la compra no existe → `buildInstallmentPaymentNotFoundReply`; si no
+  queda ninguna cuota por pagar → `buildInstallmentPaymentAlreadyPaidReply`.
+
+### `reply-builder.ts`
+- `buildInstallmentPaymentConfirmedReply` (confirma cuota pagada y avisa
+  si quedó totalmente pagada), `buildInstallmentPaymentNotFoundReply` y
+  `buildInstallmentPaymentAlreadyPaidReply`.
+- `HELP_TEXT` actualizado: ejemplo de compra sin "en"
+  (`Heladera 200000 12 cuotas`) y ejemplos de pago de cuota
+  (`Pagué cuota Galicia 150000`, `Pago 1 cuota Heladera`).
+
+### Tests (12 nuevos, 516 totales)
+- `message-parser.test.ts`: 52 tests (8 nuevos) — "Heladera 200000 12
+  cuotas" sin "en", "Compra TV 450000 6 cuotas", y los 4 formatos de
+  pago de cuota + número chico como cuota + número grande como monto.
+- `reply-builder.test.ts`: 80 tests (4 nuevos) — las 3 respuestas nuevas
+  y el HELP_TEXT con los nuevos ejemplos.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 516 tests**,
+todos pasando — 504 previos + 12 nuevos), `npm run build` (OK).

@@ -13,6 +13,9 @@ import {
   buildHelpReply,
   buildHogarReply,
   buildInstallmentConfirmedReply,
+  buildInstallmentPaymentAlreadyPaidReply,
+  buildInstallmentPaymentConfirmedReply,
+  buildInstallmentPaymentNotFoundReply,
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
@@ -224,6 +227,9 @@ describe('mensajes de texto', () => {
     expect(help).toContain('/vencimientos')
     expect(help).toContain('Pagué 5000 a Juan')
     expect(help).toContain('Pago servicio Netflix 5000')
+    expect(help).toContain('Heladera 200000 12 cuotas')
+    expect(help).toContain('Pagué cuota Galicia 150000')
+    expect(help).toContain('Pago 1 cuota Heladera')
   })
 })
 
@@ -511,6 +517,34 @@ describe('confirmaciones nuevas', () => {
 
   it('buildSaveErrorReply existe', () => {
     expect(buildSaveErrorReply()).toContain('error')
+  })
+})
+
+describe('confirmaciones de pago de cuota', () => {
+  it('buildInstallmentPaymentConfirmedReply confirma la cuota pagada', () => {
+    const reply = buildInstallmentPaymentConfirmedReply('Heladera', 3, 12, 15000, false)
+    expect(reply).toContain('cuota 3/12')
+    expect(reply).toContain('"Heladera"')
+    expect(reply).toContain('$15.000')
+    expect(reply).toContain('Gastos')
+  })
+
+  it('buildInstallmentPaymentConfirmedReply avisa cuando queda totalmente pagada', () => {
+    const reply = buildInstallmentPaymentConfirmedReply('Heladera', 12, 12, 15000, true)
+    expect(reply).toContain('cuota 12/12')
+    expect(reply).toContain('totalmente pagada')
+  })
+
+  it('buildInstallmentPaymentNotFoundReply sugiere cómo registrar la compra', () => {
+    const reply = buildInstallmentPaymentNotFoundReply('Galicia')
+    expect(reply).toContain('Galicia')
+    expect(reply).toContain('Heladera 200000 en 12 cuotas')
+  })
+
+  it('buildInstallmentPaymentAlreadyPaidReply avisa que no queda ninguna cuota', () => {
+    const reply = buildInstallmentPaymentAlreadyPaidReply('Heladera', 12)
+    expect(reply).toContain('12/12')
+    expect(reply).toContain('No queda ninguna cuota por pagar')
   })
 })
 

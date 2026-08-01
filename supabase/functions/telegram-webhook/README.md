@@ -44,8 +44,13 @@ El bot registra lo que le mandes según cómo lo escribas:
 - **Pago de servicio**: `Pago servicio Netflix 5000`, `Pagué Netflix
   5000` o `Pagué alquiler 20000`. Crea el movimiento en tus Gastos con
   la categoría del servicio.
-- **Compra en cuotas**: `Heladera 200000 en 12 cuotas` o
-  `Compra 200000 12 cuotas`.
+- **Compra en cuotas**: `Heladera 200000 en 12 cuotas`,
+  `Heladera 200000 12 cuotas` o `Compra TV 450000 6 cuotas`.
+- **Pago de cuota**: `Pagué cuota Galicia 150000`, `Pago cuota Prestamo
+  Provincia` (usa el monto de la cuota según el plan),
+  `Pagué 150000 cuota Galicia` o `Pago 1 cuota Heladera` (paga esa
+  cuota puntual). Marca la cuota como pagada y crea el movimiento en tus
+  Gastos.
 - **Gasto fijo / suscripción**: `Suscripción 5000 Netflix`,
   `Alquiler 20000`, `Servicio 3000 luz`, `Cable 3000 mensual` o
   `Fijo 2000 cable`.

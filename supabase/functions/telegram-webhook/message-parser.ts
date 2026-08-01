@@ -32,6 +32,7 @@ export type ParsedTelegramMessage =
   | { kind: 'debt'; debtType: 'debo' | 'me_deben'; amount: number; counterpartyName: string }
   | { kind: 'debt_payment'; amount: number; personName: string; paymentType: 'pay' | 'collect' }
   | { kind: 'recurring_payment'; amount: number; serviceName: string }
+  | { kind: 'installment_payment'; amount: number | null; purchaseName: string; installmentNumber: number | null }
   | { kind: 'installment'; description: string; totalAmount: number; installmentsCount: number }
   | { kind: 'recurring'; description: string; amount: number; expenseKind: 'subscription' | 'utility_rent' }
   | { kind: 'savings_goal'; name: string; targetAmount: number }
@@ -207,9 +208,15 @@ function parseRecurringPayment(text: string): ParsedTelegramMessage | null {
 const INSTALLMENT_EN_PATTERN = /^(.+?)\s+en\s+(\d{1,2})\s+cuotas?$/i
 const INSTALLMENT_VERB_PATTERN =
   /^(?:compré|compre|comprar|compra)\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+(\d{1,2})\s+cuotas?$/i
+const INSTALLMENT_NO_EN_PATTERN =
+  /^(.+?)\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+(\d{1,2})\s+cuotas?$/i
 
 /**
- * "Heladera 200000 en 12 cuotas" o "Compra 200000 12 cuotas".
+ * "Heladera 200000 en 12 cuotas", "Heladera 200000 12 cuotas",
+ * "Compra TV 450000 6 cuotas" o "Compra 200000 12 cuotas". Se evalúa
+ * primero el conector "en", después el formato con verbo (que ya no lleva
+ * descripción) y por último el formato sin conector (que admite
+ * descripción y le saca el verbo de compra si lo trae adelante).
  */
 function parseInstallment(text: string): ParsedTelegramMessage | null {
   const enMatch = text.match(INSTALLMENT_EN_PATTERN)
@@ -227,6 +234,73 @@ function parseInstallment(text: string): ParsedTelegramMessage | null {
     const count = Number(verbMatch[2])
     if (amount === null || amount <= 0 || count <= 0) return null
     return { kind: 'installment', description: 'Compra en cuotas', totalAmount: amount, installmentsCount: count }
+  }
+
+  const noEnMatch = text.match(INSTALLMENT_NO_EN_PATTERN)
+  if (noEnMatch) {
+    const amount = extractAmount(noEnMatch[2])
+    const count = Number(noEnMatch[3])
+    if (amount === null || amount <= 0 || count <= 0) return null
+    const description = cleanName(
+      extractDescription(noEnMatch[1], amount, 'Compra en cuotas').replace(/^(?:compré|compre|comprar|compra)\s+/i, '')
+    )
+    return { kind: 'installment', description: description || 'Compra en cuotas', totalAmount: amount, installmentsCount: count }
+  }
+
+  return null
+}
+
+/**
+ * "Pagué cuota Galicia 150000", "Pago cuota Prestamo Provincia",
+ * "Pagué 150000 cuota Galicia" o "Pago 1 cuota Heladera" — registra el
+ * pago de una cuota de una compra existente. El monto es opcional
+ * (si no se pasa, el handler usa el monto de la cuota según el plan); el
+ * número de cuota es opcional también ("Pago 3 cuota X" paga esa cuota,
+ * si no, la próxima impaga). Un número pequeño (≤ 60) antes de "cuota"
+ * se interpreta como número de cuota; un número grande, como monto.
+ */
+function parseInstallmentPayment(text: string): ParsedTelegramMessage | null {
+  // "Pago cuota Prestamo Provincia" / "Pago cuota Galicia 150000"
+  const pagoCuotaMatch = text.match(/^pago\s+cuota\s+(.+)$/i)
+  if (pagoCuotaMatch) {
+    const amount = extractAmount(pagoCuotaMatch[1])
+    const purchaseName = cleanName(stripAmount(pagoCuotaMatch[1]))
+    if (!purchaseName) return null
+    return { kind: 'installment_payment', amount, purchaseName, installmentNumber: null }
+  }
+
+  // "Pagué cuota Galicia 150000"
+  const pagueCuotaMatch = text.match(/^pagu(?:é|e)\s+cuota\s+(.+)$/i)
+  if (pagueCuotaMatch) {
+    const amount = extractAmount(pagueCuotaMatch[1])
+    const purchaseName = cleanName(stripAmount(pagueCuotaMatch[1]))
+    if (!purchaseName) return null
+    return { kind: 'installment_payment', amount, purchaseName, installmentNumber: null }
+  }
+
+  // "Pago 1 cuota Heladera" / "Pago 150000 cuota Galicia"
+  const pagoNumeroCuotaMatch = text.match(
+    /^pago\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+cuota\s+(.+)$/i
+  )
+  if (pagoNumeroCuotaMatch) {
+    const n = extractAmount(pagoNumeroCuotaMatch[1])
+    const purchaseName = cleanName(pagoNumeroCuotaMatch[2])
+    if (n === null || n <= 0 || !purchaseName) return null
+    if (n <= 60 && Number.isInteger(n)) {
+      return { kind: 'installment_payment', amount: null, purchaseName, installmentNumber: n }
+    }
+    return { kind: 'installment_payment', amount: n, purchaseName, installmentNumber: null }
+  }
+
+  // "Pagué 150000 cuota Galicia"
+  const pagueMontoCuotaMatch = text.match(
+    /^pagu(?:é|e)\s+(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s+cuota\s+(.+)$/i
+  )
+  if (pagueMontoCuotaMatch) {
+    const amount = extractAmount(pagueMontoCuotaMatch[1])
+    const purchaseName = cleanName(pagueMontoCuotaMatch[2])
+    if (amount === null || amount <= 0 || !purchaseName) return null
+    return { kind: 'installment_payment', amount, purchaseName, installmentNumber: null }
   }
 
   return null
@@ -313,9 +387,10 @@ function parseSavingsGoal(text: string): ParsedTelegramMessage | null {
  * intención en texto libre: gasto ("Gasto 4500 café"), deuda
  * ("Debo 5000 a Juan"), pago de deuda ("Pagué 5000 a Juan", "Cobré
  * 3000 de Pedro"), pago de servicio ("Pago servicio Netflix 5000",
- * "Pagué Netflix 5000"), cuotas ("Heladera 200000 en 12 cuotas"), gasto
- * fijo/suscripción ("Suscripción 5000 Netflix") o meta de ahorro
- * ("Meta Vacaciones 200000").
+ * "Pagué Netflix 5000"), pago de cuota ("Pagué cuota Galicia 150000",
+ * "Pago 1 cuota Heladera"), cuotas ("Heladera 200000 en 12 cuotas" o
+ * "Heladera 200000 12 cuotas"), gasto fijo/suscripción ("Suscripción
+ * 5000 Netflix") o meta de ahorro ("Meta Vacaciones 200000").
  */
 export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   const trimmed = text.trim()
@@ -342,14 +417,22 @@ export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   }
 
   // Las intenciones en texto libre se evalúan ANTES del gasto genérico:
-  // deuda ("Debo... a..." / "Me debe..."), pagos de deudas ("Pagué X a
-  // Y", "Cobré X de Y", "Pago deuda...", "Pago X Y"), pagos de
-  // servicios ("Pago servicio...", "Pagué <servicio> <monto>"), cuotas
-  // ("... en N cuotas"), fijos/suscripciones ("Suscripción...",
-  // "Alquiler...", "... mensual") y metas ("Meta...", "Ahorrar...
-  // para...").
+  // deuda ("Debo... a..." / "Me debe..."), pago de cuota ("Pago cuota
+  // X", "Pago N cuota X", "Pagué [monto] cuota X"), pagos de deudas
+  // ("Pagué X a Y", "Cobré X de Y", "Pago deuda...", "Pago X Y"), pagos
+  // de servicios ("Pago servicio...", "Pagué <servicio> <monto>"),
+  // cuotas ("... en N cuotas" o "... N cuotas"), fijos/suscripciones
+  // ("Suscripción...", "Alquiler...", "... mensual") y metas ("Meta...",
+  // "Ahorrar... para...").
   const debt = parseDebt(trimmed)
   if (debt) return debt
+
+  // El pago de cuota se evalúa ANTES que el pago de deuda y el pago de
+  // servicio: "Pago cuota X", "Pago 1 cuota X" y "Pagué 150000 cuota X"
+  // empezarían como pago de deuda ("pago X Y") o de servicio ("pagué X")
+  // si no se revisara primero.
+  const installmentPayment = parseInstallmentPayment(trimmed)
+  if (installmentPayment) return installmentPayment
 
   const debtPayment = parseDebtPayment(trimmed)
   if (debtPayment) return debtPayment

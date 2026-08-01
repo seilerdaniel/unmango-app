@@ -206,6 +206,80 @@ describe('parseTelegramMessage: compras en cuotas', () => {
       installmentsCount: 12,
     })
   })
+
+  it('"Heladera 200000 12 cuotas" sin el conector "en" también es una compra en cuotas', () => {
+    expect(parseTelegramMessage('Heladera 200000 12 cuotas')).toEqual({
+      kind: 'installment',
+      description: 'Heladera',
+      totalAmount: 200000,
+      installmentsCount: 12,
+    })
+  })
+
+  it('"Compra TV 450000 6 cuotas" saca el verbo y conserva la descripción', () => {
+    expect(parseTelegramMessage('Compra TV 450000 6 cuotas')).toEqual({
+      kind: 'installment',
+      description: 'TV',
+      totalAmount: 450000,
+      installmentsCount: 6,
+    })
+  })
+})
+
+describe('parseTelegramMessage: pagos de cuotas', () => {
+  it('"Pagué cuota Galicia 150000" separa monto y compra', () => {
+    expect(parseTelegramMessage('Pagué cuota Galicia 150000')).toEqual({
+      kind: 'installment_payment',
+      amount: 150000,
+      purchaseName: 'Galicia',
+      installmentNumber: null,
+    })
+  })
+
+  it('"Pago cuota Prestamo Provincia" sin monto deja el monto en null', () => {
+    expect(parseTelegramMessage('Pago cuota Prestamo Provincia')).toEqual({
+      kind: 'installment_payment',
+      amount: null,
+      purchaseName: 'Prestamo Provincia',
+      installmentNumber: null,
+    })
+  })
+
+  it('"Pagué 150000 cuota Galicia" con el monto antes de "cuota"', () => {
+    expect(parseTelegramMessage('Pagué 150000 cuota Galicia')).toEqual({
+      kind: 'installment_payment',
+      amount: 150000,
+      purchaseName: 'Galicia',
+      installmentNumber: null,
+    })
+  })
+
+  it('"Pago 1 cuota Heladera" indica el número de cuota a pagar', () => {
+    expect(parseTelegramMessage('Pago 1 cuota Heladera')).toEqual({
+      kind: 'installment_payment',
+      amount: null,
+      purchaseName: 'Heladera',
+      installmentNumber: 1,
+    })
+  })
+
+  it('"Pago 3 cuota Heladera" usa números de cuota de hasta dos dígitos', () => {
+    expect(parseTelegramMessage('Pago 3 cuota Heladera')).toEqual({
+      kind: 'installment_payment',
+      amount: null,
+      purchaseName: 'Heladera',
+      installmentNumber: 3,
+    })
+  })
+
+  it('"Pago 150000 cuota Galicia" con un número grande lo toma como monto', () => {
+    expect(parseTelegramMessage('Pago 150000 cuota Galicia')).toEqual({
+      kind: 'installment_payment',
+      amount: 150000,
+      purchaseName: 'Galicia',
+      installmentNumber: null,
+    })
+  })
 })
 
 describe('parseTelegramMessage: suscripciones y gastos fijos', () => {
