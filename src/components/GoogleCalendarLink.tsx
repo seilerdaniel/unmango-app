@@ -151,8 +151,8 @@ export default function GoogleCalendarLink() {
       {connected ? (
         <div className="space-y-2.5">
           <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 size={14} /> Conectado — tus suscripciones y servicios/alquiler se
-            sincronizan como eventos con recordatorio.
+            <CheckCircle2 size={14} /> Conectado — tus suscripciones, cuotas y deudas a pagar
+            se sincronizan como eventos con recordatorio.
           </p>
 
           <button
@@ -176,7 +176,7 @@ export default function GoogleCalendarLink() {
       ) : (
         <div className="space-y-2.5">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Conectá tu Google Calendar para que tus suscripciones y servicios/alquiler
+            Conectá tu Google Calendar para que tus suscripciones, cuotas y deudas a pagar
             aparezcan como eventos con recordatorio automático.
           </p>
           <button

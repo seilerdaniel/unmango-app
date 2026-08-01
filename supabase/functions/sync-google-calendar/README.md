@@ -1,7 +1,8 @@
 # Sincronización con Google Calendar
 
-Tus suscripciones y servicios/alquiler aparecen como eventos en tu
-Google Calendar, con recordatorios automáticos (3 días y 1 día antes).
+Tus suscripciones y servicios/alquiler, compras en cuotas y deudas a
+pagar aparecen como eventos en tu Google Calendar, con recordatorios
+automáticos (3 días y 1 día antes).
 
 ## Lo que ya hiciste (según la conversación)
 
@@ -89,11 +90,18 @@ archivo (después de todos los SQL anteriores).
 
 ## Alcance actual (qué sincroniza y qué no, todavía)
 
-Por ahora sincroniza **Suscripciones y Servicios/Alquiler** (tienen una
-fecha de vencimiento recurrente clara). **Cuotas y Deudas todavía no**
-— la tabla `google_calendar_events` ya está preparada para soportarlas
-(columna `source_table` acepta `'installment_purchases'` y `'debts'`),
-es cuestión de sumar esa lógica a la función el día que se priorice.
+Sincroniza:
+
+- **Suscripciones y Servicios/Alquiler** — un evento por vencimiento
+  próximo (💰).
+- **Compras en cuotas** — un evento por la *próxima cuota impaga*
+  (`Cuota N/M Descripción — $monto`), usando el mes en que vence; si
+  pagaste esa cuota, el siguiente "Sincronizar ahora" avanza a la
+  siguiente (o borra el evento si la compra ya está saldada).
+- **Deudas a pagar** — un evento en la fecha límite de cada deuda
+  pendiente del tipo *debo* (`Deuda: ... — $monto`). Las deudas
+  saldadas, sin fecha o donde vos sos quien cobra (*me deben*) no
+  generan evento, y si ya había uno se borra.
 
 La sincronización es **manual** (botón "Sincronizar ahora"), no
 automática — si querés que se sincronice sola todos los días, se puede

@@ -2447,3 +2447,56 @@ movimiento real en `transactions` (antes solo creaba entidades nuevas).
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 493 tests**,
 todos pasando — 478 previos + 15 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 6b — Google Calendar sincroniza cuotas y deudas
+
+La Edge Function `sync-google-calendar` ya sincronizaba suscripciones y
+servicios/alquiler; ahora también genera eventos para la **próxima cuota
+impaga** de las compras en cuotas y para las **deudas a pagar** (tipo
+`debo`) pendientes con vencimiento. La tabla `google_calendar_events`
+ya estaba preparada (enum `source_table` aceptaba
+`'installment_purchases'` y `'debts'`); se sumó la lógica.
+
+### `calendar-event.ts` — builders nuevos (lógica pura, testeable)
+- `computeInstallmentSchedule` / `nextUnpaidInstallment`: réplica de
+  `src/lib/installments.ts` (cuotas mensuales desde
+  `first_installment_date`, resto del redondeo en la última cuota).
+- `buildInstallmentCalendarEvent`: evento de día completo en el mes de
+  la próxima cuota impaga, título `Cuota N/M Descripción — $monto`;
+  devuelve `null` si la compra está totalmente pagada.
+- `buildDebtCalendarEvent`: evento en `due_date` para deudas
+  `debt_type='debo'` con `remaining_amount > 0` y fecha; `null` para
+  saldadas, sin fecha o donde el usuario es quien cobra (`me_deben`).
+- Helpers compartidos `formatAmount` (separador de miles estilo ARS,
+  ahora también aplicado a recurrentes) y `buildReminders` (los mismos
+  2 recordatorios de siempre).
+
+### `index.ts` — carga y upsert genéricos
+- Trae en paralelo `recurring_expenses`, `installment_purchases`,
+  `installment_payments` (para saber qué cuotas ya se pagaron) y
+  `debts`.
+- El mapeo `google_calendar_events` ahora se lee completo (las tres
+  `source_table`) y se busca por `source_table + source_id`.
+- Loop único para las tres entidades: si el builder devuelve `null`
+  (cuota pagada, deuda saldada) y existía un evento de Google mapeado,
+  se **borra** tanto el evento de Google como el mapeo — no quedan
+  eventos viejos colgando. Si el builder devuelve evento, se
+  crea/actualiza (PATCH si ya existía) y se upsertan el mapeo.
+- `deleteCalendarEvent` (DELETE con tolerancia a 404) para esa limpieza.
+
+### Frontend y docs
+- `GoogleCalendarLink.tsx`: el copy del estado conectado/desconectado
+  menciona suscripciones, cuotas y deudas a pagar.
+- README de la función: sección "Alcance actual" reescrita (qué
+  sincroniza cada entidad y cómo avanza la cuota tras pagarla).
+
+### Tests (11 nuevos, 504 totales)
+- `calendar-event.test.ts`: 18 tests (11 nuevos) — plan de cuotas,
+  resto del redondeo en la última, primera cuota impaga, evento de
+  cuota (título/monto/fecha), compra saldada → `null`, deuda pendiente,
+  `me_deben` → `null`, saldada/sin fecha → `null`. Se ajustó la
+  aserción del evento recurrente a `5.000` por el nuevo formato ARS.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**62 archivos, 504 tests**,
+todos pasando — 493 previos + 11 nuevos), `npm run build` (OK).

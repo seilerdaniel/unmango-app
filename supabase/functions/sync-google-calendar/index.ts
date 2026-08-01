@@ -11,9 +11,12 @@
 // 1. Identifica al usuario a partir del JWT.
 // 2. Busca su refresh_token de Google guardado en google_calendar_tokens.
 // 3. Pide un access_token nuevo a Google con ese refresh_token.
-// 4. Trae sus suscripciones y servicios/alquiler activos.
+// 4. Trae sus suscripciones y servicios/alquiler activos, compras en
+//    cuotas con sus pagos, y deudas a pagar.
 // 5. Para cada uno, crea o actualiza un evento en Google Calendar
 //    (busca en google_calendar_events si ya existe un evento mapeado).
+//    Si la entidad ya no genera evento (cuota pagada, deuda saldada,
+//    recurrente desactivado), borra el evento de Google asociado.
 //
 // Variables de entorno necesarias (ver README.md):
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET — las mismas credenciales
@@ -23,7 +26,15 @@
 //   Functions.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { buildCalendarEvent, type RecurringExpenseForCalendar } from './calendar-event.ts'
+import {
+  buildCalendarEvent,
+  buildDebtCalendarEvent,
+  buildInstallmentCalendarEvent,
+  type DebtForCalendar,
+  type GoogleCalendarEventPayload,
+  type InstallmentPurchaseForCalendar,
+  type RecurringExpenseForCalendar,
+} from './calendar-event.ts'
 
 async function refreshGoogleAccessToken(refreshToken: string, clientId: string, clientSecret: string): Promise<string> {
   const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -50,7 +61,7 @@ async function upsertCalendarEvent(
   accessToken: string,
   calendarId: string,
   existingEventId: string | null,
-  payload: ReturnType<typeof buildCalendarEvent>
+  payload: GoogleCalendarEventPayload
 ): Promise<string> {
   const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
   const url = existingEventId ? `${base}/${existingEventId}` : base
@@ -72,6 +83,20 @@ async function upsertCalendarEvent(
 
   const data = await response.json()
   return data.id
+}
+
+async function deleteCalendarEvent(accessToken: string, calendarId: string, eventId: string): Promise<void> {
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text()
+    throw new Error(`Error de la API de Google Calendar al borrar evento (${response.status}): ${text}`)
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -135,41 +160,100 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const { data: recurringItems, error: recurringError } = await supabaseAdmin
-    .from('recurring_expenses')
-    .select('id, title, amount, currency, billing_day, billing_frequency, billing_month, expense_kind')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
+  const [recurringResult, installmentsResult, installmentPaymentsResult, debtsResult] = await Promise.all([
+    supabaseAdmin
+      .from('recurring_expenses')
+      .select('id, title, amount, currency, billing_day, billing_frequency, billing_month, expense_kind')
+      .eq('user_id', user.id)
+      .eq('is_active', true),
+    supabaseAdmin
+      .from('installment_purchases')
+      .select('id, description, total_amount, installments_count, first_installment_date')
+      .eq('user_id', user.id),
+    supabaseAdmin
+      .from('installment_payments')
+      .select('installment_purchase_id, installment_number')
+      .eq('user_id', user.id),
+    supabaseAdmin
+      .from('debts')
+      .select('id, description, remaining_amount, currency, due_date, debt_type')
+      .eq('user_id', user.id),
+  ])
 
-  if (recurringError) {
-    return new Response(JSON.stringify({ error: recurringError.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  for (const result of [recurringResult, installmentsResult, installmentPaymentsResult, debtsResult]) {
+    if (result.error) {
+      return new Response(JSON.stringify({ error: result.error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   const { data: existingMappings } = await supabaseAdmin
     .from('google_calendar_events')
-    .select('source_id, google_event_id')
+    .select('source_table, source_id, google_event_id')
     .eq('user_id', user.id)
-    .eq('source_table', 'recurring_expenses')
 
-  const mappingBySourceId = new Map((existingMappings ?? []).map((m) => [m.source_id, m.google_event_id]))
+  const mappingKey = (sourceTable: string, sourceId: string) => `${sourceTable}:${sourceId}`
+  const mappingBySource = new Map((existingMappings ?? []).map((m) => [mappingKey(m.source_table, m.source_id), m.google_event_id]))
+
+  const paidByPurchase = new Map<string, number[]>()
+  for (const payment of installmentPaymentsResult.data ?? []) {
+    const paid = paidByPurchase.get(payment.installment_purchase_id) ?? []
+    paid.push(payment.installment_number)
+    paidByPurchase.set(payment.installment_purchase_id, paid)
+  }
+
+  type SourceEntry = {
+    table: 'recurring_expenses' | 'installment_purchases' | 'debts'
+    id: string
+    label: string
+    payload: GoogleCalendarEventPayload | null
+  }
+
+  const entries: SourceEntry[] = []
+  for (const item of (recurringResult.data ?? []) as RecurringExpenseForCalendar[]) {
+    entries.push({ table: 'recurring_expenses', id: item.id, label: item.title, payload: buildCalendarEvent(item) })
+  }
+  for (const item of (installmentsResult.data ?? []) as InstallmentPurchaseForCalendar[]) {
+    entries.push({
+      table: 'installment_purchases',
+      id: item.id,
+      label: item.description,
+      payload: buildInstallmentCalendarEvent(item, paidByPurchase.get(item.id) ?? []),
+    })
+  }
+  for (const item of (debtsResult.data ?? []) as DebtForCalendar[]) {
+    entries.push({ table: 'debts', id: item.id, label: item.description, payload: buildDebtCalendarEvent(item) })
+  }
 
   let synced = 0
   const errors: string[] = []
 
-  for (const item of (recurringItems ?? []) as RecurringExpenseForCalendar[]) {
+  for (const entry of entries) {
     try {
-      const payload = buildCalendarEvent(item)
-      const existingEventId = mappingBySourceId.get(item.id) ?? null
-      const googleEventId = await upsertCalendarEvent(accessToken, tokenRow.calendar_id, existingEventId, payload)
+      const key = mappingKey(entry.table, entry.id)
+      const existingEventId = mappingBySource.get(key) ?? null
+
+      if (entry.payload === null) {
+        if (existingEventId) {
+          await deleteCalendarEvent(accessToken, tokenRow.calendar_id, existingEventId)
+          await supabaseAdmin
+            .from('google_calendar_events')
+            .delete()
+            .eq('source_table', entry.table)
+            .eq('source_id', entry.id)
+        }
+        continue
+      }
+
+      const googleEventId = await upsertCalendarEvent(accessToken, tokenRow.calendar_id, existingEventId, entry.payload)
 
       await supabaseAdmin.from('google_calendar_events').upsert(
         {
           user_id: user.id,
-          source_table: 'recurring_expenses',
-          source_id: item.id,
+          source_table: entry.table,
+          source_id: entry.id,
           google_event_id: googleEventId,
           updated_at: new Date().toISOString(),
         },
@@ -177,12 +261,12 @@ Deno.serve(async (req: Request) => {
       )
       synced++
     } catch (err) {
-      console.error(`Error sincronizando "${item.title}":`, err)
-      errors.push(item.title)
+      console.error(`Error sincronizando "${entry.label}":`, err)
+      errors.push(entry.label)
     }
   }
 
-  return new Response(JSON.stringify({ synced, total: (recurringItems ?? []).length, errors }), {
+  return new Response(JSON.stringify({ synced, total: entries.length, errors }), {
     headers: { 'Content-Type': 'application/json' },
   })
 })
