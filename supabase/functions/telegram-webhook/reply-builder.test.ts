@@ -2,11 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   buildBilleterasReply,
   buildConsejosReply,
+  buildCuotasPayload,
   buildCuotasReply,
   buildDebtConfirmedReply,
   buildDebtPaymentConfirmedReply,
   buildDebtPaymentNotFoundReply,
+  buildDebtsPayload,
   buildDebtsReply,
+  buildExpenseCategorySlices,
   buildExpenseConfirmedReply,
   buildFijosReply,
   buildGastadoReply,
@@ -19,18 +22,23 @@ import {
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
+  buildMainReplyKeyboard,
   buildMetasReply,
   buildNotLinkedReply,
+  buildQuickChartPieUrl,
   buildRecurringConfirmedReply,
   buildRecurringPaymentConfirmedReply,
   buildRecurringPaymentNotFoundReply,
+  buildResumenCaption,
   buildSafeToSpendReply,
   buildSaldoReply,
   buildSaveErrorReply,
   buildSavingsGoalConfirmedReply,
   buildScoreReply,
+  buildSetMyCommandsPayload,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
+  buildVencimientosPayload,
   buildVencimientosReply,
   computeFinancialHealthScore,
   computeHouseholdBalance,
@@ -49,6 +57,7 @@ import {
   monthlyEquivalentAmount,
   nextBillingDate,
 } from './reply-builder'
+import type { InlineKeyboardMarkup } from './reply-builder'
 
 describe('formatArs', () => {
   it('formatea montos enteros con separador de miles', () => {
@@ -716,5 +725,162 @@ describe('confirmaciones de pagos', () => {
   it('buildRecurringPaymentNotFoundReply avisa si no hay servicio con ese nombre', () => {
     expect(buildRecurringPaymentNotFoundReply('Netflix')).toContain('Netflix')
     expect(buildRecurringPaymentNotFoundReply('Netflix')).toContain('No encontré')
+  })
+})
+
+describe('buildMainReplyKeyboard', () => {
+  it('incluye los 4 botones rápidos del teclado persistente', () => {
+    const keyboard = buildMainReplyKeyboard()
+    expect(keyboard.reply_keyboard).toEqual([
+      ['💳 Billeteras'],
+      ['📅 Vencimientos'],
+      ['🎯 Safe-to-Spend'],
+      ['📊 Mi Score'],
+    ])
+    expect(keyboard.resize_keyboard).toBe(true)
+    expect(keyboard.one_time_keyboard).toBe(false)
+  })
+})
+
+describe('buildSetMyCommandsPayload', () => {
+  it('registra los comandos nativos del menú', () => {
+    const payload = buildSetMyCommandsPayload()
+    const commands = payload.commands.map((c) => c.command)
+    expect(commands).toContain('ayuda')
+    expect(commands).toContain('billeteras')
+    expect(commands).toContain('vencimientos')
+    expect(commands).toContain('safetospend')
+    expect(commands).toContain('score')
+    expect(commands).toContain('resumen')
+    expect(commands).toContain('gastos')
+  })
+
+  it('cada comando trae una descripción', () => {
+    for (const command of buildSetMyCommandsPayload().commands) {
+      expect(command.description.length).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('buildDebtsPayload', () => {
+  it('arma un botón inline "Marcar Pagada" por deuda "debo" pendiente', () => {
+    const payload = buildDebtsPayload([
+      { id: 'debt-1', description: 'Deuda con Juan', counterpartyName: 'Juan', debtType: 'debo', totalAmount: 5000, remainingAmount: 5000, currency: 'ARS' },
+      { id: 'debt-2', description: 'Deuda con Pedro', counterpartyName: 'Pedro', debtType: 'me_deben', totalAmount: 3000, remainingAmount: 1000, currency: 'ARS' },
+    ])
+    expect(payload.text).toContain('le debés $5.000')
+    expect(payload.replyMarkup).not.toBeNull()
+    const markup = payload.replyMarkup as InlineKeyboardMarkup
+    expect(markup.inline_keyboard[0][0]).toEqual({ text: '✅ Marcar Pagada', callback_data: 'pay_debt:debt-1' })
+    expect(markup.inline_keyboard).toHaveLength(1)
+  })
+
+  it('no manda botones si no hay deudas "debo" pendientes', () => {
+    const payload = buildDebtsPayload([
+      { id: 'debt-1', description: 'Deuda con Pedro', counterpartyName: 'Pedro', debtType: 'me_deben', totalAmount: 3000, remainingAmount: 3000, currency: 'ARS' },
+    ])
+    expect(payload.replyMarkup).toBeNull()
+  })
+
+  it('no arma botón para una deuda "debo" ya saldada', () => {
+    const payload = buildDebtsPayload([
+      { id: 'debt-1', description: 'Deuda con Juan', counterpartyName: 'Juan', debtType: 'debo', totalAmount: 5000, remainingAmount: 0, currency: 'ARS' },
+    ])
+    expect(payload.replyMarkup).toBeNull()
+  })
+})
+
+describe('buildCuotasPayload', () => {
+  it('arma un botón inline por compra con cuotas impagas', () => {
+    const payload = buildCuotasPayload([
+      { id: 'purchase-1', description: 'Heladera', totalAmount: 200000, installmentsCount: 12, paidCount: 3, monthlyAmount: 16666.67 },
+    ])
+    expect(payload.text).toContain('Heladera')
+    expect(payload.replyMarkup).not.toBeNull()
+    const markup = payload.replyMarkup as InlineKeyboardMarkup
+    expect(markup.inline_keyboard[0][0]).toEqual({ text: '✅ Marcar Pagada', callback_data: 'pay_installment:purchase-1' })
+  })
+
+  it('no manda botones si todas las cuotas están pagadas', () => {
+    const payload = buildCuotasPayload([
+      { id: 'purchase-1', description: 'Heladera', totalAmount: 200000, installmentsCount: 12, paidCount: 12, monthlyAmount: 16666.67 },
+    ])
+    expect(payload.replyMarkup).toBeNull()
+  })
+})
+
+describe('buildVencimientosPayload', () => {
+  const today = new Date(2026, 7, 1)
+
+  it('arma botones para cuotas y deudas pagables con su callback', () => {
+    const items = computeUpcomingDueItems({
+      recurring: [],
+      installments: [
+        { id: 'p1', description: 'Heladera', totalAmount: 120000, installmentsCount: 12, firstInstallmentDate: '2026-07-15', paidInstallmentNumbers: [] },
+      ],
+      debts: [
+        { id: 'd1', description: 'Préstamo', remainingAmount: 30000, currency: 'ARS', dueDate: '2026-08-25', debtType: 'debo' },
+        { id: 'd2', description: 'Crédito que me deben', remainingAmount: 99999, currency: 'ARS', dueDate: '2026-08-10', debtType: 'me_deben' },
+      ],
+      today,
+    })
+    const payload = buildVencimientosPayload(items)
+    expect(payload.text).toContain('cuota 2/12')
+    expect(payload.replyMarkup).not.toBeNull()
+    const data = (payload.replyMarkup as InlineKeyboardMarkup).inline_keyboard.map((row) => row[0].callback_data)
+    expect(data).toContain('pay_installment:p1:2')
+    expect(data).toContain('pay_debt:d1')
+  })
+})
+
+describe('buildExpenseCategorySlices', () => {
+  it('agrupa los gastos del mes por categoría y los ordena de mayor a menor', () => {
+    const slices = buildExpenseCategorySlices([
+      { type: 'expense', amountArs: 1000, categoryName: 'Comida' },
+      { type: 'expense', amountArs: 2000, categoryName: 'Comida' },
+      { type: 'expense', amountArs: 500, categoryName: null },
+      { type: 'income', amountArs: 99999, categoryName: 'Sueldo' },
+    ])
+    expect(slices).toEqual([
+      { label: 'Comida', value: 3000 },
+      { label: 'Sin categoría', value: 500 },
+    ])
+  })
+
+  it('ignora ingresos y devuelve lista vacía sin gastos', () => {
+    expect(buildExpenseCategorySlices([{ type: 'income', amountArs: 1000, categoryName: 'Sueldo' }])).toEqual([])
+  })
+})
+
+describe('buildQuickChartPieUrl', () => {
+  it('genera una URL de QuickChart con el config del gráfico codificado', () => {
+    const url = buildQuickChartPieUrl([
+      { label: 'Comida', value: 3000 },
+      { label: 'Transporte', value: 500 },
+    ])
+    expect(url).toContain('https://quickchart.io/chart?c=')
+    expect(url).toContain('doughnut')
+    expect(url).toContain(encodeURIComponent('Comida'))
+  })
+
+  it('decodifica el config y respeta los montos', () => {
+    const url = buildQuickChartPieUrl([{ label: 'Comida', value: 3000 }])
+    const decoded = decodeURIComponent(url.replace('https://quickchart.io/chart?c=', '').split('&')[0])
+    expect(JSON.parse(decoded).data.datasets[0].data).toEqual([3000])
+  })
+})
+
+describe('buildResumenCaption', () => {
+  it('arma el desglose por categoría con el total del mes y el porcentaje', () => {
+    const caption = buildResumenCaption([{ label: 'Comida', value: 3000 }], 5000, 20000)
+    expect(caption).toContain('Tus gastos de $5.000')
+    expect(caption).toContain('Comida: $3.000')
+    expect(caption).toContain('25%')
+    expect(caption).toContain('$20.000')
+  })
+
+  it('sugiere cargar el ingreso si no hay', () => {
+    const caption = buildResumenCaption([{ label: 'Comida', value: 3000 }], 5000, 0)
+    expect(caption).toContain('Cargá tu ingreso mensual')
   })
 })

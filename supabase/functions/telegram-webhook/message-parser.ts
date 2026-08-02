@@ -25,6 +25,8 @@ export type TelegramCommand =
   | 'hogar'
   | 'billeteras'
   | 'vencimientos'
+  | 'resumen'
+  | 'gastos'
 
 export interface ParsedDebt {
   kind: 'debt'
@@ -83,6 +85,55 @@ const KNOWN_COMMANDS: Record<string, TelegramCommand> = {
   hogar: 'hogar',
   billeteras: 'billeteras',
   vencimientos: 'vencimientos',
+  resumen: 'resumen',
+  gastos: 'gastos',
+}
+
+/**
+ * Botones del teclado principal persistente (buildMainReplyKeyboard):
+ * el texto que envía cada botón se mapea al comando equivalente para que
+ * el handler ejecute lo mismo que si se tipeara /billeteras, etc.
+ */
+const REPLY_BUTTON_COMMANDS: Array<{ label: string; command: TelegramCommand }> = [
+  { label: '💳 billeteras', command: 'billeteras' },
+  { label: '📅 vencimientos', command: 'vencimientos' },
+  { label: '🎯 safe-to-spend', command: 'safetospend' },
+  { label: '📊 mi score', command: 'score' },
+]
+
+export type CallbackAction =
+  | { kind: 'pay_debt'; debtId: string }
+  | { kind: 'pay_installment'; purchaseId: string; installmentNumber: number | null }
+
+/**
+ * Interpreta el callback_data de un botón inline. Formatos soportados:
+ *   "pay_debt:[id]" — paga la deuda completa.
+ *   "pay_installment:[id]" — paga la próxima cuota impaga de la compra.
+ *   "pay_installment:[id]:[número]" — paga esa cuota puntual.
+ */
+export function parseCallbackData(data: string): CallbackAction | null {
+  const [action, first, second] = data.split(':')
+  const firstPart = first?.trim()
+  if (!action || !firstPart) return null
+
+  if (action === 'pay_debt') {
+    return { kind: 'pay_debt', debtId: firstPart }
+  }
+
+  if (action === 'pay_installment') {
+    const rawNumber = second?.trim()
+    const installmentNumber = rawNumber ? Number(rawNumber) : null
+    return {
+      kind: 'pay_installment',
+      purchaseId: firstPart,
+      installmentNumber:
+        installmentNumber !== null && Number.isInteger(installmentNumber) && installmentNumber > 0
+          ? installmentNumber
+          : null,
+    }
+  }
+
+  return null
 }
 
 function extractAmount(text: string): number | null {
@@ -558,18 +609,29 @@ function parseSavingsGoal(text: string): ParsedTelegramMessage | null {
 /**
  * Interpreta un mensaje entrante del bot: puede ser un comando
  * (/saldo, /gastado, /safetospend, /score, /deudas, /cuotas, /metas,
- * /fijos, /consejos, /hogar, /billeteras, /vencimientos, /ayuda), un
- * código de vinculación (6 dígitos, con o sin "/start" adelante) o una
- * intención en texto libre: gasto ("Gasto 4500 café"), deuda
- * ("Debo 5000 a Juan"), pago de deuda ("Pagué 5000 a Juan", "Cobré
- * 3000 de Pedro"), pago de servicio ("Pago servicio Netflix 5000",
- * "Pagué Netflix 5000"), pago de cuota ("Pagué cuota Galicia 150000",
- * "Pago 1 cuota Heladera"), cuotas ("Heladera 200000 en 12 cuotas" o
- * "Heladera 200000 12 cuotas"), gasto fijo/suscripción ("Suscripción
- * 5000 Netflix") o meta de ahorro ("Meta Vacaciones 200000").
+ * /fijos, /consejos, /hogar, /billeteras, /vencimientos, /resumen,
+ * /gastos, /ayuda), el texto de un botón del teclado principal
+ * ("💳 Billeteras", "📅 Vencimientos", ...), un código de vinculación
+ * (6 dígitos, con o sin "/start" adelante) o una intención en texto
+ * libre: gasto ("Gasto 4500 café"), deuda ("Debo 5000 a Juan"), pago de
+ * deuda ("Pagué 5000 a Juan", "Cobré 3000 de Pedro"), pago de servicio
+ * ("Pago servicio Netflix 5000", "Pagué Netflix 5000"), pago de cuota
+ * ("Pagué cuota Galicia 150000", "Pago 1 cuota Heladera"), cuotas
+ * ("Heladera 200000 en 12 cuotas" o "Heladera 200000 12 cuotas"), gasto
+ * fijo/suscripción ("Suscripción 5000 Netflix") o meta de ahorro
+ * ("Meta Vacaciones 200000").
  */
 export function parseTelegramMessage(text: string): ParsedTelegramMessage {
   const trimmed = text.trim()
+
+  // Botones del teclado principal: el texto exacto que envía cada botón
+  // se mapea al comando equivalente antes de buscar comandos "/".
+  const normalizedButton = trimmed.toLowerCase().replace(/\s+/g, ' ')
+  for (const entry of REPLY_BUTTON_COMMANDS) {
+    if (normalizedButton === entry.label) {
+      return { kind: 'command', command: entry.command }
+    }
+  }
 
   if (trimmed.startsWith('/')) {
     const linkMatch = trimmed.match(/^\/start\s+(\d{6})$/)

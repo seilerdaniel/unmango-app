@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTelegramMessage } from './message-parser'
+import { parseCallbackData, parseTelegramMessage } from './message-parser'
 
 describe('parseTelegramMessage', () => {
   it('reconoce un código de vinculación con /start', () => {
@@ -448,6 +448,70 @@ describe('parseTelegramMessage: comandos nuevos', () => {
   it('reconoce /billeteras y /vencimientos', () => {
     expect(parseTelegramMessage('/billeteras')).toEqual({ kind: 'command', command: 'billeteras' })
     expect(parseTelegramMessage('/vencimientos')).toEqual({ kind: 'command', command: 'vencimientos' })
+  })
+
+  it('reconoce /resumen y /gastos', () => {
+    expect(parseTelegramMessage('/resumen')).toEqual({ kind: 'command', command: 'resumen' })
+    expect(parseTelegramMessage('/gastos')).toEqual({ kind: 'command', command: 'gastos' })
+  })
+})
+
+describe('parseTelegramMessage: botones del teclado principal', () => {
+  it('mapea "💳 Billeteras" al comando /billeteras', () => {
+    expect(parseTelegramMessage('💳 Billeteras')).toEqual({ kind: 'command', command: 'billeteras' })
+  })
+
+  it('mapea "📅 Vencimientos" al comando /vencimientos', () => {
+    expect(parseTelegramMessage('📅 Vencimientos')).toEqual({ kind: 'command', command: 'vencimientos' })
+  })
+
+  it('mapea "🎯 Safe-to-Spend" al comando /safetospend', () => {
+    expect(parseTelegramMessage('🎯 Safe-to-Spend')).toEqual({ kind: 'command', command: 'safetospend' })
+  })
+
+  it('mapea "📊 Mi Score" al comando /score', () => {
+    expect(parseTelegramMessage('📊 Mi Score')).toEqual({ kind: 'command', command: 'score' })
+  })
+
+  it('es tolerante a mayúsculas y espacios extra', () => {
+    expect(parseTelegramMessage('  📊 MI   SCORE ')).toEqual({ kind: 'command', command: 'score' })
+  })
+})
+
+describe('parseCallbackData', () => {
+  it('parsea un pago de deuda (pay_debt:[id])', () => {
+    expect(parseCallbackData('pay_debt:abc-123')).toEqual({ kind: 'pay_debt', debtId: 'abc-123' })
+  })
+
+  it('parsea un pago de cuota con número de cuota (pay_installment:[id]:[n])', () => {
+    expect(parseCallbackData('pay_installment:purchase-9:3')).toEqual({
+      kind: 'pay_installment',
+      purchaseId: 'purchase-9',
+      installmentNumber: 3,
+    })
+  })
+
+  it('parsea un pago de cuota sin número (paga la próxima impaga)', () => {
+    expect(parseCallbackData('pay_installment:purchase-9')).toEqual({
+      kind: 'pay_installment',
+      purchaseId: 'purchase-9',
+      installmentNumber: null,
+    })
+  })
+
+  it('ignora números de cuota inválidos (los deja en null)', () => {
+    expect(parseCallbackData('pay_installment:purchase-9:abc')).toEqual({
+      kind: 'pay_installment',
+      purchaseId: 'purchase-9',
+      installmentNumber: null,
+    })
+  })
+
+  it('devuelve null para datos desconocidos o vacíos', () => {
+    expect(parseCallbackData('pay_other:123')).toBeNull()
+    expect(parseCallbackData('pay_debt:')).toBeNull()
+    expect(parseCallbackData('pay_installment:')).toBeNull()
+    expect(parseCallbackData('')).toBeNull()
   })
 })
 

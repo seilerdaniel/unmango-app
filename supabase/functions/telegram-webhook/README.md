@@ -28,7 +28,20 @@ estos comandos:
 - `/billeteras` — saldo individual de cada billetera (ARS + USD).
 - `/vencimientos` — lo que vence en los próximos 30 días (fijos,
   cuotas impagas y deudas), ordenado por fecha y con total a pagar.
+- `/resumen` o `/gastos` — gráfico de torta (imagen) con la
+  distribución de tus gastos del mes por categoría, y el desglose.
 - `/ayuda` — lista de comandos.
+
+Además, el bot muestra un **teclado persistente** con 4 botones rápidos
+sobre la caja de texto — `💳 Billeteras`, `📅 Vencimientos`,
+`🎯 Safe-to-Spend` y `📊 Mi Score` — que equivalen a esos comandos.
+También registra los comandos con `setMyCommands`, así aparecen en el
+menú nativo de Telegram (botón "/").
+
+Las respuestas de `/deudas`, `/cuotas` y `/vencimientos` traen un botón
+**"✅ Marcar Pagada"** por cada ítem pendiente: tocarlo registra el pago
+(descuenta la deuda o marca la cuota como pagada, y crea el movimiento
+en tus Gastos) sin tener que escribir nada.
 
 ## Intenciones en texto libre
 

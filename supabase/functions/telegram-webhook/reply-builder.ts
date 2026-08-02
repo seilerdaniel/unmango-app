@@ -99,6 +99,7 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 
 /saldo — tu saldo total en billeteras
 /gastado — cuánto gastaste este mes
+/resumen o /gastos — gráfico de tus gastos del mes por categoría
 /safetospend — cuánto podés gastar hoy sin romper tus compromisos
 /score — tu Un Mango Score (salud financiera del mes)
 /deudas — tus deudas pendientes
@@ -111,7 +112,9 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 /vencimientos — lo que vence en los próximos 30 días
 /ayuda — este mensaje
 
-También podés mandarme texto libre, por ejemplo:
+También podés usar los botones que te dejo sobre la caja de texto
+(💳 Billeteras, 📅 Vencimientos, 🎯 Safe-to-Spend, 📊 Mi Score) o
+mandarme texto libre, por ejemplo:
 "Gasto 4500 café" — registra un gasto
 "Debo 5000 a Juan" o "Me debe 3000 Pedro" — registra una deuda
 "Pagué 5000 a Juan" o "Cobré 3000 de Pedro" — registra un pago de deuda
@@ -223,6 +226,84 @@ export function formatMoney(amount: number, currency: string): string {
     return `US$${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
   }
   return formatArs(amount)
+}
+
+// ---------------- Teclados y comandos nativos ----------------
+
+export type ReplyKeyboardMarkup = {
+  reply_keyboard: string[][]
+  resize_keyboard?: boolean
+  one_time_keyboard?: boolean
+}
+
+export type InlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>
+}
+
+export type TelegramReplyMarkup = ReplyKeyboardMarkup | InlineKeyboardMarkup
+
+export interface TelegramReplyPayload {
+  text: string
+  /** null cuando la respuesta no lleva botones (mensaje plano). */
+  replyMarkup: TelegramReplyMarkup | null
+}
+
+/**
+ * Teclado principal persistente (reply_keyboard): 4 botones rápidos que
+ * quedan fijos sobre la caja de texto de Telegram. Cada botón envía el
+ * texto mapeado por el parser (message-parser.ts) al comando equivalente.
+ */
+export function buildMainReplyKeyboard(): ReplyKeyboardMarkup {
+  return {
+    reply_keyboard: [
+      ['💳 Billeteras'],
+      ['📅 Vencimientos'],
+      ['🎯 Safe-to-Spend'],
+      ['📊 Mi Score'],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  }
+}
+
+export interface BotCommand {
+  command: string
+  description: string
+}
+
+/**
+ * Comandos nativos que se registran con setMyCommands para que aparezcan
+ * en el menú de Telegram (botón "/").
+ */
+export const BOT_COMMANDS: BotCommand[] = [
+  { command: 'ayuda', description: 'Lista de comandos y ayuda' },
+  { command: 'saldo', description: 'Tu saldo total en billeteras' },
+  { command: 'gastado', description: 'Cuánto gastaste este mes' },
+  { command: 'resumen', description: 'Gráfico de tus gastos del mes por categoría' },
+  { command: 'gastos', description: 'Gráfico de tus gastos del mes por categoría' },
+  { command: 'safetospend', description: 'Cuánto podés gastar hoy sin romper compromisos' },
+  { command: 'score', description: 'Tu Un Mango Score (salud financiera del mes)' },
+  { command: 'deudas', description: 'Tus deudas pendientes' },
+  { command: 'cuotas', description: 'Tus compras en cuotas' },
+  { command: 'metas', description: 'Tus metas de ahorro' },
+  { command: 'fijos', description: 'Tus suscripciones y gastos fijos' },
+  { command: 'consejos', description: 'Recomendaciones según tus números' },
+  { command: 'hogar', description: 'Balance de gastos de hogar con tu pareja' },
+  { command: 'billeteras', description: 'Saldo individual de cada billetera' },
+  { command: 'vencimientos', description: 'Lo que vence en los próximos 30 días' },
+]
+
+/** Payload para el endpoint setMyCommands de la Bot API. */
+export function buildSetMyCommandsPayload(): { commands: BotCommand[] } {
+  return { commands: BOT_COMMANDS }
+}
+
+/**
+ * Botón inline "Marcar Pagada" para un ítem pagable (deuda o cuota).
+ * El callback_data lo interpreta parseCallbackData (message-parser.ts).
+ */
+export function buildPayButton(callbackData: string): { text: string; callback_data: string } {
+  return { text: '✅ Marcar Pagada', callback_data: callbackData }
 }
 
 // ---------------- Un Mango Score (replica de src/lib/financialHealthScore.ts) ----------------
@@ -476,6 +557,8 @@ export function generateAdviceMessages(inputs: TelegramAdviceInputs): string[] {
 // ---------------- Items para las respuestas de listas ----------------
 
 export interface DebtListItem {
+  /** ID de la deuda, para el botón inline "Marcar Pagada" (pay_debt:[id]). */
+  id?: string | null
   description: string
   counterpartyName: string
   debtType: 'debo' | 'me_deben'
@@ -485,6 +568,8 @@ export interface DebtListItem {
 }
 
 export interface InstallmentListItem {
+  /** ID de la compra, para el botón inline "Marcar Pagada" (pay_installment:[id]). */
+  id?: string | null
   description: string
   totalAmount: number
   installmentsCount: number
@@ -768,6 +853,15 @@ export function buildBilleterasReply(items: WalletBalanceRow[]): string {
 
 export type DueKind = 'fijo' | 'cuota' | 'deuda'
 
+/**
+ * A qué apunta el botón "Marcar Pagada" de un ítem: la deuda entera
+ * (pay_debt:[id]) o una cuota puntual de una compra
+ * (pay_installment:[id]:[número]).
+ */
+export type DuePaymentTarget =
+  | { kind: 'debt'; debtId: string }
+  | { kind: 'installment'; purchaseId: string; installmentNumber: number }
+
 export interface DueItem {
   description: string
   /** Fecha de vencimiento en formato YYYY-MM-DD. */
@@ -777,6 +871,8 @@ export interface DueItem {
   kind: DueKind
   /** Detalle opcional, ej. "cuota 3/12". */
   detail?: string
+  /** Botón inline de pago, presente solo cuando el ítem es pagable. */
+  paymentTarget?: DuePaymentTarget
 }
 
 /** Ventana por defecto de /vencimientos: lo que vence de hoy a 30 días. */
@@ -792,6 +888,8 @@ export interface UpcomingDueInput {
     billingMonth: number | null
   }[]
   installments: {
+    /** ID de la compra, para armar el botón de pago de la cuota. */
+    id?: string
     description: string
     totalAmount: number
     installmentsCount: number
@@ -799,6 +897,8 @@ export interface UpcomingDueInput {
     paidInstallmentNumbers: number[]
   }[]
   debts: {
+    /** ID de la deuda, para armar el botón de pago. */
+    id?: string
     description: string
     remainingAmount: number
     currency: string
@@ -940,6 +1040,9 @@ export function computeUpcomingDueItems(input: UpcomingDueInput): DueItem[] {
           currency: 'ARS',
           kind: 'cuota',
           detail: `cuota ${item.installmentNumber}/${p.installmentsCount}`,
+          paymentTarget: p.id
+            ? { kind: 'installment', purchaseId: p.id, installmentNumber: item.installmentNumber }
+            : undefined,
         })
       }
     }
@@ -955,6 +1058,7 @@ export function computeUpcomingDueItems(input: UpcomingDueInput): DueItem[] {
         amount: d.remainingAmount,
         currency: d.currency,
         kind: 'deuda',
+        paymentTarget: d.id ? { kind: 'debt', debtId: d.id } : undefined,
       })
     }
   }
@@ -986,4 +1090,138 @@ export function buildVencimientosReply(items: DueItem[], windowDays: number = UP
   if (totalUsd > 0) totalLines.push(` + ${formatMoney(totalUsd, 'USD')}`)
 
   return [`Tus próximos vencimientos (${windowDays} días):`, ...lines, '', ...totalLines].join('\n')
+}
+
+// ---------------- Payloads con botones inline ----------------
+
+/**
+ * Payload de /deudas: el texto de buildDebtsReply más un botón inline
+ * "✅ Marcar Pagada" por cada deuda "debo" pendiente (pay_debt:[id]).
+ */
+export function buildDebtsPayload(items: DebtListItem[]): TelegramReplyPayload {
+  const text = buildDebtsReply(items)
+  const rows = items
+    .filter((d) => d.debtType === 'debo' && d.remainingAmount > 0 && !!d.id)
+    .map((d) => [buildPayButton(`pay_debt:${d.id}`)])
+  return { text, replyMarkup: rows.length > 0 ? { inline_keyboard: rows } : null }
+}
+
+/**
+ * Payload de /cuotas: el texto de buildCuotasReply más un botón inline
+ * por cada compra con cuotas impagas (pay_installment:[id]) que paga la
+ * próxima cuota impaga del plan.
+ */
+export function buildCuotasPayload(items: InstallmentListItem[]): TelegramReplyPayload {
+  const text = buildCuotasReply(items)
+  const rows = items
+    .filter((p) => !!p.id && p.paidCount < p.installmentsCount)
+    .map((p) => [buildPayButton(`pay_installment:${p.id}`)])
+  return { text, replyMarkup: rows.length > 0 ? { inline_keyboard: rows } : null }
+}
+
+/**
+ * Payload de /vencimientos: el texto de buildVencimientosReply más un
+ * botón inline por cada ítem pagable — cuota (pay_installment:[id]:[n])
+ * o deuda (pay_debt:[id]).
+ */
+export function buildVencimientosPayload(items: DueItem[]): TelegramReplyPayload {
+  const text = buildVencimientosReply(items)
+  const rows = items
+    .filter((i) => i.paymentTarget)
+    .map((i) => {
+      const target = i.paymentTarget as DuePaymentTarget
+      const callbackData =
+        target.kind === 'debt'
+          ? `pay_debt:${target.debtId}`
+          : `pay_installment:${target.purchaseId}:${target.installmentNumber}`
+      return [buildPayButton(callbackData)]
+    })
+  return { text, replyMarkup: rows.length > 0 ? { inline_keyboard: rows } : null }
+}
+
+// ---------------- Resumen visual con QuickChart ----------------
+
+export interface ExpenseCategorySlice {
+  label: string
+  value: number
+}
+
+/**
+ * Agrupa los gastos del mes por categoría (sumando los montos) y los
+ * ordena de mayor a menor. Los gastos sin categoría van a "Sin
+ * categoría"; los ingresos no se cuentan.
+ */
+export function buildExpenseCategorySlices(
+  transactions: { type: string; amountArs: number; categoryName: string | null }[]
+): ExpenseCategorySlice[] {
+  const byLabel = new Map<string, number>()
+  for (const t of transactions) {
+    if (t.type !== 'expense') continue
+    const amount = Number(t.amountArs) || 0
+    if (amount <= 0) continue
+    const label = t.categoryName?.trim() || 'Sin categoría'
+    byLabel.set(label, (byLabel.get(label) ?? 0) + amount)
+  }
+  return [...byLabel.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+}
+
+const CHART_COLOR_PALETTE = [
+  '#f59e0b',
+  '#ef4444',
+  '#10b981',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ec4899',
+  '#14b8a6',
+  '#f97316',
+  '#6366f1',
+  '#84cc16',
+]
+
+/**
+ * URL de QuickChart (Chart.js as Image) con un gráfico de torta
+ * (doughnut) de la distribución de gastos por categoría. QuickChart
+ * renderiza la imagen al pedir la URL.
+ */
+export function buildQuickChartPieUrl(slices: ExpenseCategorySlice[]): string {
+  const config = {
+    type: 'doughnut',
+    data: {
+      labels: slices.map((s) => s.label),
+      datasets: [
+        {
+          data: slices.map((s) => s.value),
+          backgroundColor: slices.map((_, i) => CHART_COLOR_PALETTE[i % CHART_COLOR_PALETTE.length]),
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { position: 'right' },
+        title: { display: true, text: 'Gastos del mes por categoría' },
+      },
+    },
+  }
+  const encoded = encodeURIComponent(JSON.stringify(config))
+  return `https://quickchart.io/chart?c=${encoded}&width=520&height=320`
+}
+
+/**
+ * Caption del gráfico de /resumen: desglose por categoría con el total
+ * del mes y (si hay ingreso cargado) el porcentaje que representa.
+ */
+export function buildResumenCaption(
+  slices: ExpenseCategorySlice[],
+  monthlyExpense: number,
+  monthlyIncome: number
+): string {
+  const lines = slices.map((s) => `• ${s.label}: ${formatArs(s.value)}`)
+  const header = `📊 Tus gastos de ${formatArs(monthlyExpense)} este mes, por categoría:`
+  const footer =
+    monthlyIncome > 0
+      ? `Representan el ${Math.round((monthlyExpense / monthlyIncome) * 100)}% de tu ingreso (${formatArs(monthlyIncome)}).`
+      : 'Cargá tu ingreso mensual en la app para ver el porcentaje que representan.'
+  return [header, '', ...lines, '', footer].join('\n')
 }

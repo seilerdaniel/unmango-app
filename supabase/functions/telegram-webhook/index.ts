@@ -4,8 +4,12 @@
 // (webhook configurado con setWebhook, ver README.md). Casos:
 //
 // 1. Comandos (/saldo, /gastado, /safetospend, /score, /deudas, /cuotas,
-//    /metas, /fijos, /consejos, /hogar, /ayuda) — si el chat ya está
-//    vinculado, consulta los datos del usuario y responde.
+//    /metas, /fijos, /consejos, /hogar, /billeteras, /vencimientos,
+//    /resumen, /gastos, /ayuda) o el texto de un botón del teclado
+//    principal — si el chat ya está vinculado, consulta los datos del
+//    usuario y responde (con el teclado principal persistente, y con
+//    botones inline "✅ Marcar Pagada" en deudas, cuotas y
+//    vencimientos).
 // 2. Código de vinculación de 6 dígitos (con o sin "/start" adelante) —
 //    busca ese código en telegram_links y completa el telegram_chat_id.
 // 3. Cualquier otro mensaje con una intención reconocible (ej. "Gasto 4500
@@ -16,9 +20,14 @@
 //    deuda, pago de deuda con movimiento, pago de servicio con movimiento,
 //    pago de cuota con movimiento, compra en cuotas, gasto fijo o meta de
 //    ahorro) para ese usuario.
+// 4. callback_query (tocaron un botón inline) — el botón "✅ Marcar
+//    Pagada" de deudas/cuotas/vencimientos procesa el pago, responde con
+//    answerCallbackQuery y manda la confirmación al chat.
 //
 // En todos los casos responde al usuario por Telegram confirmando qué se
-// hizo (o el error), para que no quede la duda de si funcionó.
+// hizo (o el error), para que no quede la duda de si funcionó. En el
+// primer request también registra los comandos nativos con setMyCommands
+// (para que aparezcan en el menú del bot).
 //
 // Variables de entorno necesarias (ver README.md para el paso a paso):
 //   TELEGRAM_BOT_TOKEN   — el token que te da BotFather
@@ -32,15 +41,16 @@
 // automáticamente en toda Edge Function.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { parseTelegramMessage } from './message-parser.ts'
+import { parseCallbackData, parseTelegramMessage } from './message-parser.ts'
 import {
   buildBilleterasReply,
   buildConsejosReply,
-  buildCuotasReply,
+  buildCuotasPayload,
   buildDebtConfirmedReply,
   buildDebtPaymentConfirmedReply,
   buildDebtPaymentNotFoundReply,
-  buildDebtsReply,
+  buildDebtsPayload,
+  buildExpenseCategorySlices,
   buildExpenseConfirmedReply,
   buildExpenseErrorReply,
   buildFijosReply,
@@ -54,19 +64,23 @@ import {
   buildLinkErrorReply,
   buildLinkInvalidReply,
   buildLinkSuccessReply,
+  buildMainReplyKeyboard,
   buildMetasReply,
   buildNotLinkedReply,
+  buildQuickChartPieUrl,
   buildRecurringConfirmedReply,
   buildRecurringPaymentConfirmedReply,
   buildRecurringPaymentNotFoundReply,
+  buildResumenCaption,
   buildSafeToSpendReply,
   buildSaldoReply,
   buildSaveErrorReply,
   buildSavingsGoalConfirmedReply,
   buildScoreReply,
+  buildSetMyCommandsPayload,
   buildUnknownCommandReply,
   buildUnrecognizedReply,
-  buildVencimientosReply,
+  buildVencimientosPayload,
   computeFinancialHealthScore,
   computeHouseholdBalance,
   computeInstallmentScheduleItems,
@@ -81,20 +95,38 @@ import {
   isGoalStalled,
   monthlyEquivalentAmount,
 } from './reply-builder.ts'
+import type { TelegramReplyMarkup } from './reply-builder.ts'
 
 interface TelegramUpdate {
   message?: {
     chat: { id: number }
     text?: string
   }
+  callback_query?: {
+    id: string
+    from: { id: number }
+    message?: {
+      chat: { id: number }
+      message_id: number
+      text?: string
+    }
+    data?: string
+  }
 }
 
-async function sendTelegramMessage(botToken: string, chatId: number, text: string): Promise<boolean> {
+async function sendTelegramMessage(
+  botToken: string,
+  chatId: number,
+  text: string,
+  replyMarkup?: TelegramReplyMarkup
+): Promise<boolean> {
   try {
+    const body: Record<string, unknown> = { chat_id: chatId, text }
+    if (replyMarkup) body.reply_markup = replyMarkup
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -104,6 +136,76 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
     return true
   } catch (err) {
     console.error('Error de red al enviar mensaje a Telegram:', err)
+    return false
+  }
+}
+
+// Envía una imagen (el gráfico de /resumen se genera como URL de
+// QuickChart y Telegram la descarga solo al renderizarla).
+async function sendTelegramPhoto(
+  botToken: string,
+  chatId: number,
+  photoUrl: string,
+  caption: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, photo: photoUrl, caption }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`Telegram respondió ${res.status} al enviar la foto: ${body}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Error de red al enviar la foto a Telegram:', err)
+    return false
+  }
+}
+
+// Responde a un toque de botón inline (callback_query). El text es la
+// notificación corta que Telegram muestra sobre el botón.
+async function answerCallbackQuery(botToken: string, callbackQueryId: string, text: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`Telegram respondió ${res.status} al responder el callback: ${body}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Error de red al responder el callback:', err)
+    return false
+  }
+}
+
+// Registra los comandos nativos con setMyCommands para que aparezcan en
+// el menú del bot (el botón "/"). Se llama una vez por instancia fría.
+let botCommandsRegistered = false
+
+async function registerBotCommands(botToken: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSetMyCommandsPayload()),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`Telegram respondió ${res.status} al registrar comandos: ${body}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('Error de red registrando comandos:', err)
     return false
   }
 }
@@ -330,7 +432,7 @@ async function fetchUpcomingDueItems(
       .eq('user_id', userId),
     supabase
       .from('debts')
-      .select('description, remaining_amount, currency, due_date, debt_type')
+      .select('id, description, remaining_amount, currency, due_date, debt_type')
       .eq('user_id', userId),
   ])
 
@@ -355,6 +457,7 @@ async function fetchUpcomingDueItems(
       billingMonth: r.billing_month,
     })),
     installments: (purchases.data ?? []).map((p) => ({
+      id: p.id,
       description: p.description,
       totalAmount: Number(p.total_amount) || 0,
       installmentsCount: p.installments_count,
@@ -362,6 +465,7 @@ async function fetchUpcomingDueItems(
       paidInstallmentNumbers: paidByPurchase.get(p.id) ?? [],
     })),
     debts: (debts.data ?? []).map((d) => ({
+      id: d.id,
       description: d.description,
       remainingAmount: Number(d.remaining_amount) || 0,
       currency: d.currency,
@@ -374,35 +478,19 @@ async function fetchUpcomingDueItems(
 // Registra un pago de deuda: descuenta el monto del saldo pendiente,
 // crea el movimiento real (gasto si pagás, ingreso si cobrás) y guarda
 // el pago en debt_payments — mismo flujo que DebtsManager del frontend.
-async function handleDebtPayment(
+async function recordDebtPayment(
   supabase: ReturnType<typeof createClient>,
   userId: string,
+  debt: {
+    id: string
+    counterparty_name: string | null
+    debt_type: string | null
+    currency: string | null
+    remaining_amount: number | null
+  },
   amount: number,
-  personName: string,
   paymentType: 'pay' | 'collect'
 ): Promise<{ found: boolean; reply: string }> {
-  const searchName = personName.replace(/[%_]/g, '').trim()
-  const { data, error } = await supabase
-    .from('debts')
-    .select('id, description, counterparty_name, debt_type, currency, remaining_amount')
-    .eq('user_id', userId)
-    .ilike('counterparty_name', `%${searchName}%`)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-
-  const rows = data ?? []
-  // Preferimos una deuda pendiente coherente con la intención: pagar va
-  // contra deudas "debo" y cobrar contra "me_deben".
-  const typeWanted = paymentType === 'pay' ? 'debo' : 'me_deben'
-  const debt =
-    rows.find((d) => Number(d.remaining_amount) > 0 && d.debt_type === typeWanted) ??
-    rows.find((d) => Number(d.remaining_amount) > 0) ??
-    rows[0]
-
-  if (!debt) {
-    return { found: false, reply: buildDebtPaymentNotFoundReply(personName) }
-  }
-
   const newRemaining = Math.max(0, Number(debt.remaining_amount) - amount)
 
   const { error: updateError } = await supabase
@@ -443,8 +531,69 @@ async function handleDebtPayment(
 
   return {
     found: true,
-    reply: buildDebtPaymentConfirmedReply(paymentType, amount, debt.counterparty_name, newRemaining, debt.currency),
+    reply: buildDebtPaymentConfirmedReply(paymentType, amount, debt.counterparty_name ?? '', newRemaining, debt.currency ?? 'ARS'),
   }
+}
+
+async function handleDebtPayment(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  amount: number,
+  personName: string,
+  paymentType: 'pay' | 'collect'
+): Promise<{ found: boolean; reply: string }> {
+  const searchName = personName.replace(/[%_]/g, '').trim()
+  const { data, error } = await supabase
+    .from('debts')
+    .select('id, description, counterparty_name, debt_type, currency, remaining_amount')
+    .eq('user_id', userId)
+    .ilike('counterparty_name', `%${searchName}%`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  const rows = data ?? []
+  // Preferimos una deuda pendiente coherente con la intención: pagar va
+  // contra deudas "debo" y cobrar contra "me_deben".
+  const typeWanted = paymentType === 'pay' ? 'debo' : 'me_deben'
+  const debt =
+    rows.find((d) => Number(d.remaining_amount) > 0 && d.debt_type === typeWanted) ??
+    rows.find((d) => Number(d.remaining_amount) > 0) ??
+    rows[0]
+
+  if (!debt) {
+    return { found: false, reply: buildDebtPaymentNotFoundReply(personName) }
+  }
+
+  return recordDebtPayment(supabase, userId, debt, amount, paymentType)
+}
+
+// Versión del pago de deuda que llega del botón inline "✅ Marcar
+// Pagada" (pay_debt:[id]): paga el saldo completo que queda pendiente.
+async function handleDebtPaymentById(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  debtId: string
+): Promise<{ found: boolean; reply: string }> {
+  const { data: debt, error } = await supabase
+    .from('debts')
+    .select('id, description, counterparty_name, debt_type, currency, remaining_amount')
+    .eq('user_id', userId)
+    .eq('id', debtId)
+    .maybeSingle()
+  if (error) throw error
+
+  if (!debt) {
+    return { found: false, reply: 'No encontré esa deuda. Pedí /deudas de nuevo para ver el estado actual.' }
+  }
+  if (debt.debt_type !== 'debo') {
+    return { found: true, reply: 'Esa deuda es un cobro pendiente (te deben a vos), no un pago tuyo.' }
+  }
+  const remaining = Number(debt.remaining_amount) || 0
+  if (remaining <= 0) {
+    return { found: true, reply: 'Esa deuda ya está totalmente pagada.' }
+  }
+
+  return recordDebtPayment(supabase, userId, debt, remaining, 'pay')
 }
 
 // Registra el pago de un servicio/suscripción existente: busca por
@@ -489,32 +638,25 @@ async function handleRecurringPayment(
   return { found: true, reply: buildRecurringPaymentConfirmedReply(service.title, amount, 'ARS') }
 }
 
-// Registra el pago de una cuota de una compra en cuotas existente: busca
-// la compra por descripción, marca la cuota como pagada (mismo mecanismo
-// que el botón "Pagar cuota" de InstallmentTracker: un registro en
-// installment_payments con el número de la cuota, sin superar el total
-// del plan) y crea el movimiento real en transactions.
-async function handleInstallmentPayment(
+// Registra el pago de una cuota de una compra en cuotas: marca la cuota
+// como pagada (mismo mecanismo que el botón "Pagar cuota" de
+// InstallmentTracker: un registro en installment_payments con el número
+// de la cuota, sin superar el total del plan) y crea el movimiento real
+// en transactions.
+async function recordInstallmentPayment(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  purchaseName: string,
+  purchase: {
+    id: string
+    description: string | null
+    total_amount: number | null
+    installments_count: number
+    first_installment_date: string | null
+    category_id: string | null
+  },
   amount: number | null,
   installmentNumber: number | null
 ): Promise<{ found: boolean; reply: string }> {
-  const searchName = purchaseName.replace(/[%_]/g, '').trim()
-  const { data, error } = await supabase
-    .from('installment_purchases')
-    .select('id, description, total_amount, installments_count, first_installment_date, category_id')
-    .eq('user_id', userId)
-    .ilike('description', `%${searchName}%`)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-
-  const purchase = (data ?? [])[0]
-  if (!purchase) {
-    return { found: false, reply: buildInstallmentPaymentNotFoundReply(purchaseName) }
-  }
-
   const { data: payments, error: paymentsError } = await supabase
     .from('installment_payments')
     .select('installment_number')
@@ -526,7 +668,7 @@ async function handleInstallmentPayment(
   const schedule = computeInstallmentScheduleItems(
     Number(purchase.total_amount) || 0,
     purchase.installments_count,
-    new Date(`${purchase.first_installment_date}T00:00:00`)
+    new Date(`${purchase.first_installment_date ?? new Date().toISOString().slice(0, 10)}T00:00:00`)
   )
 
   // Si viene un número de cuota específico y todavía no está pagada, esa
@@ -538,7 +680,7 @@ async function handleInstallmentPayment(
   }
 
   if (!target) {
-    return { found: true, reply: buildInstallmentPaymentAlreadyPaidReply(purchase.description, purchase.installments_count) }
+    return { found: true, reply: buildInstallmentPaymentAlreadyPaidReply(purchase.description ?? 'Compra en cuotas', purchase.installments_count) }
   }
 
   const paymentAmount = amount ?? target.amount
@@ -580,13 +722,61 @@ async function handleInstallmentPayment(
   return {
     found: true,
     reply: buildInstallmentPaymentConfirmedReply(
-      purchase.description,
+      purchase.description ?? 'Compra en cuotas',
       target.installmentNumber,
       purchase.installments_count,
       paymentAmount,
       fullyPaid
     ),
   }
+}
+
+async function handleInstallmentPayment(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  purchaseName: string,
+  amount: number | null,
+  installmentNumber: number | null
+): Promise<{ found: boolean; reply: string }> {
+  const searchName = purchaseName.replace(/[%_]/g, '').trim()
+  const { data, error } = await supabase
+    .from('installment_purchases')
+    .select('id, description, total_amount, installments_count, first_installment_date, category_id')
+    .eq('user_id', userId)
+    .ilike('description', `%${searchName}%`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+
+  const purchase = (data ?? [])[0]
+  if (!purchase) {
+    return { found: false, reply: buildInstallmentPaymentNotFoundReply(purchaseName) }
+  }
+
+  return recordInstallmentPayment(supabase, userId, purchase, amount, installmentNumber)
+}
+
+// Versión del pago de cuota que llega del botón inline "✅ Marcar
+// Pagada" (pay_installment:[id] o pay_installment:[id]:[número]): paga
+// la cuota indicada (o la próxima impaga) usando el monto del plan.
+async function handleInstallmentPaymentById(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  purchaseId: string,
+  installmentNumber: number | null
+): Promise<{ found: boolean; reply: string }> {
+  const { data: purchase, error } = await supabase
+    .from('installment_purchases')
+    .select('id, description, total_amount, installments_count, first_installment_date, category_id')
+    .eq('user_id', userId)
+    .eq('id', purchaseId)
+    .maybeSingle()
+  if (error) throw error
+
+  if (!purchase) {
+    return { found: false, reply: 'No encontré esa compra en cuotas. Pedí /cuotas o /vencimientos de nuevo para ver el estado actual.' }
+  }
+
+  return recordInstallmentPayment(supabase, userId, purchase, null, installmentNumber)
 }
 
 interface AdviceData {
@@ -786,6 +976,14 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  // Registrar los comandos nativos (setMyCommands) la primera vez que
+  // arranca la instancia — fire and forget para no sumar latencia a la
+  // primera respuesta.
+  if (!botCommandsRegistered) {
+    botCommandsRegistered = true
+    void registerBotCommands(botToken)
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
@@ -794,6 +992,52 @@ Deno.serve(async (req: Request) => {
   try {
     update = await req.json()
   } catch {
+    return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+  }
+
+  // Un toque de botón inline (callback_query) no es un mensaje de texto:
+  // el callback_data indica qué pagar (pay_debt:[id] o
+  // pay_installment:[id]:[n]) y se procesa acá antes que el mensaje.
+  if (update.callback_query) {
+    const { id: callbackId, data, message } = update.callback_query
+    const callbackChatId = message?.chat.id
+    if (!callbackChatId || !data) {
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const action = parseCallbackData(data)
+    if (!action) {
+      await answerCallbackQuery(botToken, callbackId, 'Acción no reconocida')
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    }
+
+    const { data: callbackLink, error: callbackFindError } = await supabaseAdmin
+      .from('telegram_links')
+      .select('user_id')
+      .eq('telegram_chat_id', callbackChatId)
+      .maybeSingle()
+
+    if (callbackFindError || !callbackLink) {
+      await answerCallbackQuery(botToken, callbackId, 'Tu cuenta todavía no está vinculada.')
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    }
+
+    try {
+      const result =
+        action.kind === 'pay_debt'
+          ? await handleDebtPaymentById(supabaseAdmin, callbackLink.user_id, action.debtId)
+          : await handleInstallmentPaymentById(
+              supabaseAdmin,
+              callbackLink.user_id,
+              action.purchaseId,
+              action.installmentNumber
+            )
+      await answerCallbackQuery(botToken, callbackId, result.found ? '✅ Pago registrado' : 'No se pudo procesar el pago')
+      await sendTelegramMessage(botToken, callbackChatId, result.reply, buildMainReplyKeyboard())
+    } catch (err) {
+      console.error('Error procesando callback_query:', err)
+      await answerCallbackQuery(botToken, callbackId, 'Hubo un error procesando el pago')
+    }
     return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
   }
 
@@ -807,7 +1051,13 @@ Deno.serve(async (req: Request) => {
   }
 
   const parsed = parseTelegramMessage(text)
-  const reply = async (msg: string) => sendTelegramMessage(botToken, chatId, msg)
+  // Las respuestas principales llevan el teclado persistente con los 4
+  // botones rápidos (reply_keyboard). Las listas con botones inline pasan
+  // su propio reply_markup (que no reemplaza el teclado, solo esa
+  // respuesta).
+  const reply = async (msg: string) => sendTelegramMessage(botToken, chatId, msg, buildMainReplyKeyboard())
+  const replyWithMarkup = async (msg: string, markup: TelegramReplyMarkup | null) =>
+    sendTelegramMessage(botToken, chatId, msg, markup ?? buildMainReplyKeyboard())
 
   if (parsed.kind === 'command') {
     if (parsed.command === 'ayuda' || parsed.command === 'start') {
@@ -868,22 +1118,22 @@ Deno.serve(async (req: Request) => {
       } else if (parsed.command === 'deudas') {
         const { data, error } = await supabaseAdmin
           .from('debts')
-          .select('description, counterparty_name, debt_type, total_amount, remaining_amount, currency')
+          .select('id, description, counterparty_name, debt_type, total_amount, remaining_amount, currency')
           .eq('user_id', link.user_id)
           .order('created_at', { ascending: false })
         if (error) throw error
-        await reply(
-          buildDebtsReply(
-            (data ?? []).map((d) => ({
-              description: d.description,
-              counterpartyName: d.counterparty_name,
-              debtType: d.debt_type,
-              totalAmount: Number(d.total_amount),
-              remainingAmount: Number(d.remaining_amount),
-              currency: d.currency,
-            }))
-          )
+        const payload = buildDebtsPayload(
+          (data ?? []).map((d) => ({
+            id: d.id,
+            description: d.description,
+            counterpartyName: d.counterparty_name,
+            debtType: d.debt_type,
+            totalAmount: Number(d.total_amount),
+            remainingAmount: Number(d.remaining_amount),
+            currency: d.currency,
+          }))
         )
+        await replyWithMarkup(payload.text, payload.replyMarkup)
       } else if (parsed.command === 'cuotas') {
         const [purchases, payments] = await Promise.all([
           supabaseAdmin
@@ -898,17 +1148,17 @@ Deno.serve(async (req: Request) => {
         for (const p of payments.data ?? []) {
           paidCountByPurchase.set(p.installment_purchase_id, (paidCountByPurchase.get(p.installment_purchase_id) ?? 0) + 1)
         }
-        await reply(
-          buildCuotasReply(
-            (purchases.data ?? []).map((p) => ({
-              description: p.description,
-              totalAmount: Number(p.total_amount),
-              installmentsCount: p.installments_count,
-              paidCount: paidCountByPurchase.get(p.id) ?? 0,
-              monthlyAmount: p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0,
-            }))
-          )
+        const payload = buildCuotasPayload(
+          (purchases.data ?? []).map((p) => ({
+            id: p.id,
+            description: p.description,
+            totalAmount: Number(p.total_amount),
+            installmentsCount: p.installments_count,
+            paidCount: paidCountByPurchase.get(p.id) ?? 0,
+            monthlyAmount: p.installments_count > 0 ? Number(p.total_amount) / p.installments_count : 0,
+          }))
         )
+        await replyWithMarkup(payload.text, payload.replyMarkup)
       } else if (parsed.command === 'metas') {
         const { data, error } = await supabaseAdmin
           .from('savings_goals')
@@ -954,7 +1204,39 @@ Deno.serve(async (req: Request) => {
         await reply(buildBilleterasReply(balances))
       } else if (parsed.command === 'vencimientos') {
         const dueItems = await fetchUpcomingDueItems(supabaseAdmin, link.user_id)
-        await reply(buildVencimientosReply(dueItems))
+        const payload = buildVencimientosPayload(dueItems)
+        await replyWithMarkup(payload.text, payload.replyMarkup)
+      } else if (parsed.command === 'resumen' || parsed.command === 'gastos') {
+        // Gráfico de torta (QuickChart) con la distribución de gastos del
+        // mes por categoría, enviado como imagen con el desglose.
+        const now = new Date()
+        const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        const [summary, monthTransactions] = await Promise.all([
+          fetchFinancialSummary(supabaseAdmin, link.user_id),
+          supabaseAdmin
+            .from('transactions')
+            .select('type, amount_ars, categories(name)')
+            .eq('user_id', link.user_id)
+            .gte('created_at', monthStartIso),
+        ])
+        if (monthTransactions.error) throw monthTransactions.error
+        const slices = buildExpenseCategorySlices(
+          (monthTransactions.data ?? []).map((t) => ({
+            type: t.type,
+            amountArs: Number(t.amount_ars) || 0,
+            categoryName: (t.categories as { name: string } | null)?.name ?? null,
+          }))
+        )
+        if (slices.length === 0) {
+          await reply('No tenés gastos este mes todavía — así que no hay gráfico que armar. Cargá tus primeros movimientos y volvé a pedir /resumen.')
+        } else {
+          await sendTelegramPhoto(
+            botToken,
+            chatId,
+            buildQuickChartPieUrl(slices),
+            buildResumenCaption(slices, summary.monthlyExpense, summary.monthlyIncome)
+          )
+        }
       }
     } catch (err) {
       console.error('Error consultando datos para el bot:', err)

@@ -2822,3 +2822,81 @@ todos pasando — 577 previos + 28 nuevos), `npm run build` (OK — el build
 en este sandbox requiere `.env.local` con las dos env vars de Supabase,
 es el hardening pre-existente de `supabaseClient.ts`, no algo de esta
 tanda; el archivo está gitignoreado y no se commitea).
+
+## ✅ Tanda 10 — Telegram Bot Super-Personalizado 360°
+
+**Motivo**: el bot respondía solo con texto plano; no había teclado
+persistente, no se podía pagar deuda/cuota tocando un botón, los
+comandos no aparecían en el menú nativo de Telegram y no existía un
+resumen visual de gastos.
+
+### `supabase/functions/telegram-webhook/reply-builder.ts`
+- **Teclado principal persistente**: `buildMainReplyKeyboard()` arma el
+  `reply_keyboard` con los 4 botones rápidos (`💳 Billeteras`,
+  `📅 Vencimientos`, `🎯 Safe-to-Spend`, `📊 Mi Score`), con
+  `resize_keyboard: true`.
+- **Comandos nativos**: `BOT_COMMANDS[]` + `buildSetMyCommandsPayload()`
+  para `setMyCommands` (`/ayuda`, `/billeteras`, `/vencimientos`,
+  `/safetospend`, `/score`, y el resto).
+- **Payloads con botones inline**: `buildDebtsPayload` (un botón
+  `✅ Marcar Pagada` → `pay_debt:[id]` por deuda "debo" pendiente),
+  `buildCuotasPayload` (`pay_installment:[id]` por compra con cuotas
+  impagas) y `buildVencimientosPayload` (`pay_installment:[id]:[n]` para
+  cuotas, `pay_debt:[id]` para deudas). `buildPayButton()` centraliza el
+  botón.
+- **IDs para el pago**: `DebtListItem.id`, `InstallmentListItem.id` e
+  `UpcomingDueInput` aceptan ids opcionales; `computeUpcomingDueItems`
+  propaga `DueItem.paymentTarget`.
+- **Resumen visual**: `buildExpenseCategorySlices()` (agrega gastos del
+  mes por categoría, ordena de mayor a menor, `Sin categoría` para los
+  que no tienen), `buildQuickChartPieUrl()` (config de Chart.js como
+  doughnut codificado para QuickChart.io) y `buildResumenCaption()`
+  (desglose + total del mes + % del ingreso).
+- `HELP_TEXT` actualizado con `/resumen`, `/gastos` y los botones.
+
+### `supabase/functions/telegram-webhook/message-parser.ts`
+- Comandos nuevos `resumen` y `gastos` (union + `KNOWN_COMMANDS`).
+- **Botones reply**: `REPLY_BUTTON_COMMANDS[]` mapea el texto exacto que
+  envía cada botón del teclado al comando equivalente (normalizando
+  minúsculas y espacios) antes de parsear comandos `/`.
+- **Callbacks**: `parseCallbackData()` interpreta `pay_debt:[id]`,
+  `pay_installment:[id]` y `pay_installment:[id]:[n]` → `CallbackAction`.
+
+### `supabase/functions/telegram-webhook/index.ts`
+- `sendTelegramMessage` acepta `reply_markup`; se agrega
+  `sendTelegramPhoto` (para el gráfico), `answerCallbackQuery` y
+  `registerBotCommands` (llamado fire-and-forget una vez por instancia
+  fría para registrar los comandos nativos).
+- **`callback_query`**: se procesa antes que los mensajes — parsea el
+  callback, valida el vínculo, llama a `handleDebtPaymentById` o
+  `handleInstallmentPaymentById`, responde con `answerCallbackQuery` y
+  manda la confirmación al chat (re-enviando el teclado principal).
+- **Refactor de pagos**: se extrajo `recordDebtPayment` y
+  `recordInstallmentPayment` (lógica compartida), y se agregaron las
+  versiones por id para los botones inline (la deuda se paga completa;
+  la cuota se paga con el monto del plan, la indicada o la próxima
+  impaga).
+- `fetchUpcomingDueItems` ahora trae ids para armar los targets.
+- Handlers `/deudas`, `/cuotas`, `/vencimientos` usan los payloads con
+  botones inline; las demás respuestas llevan el teclado persistente.
+- **`/resumen` y `/gastos`**: si hay gastos en el mes, genera la URL de
+  QuickChart con la distribución por categorías y la envía con
+  `sendPhoto` y el desglose en el caption; si no hay gastos, responde
+  texto avisando.
+
+### Tests (26 nuevos, 631 totales)
+- `message-parser.test.ts` (14 nuevos): botones del teclado principal
+  (`💳 Billeteras`, `📅 Vencimientos`, `🎯 Safe-to-Spend`, `📊 Mi
+  Score`, tolerancia a mayúsculas/espacios), `/resumen` y `/gastos`, y
+  `parseCallbackData` (deuda, cuota con/sin número, número inválido y
+  datos desconocidos).
+- `reply-builder.test.ts` (12 nuevos): teclado principal (4 botones +
+  flags), `setMyCommands` (comandos clave + descripciones), payloads de
+  deudas/cuotas/vencimientos (botones y callback_data correctos, sin
+  botones cuando no hay nada pagable), `buildExpenseCategorySlices`
+  (agrupa, ordena, ignora ingresos), `buildQuickChartPieUrl` (URL +
+  config decodificable con los montos) y `buildResumenCaption`.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**69 archivos, 631 tests**,
+todos pasando — 605 previos + 26 nuevos), `npm run build` (OK).
