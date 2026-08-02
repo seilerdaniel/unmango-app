@@ -13,8 +13,9 @@
 // (src/lib/financialHealthScore.ts), computeHouseholdBalance
 // (src/lib/householdBalance.ts), detectAntExpenses
 // (src/lib/antExpenses.ts), isGoalStalled (src/lib/savingsGoalStall.ts),
-// computeStreakBreak (src/lib/zeroSpendStats.ts) y generateAdviceMessages
-// (versión en texto de src/lib/financialAdvice.ts). Para /billeteras se
+// computeStreakBreak (src/lib/zeroSpendStats.ts), generateAdviceMessages
+// (versión en texto de src/lib/financialAdvice.ts), calculateRoundUp /
+// computeTotalRoundUpSavings (src/lib/roundUpSavings.ts). Para /billeteras se
 // replica get_wallet_balances() (wallets.sql) y para /vencimientos las
 // fórmulas de nextBillingDate (src/lib/recurringBilling.ts),
 // computeInstallmentScheduleItems (src/lib/installments.ts) y la regla
@@ -65,6 +66,23 @@ export function convertUsdToArs(amountUsd: number, rate: number): number {
 export function convertArsToUsd(amountArs: number, rate: number): number {
   if (!(rate > 0)) return amountArs
   return round2(amountArs / rate)
+}
+
+// Ahorro por redondeo ("Bolsillo de Cambio", Tanda 11c): redondea un gasto
+// al múltiplo superior del paso y suma el total del período. Réplicas de
+// src/lib/roundUpSavings.ts — ver nota de duplicación al inicio del
+// archivo.
+export function calculateRoundUp(amount: number, step = 1000): number {
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(step) || step <= 0) return 0
+  const remainder = amount % step
+  if (remainder === 0) return 0
+  return round2(step - remainder)
+}
+
+export function computeTotalRoundUpSavings(amounts: Array<number | null>, step = 1000): number {
+  return round2(
+    amounts.reduce<number>((acc, a) => acc + calculateRoundUp(Number(a) || 0, step), 0)
+  )
 }
 
 export interface SafeToSpendInput {
@@ -197,7 +215,8 @@ export function buildExpenseConfirmedReply(
   type: 'income' | 'expense' = 'expense',
   walletName: string | null = null,
   categoryName: string | null = null,
-  notes: string | null = null
+  notes: string | null = null,
+  roundUp: { amount: number; total: number } | null = null
 ): string {
   const kindLabel = type === 'income' ? 'un ingreso' : 'un gasto'
   const extra = [walletName ? `billetera ${walletName}` : null, categoryName ? `categoría ${categoryName}` : null]
@@ -205,7 +224,11 @@ export function buildExpenseConfirmedReply(
     .join(' · ')
   const extrasSuffix = extra ? ` (${extra})` : ''
   const notesSuffix = notes ? ` Nota: ${notes}` : ''
-  return `Listo ✅ Registré ${kindLabel} de ${formatArs(amount)} en "${description}"${extrasSuffix}.${notesSuffix}`
+  const roundUpSuffix =
+    roundUp && roundUp.amount > 0
+      ? ` 💡 +${formatArs(roundUp.amount)} asignados al Bolsillo de Cambio (${formatArs(roundUp.total)} este mes).`
+      : ''
+  return `Listo ✅ Registré ${kindLabel} de ${formatArs(amount)} en "${description}"${extrasSuffix}.${notesSuffix}${roundUpSuffix}`
 }
 
 export function buildExpenseErrorReply(): string {

@@ -5,6 +5,8 @@ import {
   walletDailyYield,
   walletMonthlyYield,
   extractReferenceRates,
+  calculateRoundUp,
+  computeTotalRoundUpSavings,
   buildBilleterasReply,
   buildConsejosReply,
   buildCuotasPayload,
@@ -249,6 +251,16 @@ describe('mensajes de texto', () => {
     expect(reply).toContain('Nota: salida con amigos')
   })
 
+  it('buildExpenseConfirmedReply suma la nota del Bolsillo de Cambio', () => {
+    const reply = buildExpenseConfirmedReply(3200, 'café', 'expense', null, null, null, { amount: 800, total: 4000 })
+    expect(reply).toContain('💡 +$800 asignados al Bolsillo de Cambio ($4.000 este mes).')
+  })
+
+  it('buildExpenseConfirmedReply omite la nota si el redondeo es 0', () => {
+    const reply = buildExpenseConfirmedReply(3200, 'café', 'expense', null, null, null, { amount: 0, total: 4000 })
+    expect(reply).not.toContain('Bolsillo de Cambio')
+  })
+
   it('buildUnknownCommandReply menciona el comando recibido', () => {
     expect(buildUnknownCommandReply('hola')).toContain('/hola')
     expect(buildUnknownCommandReply('hola')).toContain('/ayuda')
@@ -278,6 +290,30 @@ describe('mensajes de texto', () => {
     expect(help).toContain('Heladera 200000 12 cuotas')
     expect(help).toContain('Pagué cuota Galicia 150000')
     expect(help).toContain('Pago 1 cuota Heladera')
+  })
+})
+
+describe('calculateRoundUp / computeTotalRoundUpSavings (réplica del frontend)', () => {
+  it('redondea al múltiplo superior del paso por defecto ($1.000)', () => {
+    expect(calculateRoundUp(3200)).toBe(800)
+    expect(calculateRoundUp(1500)).toBe(500)
+    expect(calculateRoundUp(4000)).toBe(0)
+  })
+
+  it('respeta pasos de $100 y $500', () => {
+    expect(calculateRoundUp(3250, 100)).toBe(50)
+    expect(calculateRoundUp(3250, 500)).toBe(250)
+  })
+
+  it('devuelve 0 con montos inválidos o pasos no positivos', () => {
+    expect(calculateRoundUp(-1500)).toBe(0)
+    expect(calculateRoundUp(3200, 0)).toBe(0)
+  })
+
+  it('suma el redondeo de todos los gastos del mes', () => {
+    expect(computeTotalRoundUpSavings([3200, 1500, 4000])).toBe(1300)
+    expect(computeTotalRoundUpSavings([null, 3200], 1000)).toBe(800)
+    expect(computeTotalRoundUpSavings([])).toBe(0)
   })
 })
 

@@ -28,6 +28,7 @@ import { useToast } from "@/context/ToastContext";
 import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
+import RoundUpSavingsCard from "@/components/RoundUpSavingsCard";
 import ImportTransactions from "@/components/ImportTransactions";
 import ZeroSpendStreak from "@/components/ZeroSpendStreak";
 import BackupRestore from "@/components/BackupRestore";
@@ -453,6 +454,7 @@ export default function Home() {
             <DebtsManager onTransactionAdded={fetchTransactions} />
             <BudgetManager />
             <SavingsGoals />
+            <RoundUpSavingsCard />
           </div>
         )}
 

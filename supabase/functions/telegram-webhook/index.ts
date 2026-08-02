@@ -96,6 +96,8 @@ import {
   isGoalStalled,
   monthlyEquivalentAmount,
   applyTax,
+  calculateRoundUp,
+  computeTotalRoundUpSavings,
 } from './reply-builder.ts'
 import type { BilleterasQuoteInput, TelegramReplyMarkup } from './reply-builder.ts'
 
@@ -1368,6 +1370,42 @@ Deno.serve(async (req: Request) => {
         },
       ])
       if (insertError) throw insertError
+
+      // Bolsillo de Cambio (Tanda 11c): si el ahorro por redondeo está
+      // activo, avisamos cuánto se redondeó y cuánto lleva el mes. Sin
+      // fila en roundup_savings aplican los valores por defecto (activado,
+      // paso $1.000).
+      let roundUp: { amount: number; total: number } | null = null
+      if (parsed.type === 'expense') {
+        const { data: settings, error: settingsError } = await supabaseAdmin
+          .from('roundup_savings')
+          .select('roundup_enabled, roundup_step')
+          .eq('user_id', link.user_id)
+          .maybeSingle()
+        if (!settingsError) {
+          const step = settings?.roundup_step ? Number(settings.roundup_step) : 1000
+          const enabled = settings ? settings.roundup_enabled : true
+          if (enabled) {
+            const roundUpAmount = calculateRoundUp(parsed.amount, step)
+            if (roundUpAmount > 0) {
+              const now = new Date()
+              const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+              const { data: monthExpenses } = await supabaseAdmin
+                .from('transactions')
+                .select('amount_ars')
+                .eq('user_id', link.user_id)
+                .eq('type', 'expense')
+                .gte('created_at', monthStartIso)
+              const total = computeTotalRoundUpSavings(
+                (monthExpenses ?? []).map((t) => t.amount_ars),
+                step
+              )
+              roundUp = { amount: roundUpAmount, total }
+            }
+          }
+        }
+      }
+
       await reply(
         buildExpenseConfirmedReply(
           parsed.amount,
@@ -1375,7 +1413,8 @@ Deno.serve(async (req: Request) => {
           parsed.type,
           walletName,
           categoryName,
-          parsed.notes
+          parsed.notes,
+          roundUp
         )
       )
     } else if (parsed.kind === 'debt') {

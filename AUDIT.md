@@ -3127,3 +3127,82 @@ Dashboard → SQL Editor), igual que `wallet_tna.sql` de la tanda anterior.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**71 archivos, 666 tests**, todos pasando
 — 649 previos + 17 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 11c — Ahorro por Redondeo "Bolsillo de Cambio"
+
+**Motivo**: como el "vuelto" de un comercio, cada gasto se redondea al
+múltiplo superior del paso elegido y la diferencia se acumula en un
+bolsillo para derivarla a una Meta de Ahorro. El monto en el frontend, la
+nota en la confirmación de gastos del bot y el acumulado del mes salen
+del mismo motor puro.
+
+### `src/lib/roundUpSavings.ts` (nuevo, motor puro)
+- `calculateRoundUp(amount, step = 1000)`: redondea un gasto al múltiplo
+  superior del paso (3.200 → +800, 1.500 → +500, 4.000 → +0 con paso
+  $1.000). Devuelve 0 con montos inválidos (NaN, negativos, cero) o pasos
+  no positivos, para que frontend y bot no validen aparte. Usa `round2`
+  de `src/lib/money.ts`.
+- `computeTotalRoundUpSavings(expenses, step = 1000)`: suma el redondeo
+  de cada gasto del período (`amount_ars`). Es el total que muestra la
+  tarjeta, el que aparece en la nota del bot y el que se deriva a una
+  meta.
+
+### Schema
+- `supabase/roundup_savings.sql` (nuevo, idempotente): tabla de
+  preferencias por usuario (user_id como primary key, patrón de
+  `user_work_settings.sql`) con `roundup_enabled boolean default true` y
+  `roundup_step numeric default 1000` (check > 0), RLS select/insert/
+  update own. Sin fila, aplican los valores por defecto (activado, paso
+  $1.000).
+- Tipos sincronizados en `src/types/database.ts` (`roundup_savings`
+  Row/Insert/Update). No se sumó a la cola offline: los settings se
+  guardan con upsert inline (el sync offline asume PK `id`, y acá la PK
+  es `user_id`).
+
+### UI Web App
+- **`RoundUpSavingsCard.tsx`** (nuevo, en la pestaña Planes, después de
+  Metas de Ahorro): toggle "Ahorro por redondeo", selector de paso
+  ($100/$500/$1.000), el total del mes ("💡 Este mes acumulaste $12.800",
+  redondeando los gastos del mes desde
+  `DashboardDataContext.monthExpenses`) y el CTA "Derivar $X a la meta"
+  que suma el acumulado al `current_amount` de la Meta de Ahorro elegida
+  (offline vía cola, patrón de SavingsGoals). Persiste preferencias con
+  `upsert { onConflict: 'user_id' }` (patrón de PaymentDetailsContext).
+- `src/app/page.tsx`: se monta `<RoundUpSavingsCard />` en la pestaña
+  Planes.
+
+### Bot de Telegram (réplicas Deno en `reply-builder.ts`)
+- `calculateRoundUp` / `computeTotalRoundUpSavings`: réplicas de
+  `src/lib/roundUpSavings.ts`.
+- `buildExpenseConfirmedReply` gana el parámetro opcional
+  `roundUp: { amount; total } | null`; cuando hay redondeo agrega al
+  final: `💡 +$800 asignados al Bolsillo de Cambio ($4.000 este mes).`
+- `index.ts`: al registrar un gasto lee `roundup_savings` del usuario (o
+  los valores por defecto si no hay fila) y, si está activo, calcula el
+  redondeo del gasto y el acumulado del mes (query de gastos del mes en
+  curso, patrón de `/resumen`).
+
+**⚠️ Acción tuya**: toca `supabase/functions/telegram-webhook/` (Deno) →
+hay que **re-desplegar la función** (`supabase functions deploy
+telegram-webhook`) para que la nota del Bolsillo de Cambio aparezca en la
+confirmación de gastos. Y correr `roundup_savings.sql` en la base
+(Supabase Dashboard → SQL Editor). Recordá que siguen pendientes de la
+11a/11b: `wallet_tna.sql`, `wallet_currency.sql` y el mismo redeploy.
+
+### Tests (18 nuevos, 684 totales)
+- `src/lib/__tests__/roundUpSavings.test.ts` (nuevo, 8): redondeo al
+  múltiplo superior por defecto y con pasos $100/$500, montos ya exactos
+  (redondeo 0), montos inválidos/pasos no positivos, y
+  `computeTotalRoundUpSavings` sumando, ignorando nulos, respetando el
+  paso (sin ruido de coma flotante) y con listas vacías/sin redondeos.
+- `RoundUpSavingsCard.test.tsx` (nuevo, 4): total del mes calculado desde
+  los gastos, estado desactivado, persistencia del toggle/paso en
+  `roundup_savings`, y la derivación que suma al `current_amount` de la
+  meta elegida.
+- `reply-builder.test.ts` (6 nuevos): nota del Bolsillo en la
+  confirmación, omisión cuando no hay redondeo, y la réplica
+  `calculateRoundUp`/`computeTotalRoundUpSavings`.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**73 archivos, 684 tests**, todos pasando
+— 666 previos + 18 nuevos), `npm run build` (OK).

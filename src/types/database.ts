@@ -555,6 +555,27 @@ export interface Database {
         }
         Relationships: []
       }
+      roundup_savings: {
+        Row: {
+          user_id: string
+          roundup_enabled: boolean
+          roundup_step: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          roundup_enabled?: boolean
+          roundup_step?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          roundup_enabled?: boolean
+          roundup_step?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_payment_details: {
         Row: {
           user_id: string
