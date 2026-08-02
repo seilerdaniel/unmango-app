@@ -56,6 +56,17 @@ export function walletMonthlyYield(balance: number, tna: number): number {
   return round2((balance * (tna / 100)) / 12)
 }
 
+// Conversión ARS ⇄ USD al tipo de cambio dado. Réplicas de
+// src/lib/exchangeRates.ts.
+export function convertUsdToArs(amountUsd: number, rate: number): number {
+  return round2(amountUsd * rate)
+}
+
+export function convertArsToUsd(amountArs: number, rate: number): number {
+  if (!(rate > 0)) return amountArs
+  return round2(amountArs / rate)
+}
+
 export interface SafeToSpendInput {
   totalBalance: number
   monthlyFixedCommitments: number
@@ -840,6 +851,8 @@ export interface WalletBalanceRow {
   usdHeld: number
   /** TNA en % con la que rinde la billetera (null/0 si no rinde). */
   tnaPercentage?: number | null
+  /** Moneda en que se denomina la billetera (default ARS). */
+  currency?: 'ARS' | 'USD'
 }
 
 /**
@@ -850,7 +863,14 @@ export interface WalletBalanceRow {
  * USD de las transacciones en dólares vinculadas para mostrarlo aparte.
  */
 export function computeWalletBalances(
-  wallets: { id: string; name: string; type: string; initialBalance: number; tna?: number | null }[],
+  wallets: {
+    id: string
+    name: string
+    type: string
+    initialBalance: number
+    tna?: number | null
+    currency?: 'ARS' | 'USD'
+  }[],
   transactions: { walletId: string | null; type: string; amountArs: number; isUsd: boolean; amountUsd: number | null }[]
 ): WalletBalanceRow[] {
   return wallets.map((w) => {
@@ -862,28 +882,114 @@ export function computeWalletBalances(
     const usdHeld = linked
       .filter((t) => t.isUsd)
       .reduce((acc, t) => acc + (Number(t.amountUsd) || 0), 0)
-    return { name: w.name, type: w.type, balance, usdHeld, tnaPercentage: w.tna ?? null }
+    return {
+      name: w.name,
+      type: w.type,
+      balance,
+      usdHeld,
+      tnaPercentage: w.tna ?? null,
+      currency: w.currency ?? 'ARS',
+    }
   })
 }
 
-export function buildBilleterasReply(items: WalletBalanceRow[]): string {
+/** Cotizaciones de referencia para /billeteras (MEP y Blue, venta). */
+export interface BilleterasQuoteInput {
+  mepSell: number | null
+  blueSell: number | null
+  /** Cuál se usa para convertir las billeteras en dólares. */
+  reference: 'mep' | 'blue'
+}
+
+/**
+ * Extrae las cotizaciones MEP (casa 'bolsa') y Blue de la respuesta
+ * cruda de dolarapi.com (GET /v1/dolares). Función pura para testearla.
+ */
+export function extractReferenceRates(payload: unknown): Pick<BilleterasQuoteInput, 'mepSell' | 'blueSell'> {
+  if (!Array.isArray(payload)) return { mepSell: null, blueSell: null }
+
+  let mepSell: number | null = null
+  let blueSell: number | null = null
+
+  for (const item of payload) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as { casa?: string; venta?: number | null }
+    const sell = Number(raw.venta)
+    const value = Number.isFinite(sell) ? sell : 0
+    if (raw.casa === 'bolsa' && value > 0) mepSell = value
+    if (raw.casa === 'blue' && value > 0) blueSell = value
+  }
+
+  return { mepSell, blueSell }
+}
+
+/**
+ * Muestra el saldo en USD de una billetera denominada en dólares,
+ * convertido al tipo de cambio de referencia. Si no hay cotización
+ * (offline), cae al USD real de sus movimientos (usdHeld) y, si no
+ * tiene, al saldo crudo.
+ */
+function formatUsdWallet(w: WalletBalanceRow, referenceSell: number | null): string {
+  if (referenceSell !== null && referenceSell > 0) {
+    return formatMoney(convertArsToUsd(w.balance, referenceSell), 'USD')
+  }
+  if (w.usdHeld > 0) return formatMoney(w.usdHeld, 'USD')
+  return formatMoney(w.balance, 'USD')
+}
+
+export function buildBilleterasReply(
+  items: WalletBalanceRow[],
+  quotes: BilleterasQuoteInput | null = null
+): string {
   if (items.length === 0) {
     return 'Todavía no creaste ninguna billetera. Creá una desde la app (Billeteras) y volvé a preguntarme /billeteras.'
   }
+
+  const referenceSell = quotes ? (quotes.reference === 'mep' ? quotes.mepSell : quotes.blueSell) : null
+
+  let totalArs = 0
+  let totalUsd = 0
+  let totalDaily = 0
+
   const lines = items.map((w) => {
     const label = WALLET_TYPE_LABELS[w.type] ?? w.type
-    const usd = w.usdHeld > 0 ? ` (+ ${formatMoney(w.usdHeld, 'USD')})` : ''
+    const isUsd = w.currency === 'USD'
     const tna = w.tnaPercentage ?? null
-    const yieldSuffix =
-      tna && tna > 0 ? ` (TNA ${tna}% → +${formatArs(walletDailyYield(w.balance, tna))}/día)` : ''
+
+    if (isUsd) {
+      totalUsd += w.balance
+      const usdAmount = formatUsdWallet(w, referenceSell)
+      return `• ${w.name} — ${usdAmount} [USD] [${label}]`
+    }
+
+    totalArs += w.balance
+    totalDaily += walletDailyYield(w.balance, tna ?? 0)
+    const yieldSuffix = tna && tna > 0 ? ` (TNA ${tna}% → +${formatArs(walletDailyYield(w.balance, tna))}/día)` : ''
+    const usd = w.usdHeld > 0 ? ` (+ ${formatMoney(w.usdHeld, 'USD')})` : ''
     return `• ${w.name} — ${formatArs(w.balance)}${yieldSuffix}${usd} [${label}]`
   })
-  const total = items.reduce((acc, w) => acc + w.balance, 0)
-  const totalDaily = round2(items.reduce((acc, w) => acc + walletDailyYield(w.balance, w.tnaPercentage ?? 0), 0))
-  const reply = ['Tus billeteras:', ...lines, '', `Total: ${formatArs(total)}`]
-  if (totalDaily > 0) {
-    reply.push(`Renta diaria total estimada: ${formatArs(totalDaily)}/día`)
+
+  const reply = ['Tus billeteras:', ...lines, '']
+
+  if (totalUsd > 0) {
+    const usdTotal = referenceSell !== null && referenceSell > 0 ? convertArsToUsd(totalUsd, referenceSell) : totalUsd
+    reply.push(`Total ARS: ${formatArs(totalArs)}`)
+    reply.push(`Total USD: ${formatMoney(usdTotal, 'USD')}`)
+  } else {
+    reply.push(`Total: ${formatArs(totalArs)}`)
   }
+
+  if (totalDaily > 0) {
+    reply.push(`Renta diaria total estimada: ${formatArs(round2(totalDaily))}/día`)
+  }
+
+  if (quotes) {
+    const quoteLines: string[] = []
+    if (quotes.mepSell !== null) quoteLines.push(`MEP: ${formatArs(quotes.mepSell)}`)
+    if (quotes.blueSell !== null) quoteLines.push(`Blue: ${formatArs(quotes.blueSell)}`)
+    if (quoteLines.length > 0) reply.push(`Dólar ${quoteLines.join(' · ')}`)
+  }
+
   return reply.join('\n')
 }
 

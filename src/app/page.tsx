@@ -39,6 +39,7 @@ import SubscriptionPriceAlerts from "@/components/SubscriptionPriceAlerts";
 import InstallmentTracker from "@/components/InstallmentTracker";
 import DebtsManager from "@/components/DebtsManager";
 import DollarRatesTable from "@/components/DollarRatesTable";
+import ExchangeRateControl from "@/components/ExchangeRateControl";
 import RecentTransactions from "@/components/RecentTransactions";
 import WalletCarousel from "@/components/WalletCarousel";
 import FinancialHealthScoreWidget from "@/components/FinancialHealthScoreWidget";
@@ -391,6 +392,7 @@ export default function Home() {
                     En billeteras: {isPrivate ? "••••••" : formatAmount(totalWalletBalance)}
                   </p>
                 )}
+                <ExchangeRateControl />
               </div>
 
               <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">

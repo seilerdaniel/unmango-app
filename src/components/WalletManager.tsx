@@ -8,6 +8,7 @@ import { usePrivacy } from '@/context/PrivacyContext'
 import { useToast } from '@/context/ToastContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import { sortWallets, filterWalletsByType, WalletSortField } from '@/lib/walletSort'
+import { convertArsToUsd } from '@/lib/exchangeRates'
 import ColorPicker from '@/components/ColorPicker'
 import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard, Pencil, X } from 'lucide-react'
 
@@ -46,6 +47,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [color, setColor] = useState('#6366f1')
   const [initialBalance, setInitialBalance] = useState('')
   const [tnaPercentage, setTnaPercentage] = useState('')
+  const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS')
   const [cardNetwork, setCardNetwork] = useState('Visa')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [sortField, setSortField] = useState<WalletSortField>('name')
@@ -53,7 +55,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [filterType, setFilterType] = useState('all')
   const [submitting, setSubmitting] = useState(false)
 
-  const { isPrivate, formatAmount } = usePrivacy()
+  const { isPrivate, formatAmount, blueRate } = usePrivacy()
   const { toast, confirmDialog } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -63,6 +65,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     setColor('#6366f1')
     setInitialBalance('')
     setTnaPercentage('')
+    setCurrency('ARS')
     setCardNetwork('Visa')
     setEditingId(null)
   }
@@ -74,6 +77,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     setColor(w.color || '#6366f1')
     setInitialBalance(String(w.initial_balance ?? ''))
     setTnaPercentage(w.tna_percentage != null ? String(w.tna_percentage) : '')
+    setCurrency(w.currency ?? 'ARS')
     setCardNetwork(w.card_network || 'Visa')
     if (typeof window !== 'undefined') containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -94,6 +98,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         color,
         initial_balance: Number(initialBalance) || 0,
         tna_percentage: parsedTna === null || Number.isNaN(parsedTna) ? null : parsedTna,
+        currency,
         card_network: isCard ? cardNetwork : null,
       }
 
@@ -195,12 +200,22 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         <input
           type="number"
           placeholder="Saldo inicial"
-          title="Cuánto tenés hoy en esta cuenta/billetera, para arrancar el conteo desde ahí (dejalo vacío si arranca en $0)"
+          title="Cuánto tenés hoy en esta cuenta/billetera, para arrancar el conteo desde ahí (dejalo vacío si arranca en $0). Si es una billetera en dólares, poné el saldo en dólares."
           value={initialBalance}
           onChange={(e) => setInitialBalance(e.target.value)}
           step="any"
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
+
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as 'ARS' | 'USD')}
+          title="Moneda de la billetera. En dólares, el saldo se muestra convertido al tipo de cambio MEP/Blue seleccionado en el Dashboard."
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <option value="ARS">ARS (pesos)</option>
+          <option value="USD">USD (dólares)</option>
+        </select>
 
         <input
           type="number"
@@ -287,6 +302,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {sortWallets(filterWalletsByType(wallets, filterType), sortField, sortAscending).map((w) => {
               const Icon = walletIconFor(w.type)
+              const isUsd = w.currency === 'USD'
               return (
               <div
                 key={w.id}
@@ -310,6 +326,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                     </p>
                     <p className="text-[11px] text-gray-400 font-medium">
                       {WALLET_TYPES.find((t) => t.value === w.type)?.label ?? 'Otra'}
+                      {isUsd ? ' · 🇺🇸 USD' : ''}
                       {w.card_network ? ` · ${w.card_network}` : ''}
                       {w.tna_percentage ? ` · TNA ${w.tna_percentage}%` : ''}
                     </p>
@@ -326,7 +343,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                   <span
                     className={`text-sm font-extrabold ${w.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-rose-600'}`}
                   >
-                    {isPrivate ? '••••••' : formatAmount(w.balance)}
+                    {isPrivate ? '••••••' : isUsd ? formatAmount(convertArsToUsd(w.balance, blueRate), 'USD') : formatAmount(w.balance)}
                   </span>
                   <div className="flex items-center gap-0.5">
                     <button

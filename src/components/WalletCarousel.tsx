@@ -5,6 +5,7 @@ import { usePrivacy } from '@/context/PrivacyContext'
 import { WalletWithBalance } from '@/types'
 import { Landmark, Banknote, Smartphone, CreditCard, WalletIcon } from 'lucide-react'
 import { dailyYield, consolidatedDailyYield, consolidatedMonthlyYield } from '@/lib/walletYield'
+import { convertArsToUsd } from '@/lib/exchangeRates'
 
 function walletIconFor(type: WalletWithBalance['type']) {
   switch (type) {
@@ -29,7 +30,7 @@ function walletIconFor(type: WalletWithBalance['type']) {
  * (WalletManager), esto es solo un vistazo rápido.
  */
 export default function WalletCarousel() {
-  const { isPrivate, formatAmount } = usePrivacy()
+  const { isPrivate, formatAmount, blueRate } = usePrivacy()
   const { wallets, loading } = useWallets()
 
   if (loading || wallets.length === 0) return null
@@ -60,6 +61,7 @@ export default function WalletCarousel() {
         {wallets.map((w) => {
           const Icon = walletIconFor(w.type)
           const yieldDaily = dailyYield(w.balance, w.tna_percentage ?? 0)
+          const isUsd = w.currency === 'USD'
           return (
             <div
               key={w.id}
@@ -73,11 +75,20 @@ export default function WalletCarousel() {
               </div>
               <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate" title={w.name}>
                 {w.name}
+                {isUsd && (
+                  <span className="ml-1 text-[9px] font-black text-emerald-600 dark:text-emerald-500 align-middle">
+                    🇺🇸 USD
+                  </span>
+                )}
               </p>
               <p
                 className={`text-sm font-extrabold mt-0.5 ${w.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-rose-600'}`}
               >
-                {isPrivate ? '••••••' : formatAmount(w.balance)}
+                {isPrivate
+                  ? '••••••'
+                  : isUsd
+                    ? formatAmount(convertArsToUsd(w.balance, blueRate), 'USD')
+                    : formatAmount(w.balance)}
               </p>
               {!isPrivate && yieldDaily > 0 && (
                 <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 mt-1">

@@ -3036,3 +3036,94 @@ que el resto de `supabase/*.sql`).
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**70 archivos, 649 tests**, todos pasando
 — 638 previos + 11 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 11b — Monitor Multidivisa & Cotizaciones USD (MEP/Blue/CCL)
+
+**Motivo**: la app consultaba dolarapi.com con fetch directo en 4
+componentes distintos (DolarWidget, DollarRatesTable, ArsUsdCalculator,
+ExchangeGapSimulator), cada uno con su propio formato, sin caché ni
+fallback, y las billeteras eran todas ARS. Acá se centraliza el servicio
+de cotizaciones con caché, se agrega la moneda a las billeteras y se
+puede ver el balance consolidado en ARS o USD al tipo de cambio MEP/Blue.
+
+### `src/lib/exchangeRates.ts` (nuevo, servicio de cotizaciones canónico)
+- `fetchExchangeRates()` consulta `GET https://dolarapi.com/v1/dolares`
+  con esta prioridad: caché en memoria fresca (≤ 15 min) → caché en
+  `localStorage` fresca → red → fallback offline con la caché vencida →
+  error si no hay nada. `fetcher` y `now` son inyectables para testear
+  red, TTL y fallbacks sin tocar la red real.
+- `parseExchangeRates()` mapea las casas de dolarapi a las 4 que usa la
+  app: `oficial`, `blue`, `bolsa`→**MEP** y `contadoconliqui`→**CCL**
+  (ignora tarjeta/mayorista/cripto y las cotizaciones sin valores).
+- `convertUsdToArs(amountUsd, rate)` y `convertArsToUsd(amountArs, rate)`
+  (con `round2` de `src/lib/money.ts`), más `quoteSell()` para buscar la
+  venta de una casa puntual. `EXCHANGE_RATES_TTL_MS = 15 min`.
+
+### Schema & Billeteras multidivisa
+- `supabase/wallet_currency.sql` (nuevo, idempotente):
+  `add column if not exists currency varchar(3) not null default 'ARS'`
+  + check `currency in ('ARS', 'USD')` (patrón de `wallet_cards.sql`).
+- Tipos sincronizados en `src/types/database.ts` (`wallets` Row/Insert/
+  Update con `currency: 'ARS' | 'USD'`). La moneda es la etiqueta/
+  denominación: el saldo se sigue llevando en `amount_ars` (igual que el
+  resto de la app) y se convierte a USD al tipo de cambio de referencia
+  para mostrarse.
+
+### UI Web App
+- **`WalletManager.tsx`**: select "ARS (pesos) / USD (dólares)" en alta y
+  edición (precarga el valor guardado, lo manda como `currency`). En la
+  lista, las cuentas en dólares muestran "🇺🇸 USD" y su saldo convertido
+  (`convertArsToUsd(balance, blueRate)` formateado como USD).
+- **`WalletCarousel.tsx`**: badge "🇺🇸 USD" junto al nombre y saldo
+  convertido para las cuentas en dólares (respeta el modo ojo).
+- **`ExchangeRateControl.tsx`** (nuevo, en la tarjeta Balance Disponible
+  del Dashboard): segmented **ARS/USD** que cambia la moneda de todo el
+  panel (vía `displayCurrency` de PrivacyContext) + selector **MEP/Blue**
+  que fija la cotización de referencia (`setBlueRate` al valor de venta)
+  con el número y un botón de refresh. Las cotizaciones salen de
+  `exchangeRates.ts` (caché de 15 min); offline avisa "sin cotización" y
+  conserva el último `blueRate`. Referencia persistida en
+  `localStorage` (`unmango_reference_rate`). Esto también arregla que
+  `blueRate` quedaba en el fallback 1200: antes solo lo seteaba
+  `DolarWidget`, que no está montado en ningún lado.
+
+### Bot de Telegram (réplicas Deno en `reply-builder.ts`)
+- `convertArsToUsd` / `convertUsdToArs`: réplicas de
+  `src/lib/exchangeRates.ts`.
+- `WalletBalanceRow` gana `currency`; `computeWalletBalances` acepta y
+  propaga la moneda por billetera.
+- `extractReferenceRates(payload)`: extrae MEP y Blue (venta) de la
+  respuesta cruda de dolarapi (función pura).
+- `buildBilleterasReply(items, quotes)`: las cuentas en dólares se
+  listan como `Caja USD — US$929.49 [USD] [Banco]` (convertidas al tipo
+  de referencia; sin cotizaciones cae a `usdHeld`), los totales se
+  separan en `Total ARS:` / `Total USD:`, y al final se agrega la línea
+  `Dólar MEP: $1.450 · Blue: $1.560`.
+- `index.ts`: `fetchWalletBalances` selecciona y propaga `currency`;
+  nuevo `fetchDolarQuotes()` (fetch a dolarapi con try/catch → null si
+  falla) que el handler `/billeteras` pasa al builder.
+
+**⚠️ Acción tuya**: de nuevo toca `supabase/functions/telegram-webhook/`
+(Deno) — hay que **re-desplegar la función** (`supabase functions deploy
+telegram-webhook`) para que `/billeteras` muestre las cuentas en USD y
+las cotizaciones. Y correr `wallet_currency.sql` en la base (Supabase
+Dashboard → SQL Editor), igual que `wallet_tna.sql` de la tanda anterior.
+
+### Tests (17 nuevos, 666 totales)
+- `src/lib/__tests__/exchangeRates.test.ts` (nuevo, 11): parse de las 4
+  casas + filtrado de las demás y de cotizaciones vacías, conversiones
+  ARS⇄USD (incl. redondeo y rate inválido), `quoteSell`, fetch que cachea
+  en memoria (1 sola llamada a red), uso de la caché fresca de
+  localStorage sin red, re-fetch cuando vence el TTL, fallback a la caché
+  vencida con la red caída, rechazo sin caché, y TTL de
+  `readExchangeRatesCache` con `allowStale`.
+- `WalletManager.test.tsx` (2 nuevos): alta guarda `currency: 'USD'` y la
+  lista muestra "🇺🇸 USD" + precarga al editar.
+- `reply-builder.test.ts` (4 nuevos): listado de cuentas USD con monto
+  convertido y totales separados + línea de cotizaciones, sin cotizaciones
+  (fallback `usdHeld`, sin línea de dólar), y `extractReferenceRates`
+  (MEP/Blue y payloads raros).
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**71 archivos, 666 tests**, todos pasando
+— 649 previos + 17 nuevos), `npm run build` (OK).

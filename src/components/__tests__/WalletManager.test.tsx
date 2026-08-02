@@ -127,6 +127,62 @@ describe('WalletManager', () => {
     expect(insertedRow.tna_percentage).toBe(38)
   })
 
+  it('guarda currency USD cuando se elige dólares', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: { wallets: { data: [], error: null } },
+        rpcResults: { get_wallet_balances: { data: [], error: null } },
+      })
+    )
+
+    renderWithProviders()
+
+    await screen.findByText(/Todavía no creaste ninguna billetera/i)
+
+    await userEvent.type(screen.getByPlaceholderText('Nombre'), 'Caja de ahorro USD')
+    await userEvent.selectOptions(screen.getAllByRole('combobox')[1], 'USD')
+    await userEvent.click(screen.getByRole('button', { name: /agregar/i }))
+
+    await waitFor(() => {
+      const walletBuilders = supabaseMock.from.mock.results
+        .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+        .map((r) => r.value)
+      expect(walletBuilders.find((b) => b.insert.mock.calls.length > 0)).toBeDefined()
+    })
+
+    const walletBuilders = supabaseMock.from.mock.results
+      .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+      .map((r) => r.value)
+    const insertedBuilder = walletBuilders.find((b) => b.insert.mock.calls.length > 0)!
+    const insertedRow = insertedBuilder.insert.mock.calls[0][0][0]
+
+    expect(insertedRow.currency).toBe('USD')
+  })
+
+  it('muestra la etiqueta USD en la lista y la precarga al editar', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          wallets: { data: [{ ...WALLET_ROW, name: 'Caja de ahorro USD', currency: 'USD' }], error: null },
+        },
+        rpcResults: {
+          get_wallet_balances: { data: [{ wallet_id: 'wallet-1', balance: 1450000 }], error: null },
+        },
+      })
+    )
+
+    renderWithProviders()
+
+    await screen.findByText('Caja de ahorro USD')
+    expect(screen.getByText(/🇺🇸 USD/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTitle('Editar billetera'))
+    const currencySelect = screen.getAllByRole('combobox')[1]
+    expect(currencySelect).toHaveValue('USD')
+  })
+
   it('el botón Editar precarga la TNA y la guarda con update()', async () => {
     Object.assign(
       supabaseMock,

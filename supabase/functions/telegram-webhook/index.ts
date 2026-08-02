@@ -89,6 +89,7 @@ import {
   computeUpcomingDueItems,
   computeWalletBalances,
   detectAntExpenses,
+  extractReferenceRates,
   generateAdviceMessages,
   getDaysRemainingInMonth,
   hasNoFinancialData,
@@ -96,7 +97,7 @@ import {
   monthlyEquivalentAmount,
   applyTax,
 } from './reply-builder.ts'
-import type { TelegramReplyMarkup } from './reply-builder.ts'
+import type { BilleterasQuoteInput, TelegramReplyMarkup } from './reply-builder.ts'
 
 interface TelegramUpdate {
   message?: {
@@ -382,7 +383,7 @@ async function fetchWalletBalances(
   const [walletsResult, transactionsResult] = await Promise.all([
     supabase
       .from('wallets')
-      .select('id, name, type, initial_balance, tna_percentage')
+      .select('id, name, type, initial_balance, tna_percentage, currency')
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
     supabase
@@ -402,6 +403,7 @@ async function fetchWalletBalances(
       type: w.type,
       initialBalance: Number(w.initial_balance) || 0,
       tna: w.tna_percentage !== null && w.tna_percentage !== undefined ? Number(w.tna_percentage) : null,
+      currency: w.currency === 'USD' ? ('USD' as const) : ('ARS' as const),
     })),
     (transactionsResult.data ?? []).map((t) => ({
       walletId: t.wallet_id,
@@ -411,6 +413,22 @@ async function fetchWalletBalances(
       amountUsd: t.amount_usd !== null ? Number(t.amount_usd) : null,
     }))
   )
+}
+
+// Cotizaciones MEP/Blue de dolarapi.com para /billeteras. Si falla
+// (sin conexión o respuesta rara), devuelve null y la respuesta de
+// billeteras se arma sin cotizaciones ni conversión.
+async function fetchDolarQuotes(): Promise<BilleterasQuoteInput | null> {
+  try {
+    const res = await fetch('https://dolarapi.com/v1/dolares')
+    if (!res.ok) return null
+    const payload: unknown = await res.json()
+    const { mepSell, blueSell } = extractReferenceRates(payload)
+    if (mepSell === null && blueSell === null) return null
+    return { mepSell, blueSell, reference: 'blue' }
+  } catch {
+    return null
+  }
 }
 
 // Vencimientos próximos: fijos activos, cuotas impagas y deudas "debo"
@@ -1204,7 +1222,8 @@ Deno.serve(async (req: Request) => {
         await reply(buildHogarReply(household.balance, household.unsettledDays))
       } else if (parsed.command === 'billeteras') {
         const balances = await fetchWalletBalances(supabaseAdmin, link.user_id)
-        await reply(buildBilleterasReply(balances))
+        const quotes = await fetchDolarQuotes()
+        await reply(buildBilleterasReply(balances, quotes))
       } else if (parsed.command === 'vencimientos') {
         const dueItems = await fetchUpcomingDueItems(supabaseAdmin, link.user_id)
         const payload = buildVencimientosPayload(dueItems)

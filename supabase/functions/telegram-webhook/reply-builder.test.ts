@@ -4,6 +4,7 @@ import {
   round2,
   walletDailyYield,
   walletMonthlyYield,
+  extractReferenceRates,
   buildBilleterasReply,
   buildConsejosReply,
   buildCuotasPayload,
@@ -663,6 +664,51 @@ describe('buildBilleterasReply', () => {
     expect(walletDailyYield(50000, 0)).toBe(0)
     expect(walletMonthlyYield(100000, 12)).toBe(1000)
     expect(walletMonthlyYield(0, 40)).toBe(0)
+  })
+
+  it('listas cuentas en USD con su monto convertido y totales separados', () => {
+    const reply = buildBilleterasReply(
+      [
+        { name: 'MercadoPago', type: 'virtual_wallet', balance: 150000, usdHeld: 0, tnaPercentage: 38 },
+        { name: 'Caja USD', type: 'bank', balance: 1450000, usdHeld: 0, currency: 'USD' },
+      ],
+      { mepSell: 1450, blueSell: 1560, reference: 'blue' }
+    )
+    expect(reply).toContain('MercadoPago — $150.000 (TNA 38% → +$156,16/día) [Billetera Virtual]')
+    expect(reply).toContain('Caja USD — US$929.49 [USD] [Banco]')
+    expect(reply).toContain('Total ARS: $150.000')
+    expect(reply).toContain('Total USD: US$929.49')
+    expect(reply).toContain('Renta diaria total estimada: $156,16/día')
+    expect(reply).toContain('Dólar MEP: $1.450 · Blue: $1.560')
+  })
+
+  it('sin cotizaciones no agrega la línea de dólar ni convierte USD', () => {
+    const reply = buildBilleterasReply(
+      [{ name: 'Caja USD', type: 'bank', balance: 1450000, usdHeld: 1000, currency: 'USD' }],
+      null
+    )
+    expect(reply).toContain('Caja USD — US$1,000 [USD] [Banco]')
+    expect(reply).toContain('Total ARS: $0')
+    expect(reply).toContain('Total USD: US$1,450,000')
+    expect(reply).not.toContain('Dólar MEP')
+    expect(reply).not.toContain('Dólar Blue')
+  })
+
+  it('extractReferenceRates saca MEP y Blue de la respuesta de dolarapi', () => {
+    const quotes = extractReferenceRates([
+      { casa: 'bolsa', venta: 1450.5 },
+      { casa: 'blue', venta: 1560 },
+      { casa: 'oficial', venta: 1020 },
+      { casa: 'tarjeta', venta: 1700 },
+      { casa: 'bolsa', venta: 0 },
+    ])
+    expect(quotes.mepSell).toBe(1450.5)
+    expect(quotes.blueSell).toBe(1560)
+  })
+
+  it('extractReferenceRates tolera respuestas vacías o raras', () => {
+    expect(extractReferenceRates(null)).toEqual({ mepSell: null, blueSell: null })
+    expect(extractReferenceRates([{}, { casa: 'blue', venta: null }])).toEqual({ mepSell: null, blueSell: null })
   })
 })
 

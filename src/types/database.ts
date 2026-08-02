@@ -227,6 +227,7 @@ export interface Database {
           created_at: string
           card_network: string | null
           tna_percentage: number | null
+          currency: 'ARS' | 'USD'
         }
         Insert: {
           id?: string
@@ -238,6 +239,7 @@ export interface Database {
           created_at?: string
           card_network?: string | null
           tna_percentage?: number | null
+          currency?: 'ARS' | 'USD'
         }
         Update: {
           id?: string
@@ -249,6 +251,7 @@ export interface Database {
           created_at?: string
           card_network?: string | null
           tna_percentage?: number | null
+          currency?: 'ARS' | 'USD'
         }
         Relationships: []
       }
