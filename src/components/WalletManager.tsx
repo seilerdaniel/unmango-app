@@ -45,6 +45,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const [type, setType] = useState<Wallet['type']>('virtual_wallet')
   const [color, setColor] = useState('#6366f1')
   const [initialBalance, setInitialBalance] = useState('')
+  const [tnaPercentage, setTnaPercentage] = useState('')
   const [cardNetwork, setCardNetwork] = useState('Visa')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [sortField, setSortField] = useState<WalletSortField>('name')
@@ -61,6 +62,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     setType('virtual_wallet')
     setColor('#6366f1')
     setInitialBalance('')
+    setTnaPercentage('')
     setCardNetwork('Visa')
     setEditingId(null)
   }
@@ -71,6 +73,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
     setType(w.type)
     setColor(w.color || '#6366f1')
     setInitialBalance(String(w.initial_balance ?? ''))
+    setTnaPercentage(w.tna_percentage != null ? String(w.tna_percentage) : '')
     setCardNetwork(w.card_network || 'Visa')
     if (typeof window !== 'undefined') containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -83,11 +86,14 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
 
     if (user) {
       const isCard = type === 'credit_card' || type === 'debit_card'
+      const rawTna = tnaPercentage.trim()
+      const parsedTna = rawTna === '' ? null : Number(rawTna)
       const payload = {
         name: name.trim(),
         type,
         color,
         initial_balance: Number(initialBalance) || 0,
+        tna_percentage: parsedTna === null || Number.isNaN(parsedTna) ? null : parsedTna,
         card_network: isCard ? cardNetwork : null,
       }
 
@@ -196,6 +202,17 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
           className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
 
+        <input
+          type="number"
+          placeholder="TNA % (opcional)"
+          title="Si esta cuenta rinde plata (billetera virtual con cuenta remunerada, FCI, plazo fijo), poné la tasa nominal anual en %. Con eso te mostramos cuánto te rinde por día y por mes."
+          value={tnaPercentage}
+          onChange={(e) => setTnaPercentage(e.target.value)}
+          min="0"
+          step="any"
+          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
         {(type === 'credit_card' || type === 'debit_card') && (
           <select
             value={cardNetwork}
@@ -294,6 +311,7 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
                     <p className="text-[11px] text-gray-400 font-medium">
                       {WALLET_TYPES.find((t) => t.value === w.type)?.label ?? 'Otra'}
                       {w.card_network ? ` · ${w.card_network}` : ''}
+                      {w.tna_percentage ? ` · TNA ${w.tna_percentage}%` : ''}
                     </p>
                   </div>
                 </div>

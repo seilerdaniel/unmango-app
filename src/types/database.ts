@@ -226,6 +226,7 @@ export interface Database {
           initial_balance: number
           created_at: string
           card_network: string | null
+          tna_percentage: number | null
         }
         Insert: {
           id?: string
@@ -236,6 +237,7 @@ export interface Database {
           initial_balance?: number
           created_at?: string
           card_network?: string | null
+          tna_percentage?: number | null
         }
         Update: {
           id?: string
@@ -246,6 +248,7 @@ export interface Database {
           initial_balance?: number
           created_at?: string
           card_network?: string | null
+          tna_percentage?: number | null
         }
         Relationships: []
       }

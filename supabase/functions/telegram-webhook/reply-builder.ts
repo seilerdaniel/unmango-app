@@ -43,6 +43,19 @@ export function applyTax(baseAmount: number, taxPercentage: number): number {
   return round2(baseAmount * (1 + taxPercentage / 100))
 }
 
+// Rendimiento diario/mensual de una billetera según su TNA (tasa nominal
+// anual en %), prorrateado a 365 días y 12 meses. Réplica de
+// src/lib/walletYield.ts — ver nota de duplicación al inicio del archivo.
+export function walletDailyYield(balance: number, tna: number): number {
+  if (balance <= 0 || !(tna > 0)) return 0
+  return round2((balance * (tna / 100)) / 365)
+}
+
+export function walletMonthlyYield(balance: number, tna: number): number {
+  if (balance <= 0 || !(tna > 0)) return 0
+  return round2((balance * (tna / 100)) / 12)
+}
+
 export interface SafeToSpendInput {
   totalBalance: number
   monthlyFixedCommitments: number
@@ -825,6 +838,8 @@ export interface WalletBalanceRow {
   balance: number
   /** Suma de amount_usd de las transacciones en dólares vinculadas (informativo). */
   usdHeld: number
+  /** TNA en % con la que rinde la billetera (null/0 si no rinde). */
+  tnaPercentage?: number | null
 }
 
 /**
@@ -835,7 +850,7 @@ export interface WalletBalanceRow {
  * USD de las transacciones en dólares vinculadas para mostrarlo aparte.
  */
 export function computeWalletBalances(
-  wallets: { id: string; name: string; type: string; initialBalance: number }[],
+  wallets: { id: string; name: string; type: string; initialBalance: number; tna?: number | null }[],
   transactions: { walletId: string | null; type: string; amountArs: number; isUsd: boolean; amountUsd: number | null }[]
 ): WalletBalanceRow[] {
   return wallets.map((w) => {
@@ -847,7 +862,7 @@ export function computeWalletBalances(
     const usdHeld = linked
       .filter((t) => t.isUsd)
       .reduce((acc, t) => acc + (Number(t.amountUsd) || 0), 0)
-    return { name: w.name, type: w.type, balance, usdHeld }
+    return { name: w.name, type: w.type, balance, usdHeld, tnaPercentage: w.tna ?? null }
   })
 }
 
@@ -858,10 +873,18 @@ export function buildBilleterasReply(items: WalletBalanceRow[]): string {
   const lines = items.map((w) => {
     const label = WALLET_TYPE_LABELS[w.type] ?? w.type
     const usd = w.usdHeld > 0 ? ` (+ ${formatMoney(w.usdHeld, 'USD')})` : ''
-    return `• ${w.name} — ${formatArs(w.balance)}${usd} [${label}]`
+    const tna = w.tnaPercentage ?? null
+    const yieldSuffix =
+      tna && tna > 0 ? ` (TNA ${tna}% → +${formatArs(walletDailyYield(w.balance, tna))}/día)` : ''
+    return `• ${w.name} — ${formatArs(w.balance)}${yieldSuffix}${usd} [${label}]`
   })
   const total = items.reduce((acc, w) => acc + w.balance, 0)
-  return ['Tus billeteras:', ...lines, '', `Total: ${formatArs(total)}`].join('\n')
+  const totalDaily = round2(items.reduce((acc, w) => acc + walletDailyYield(w.balance, w.tnaPercentage ?? 0), 0))
+  const reply = ['Tus billeteras:', ...lines, '', `Total: ${formatArs(total)}`]
+  if (totalDaily > 0) {
+    reply.push(`Renta diaria total estimada: ${formatArs(totalDaily)}/día`)
+  }
+  return reply.join('\n')
 }
 
 // ---------------- Vencimientos próximos (replicas de recurringBilling / installments / debts) ----------------

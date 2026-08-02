@@ -382,7 +382,7 @@ async function fetchWalletBalances(
   const [walletsResult, transactionsResult] = await Promise.all([
     supabase
       .from('wallets')
-      .select('id, name, type, initial_balance')
+      .select('id, name, type, initial_balance, tna_percentage')
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
     supabase
@@ -401,6 +401,7 @@ async function fetchWalletBalances(
       name: w.name,
       type: w.type,
       initialBalance: Number(w.initial_balance) || 0,
+      tna: w.tna_percentage !== null && w.tna_percentage !== undefined ? Number(w.tna_percentage) : null,
     })),
     (transactionsResult.data ?? []).map((t) => ({
       walletId: t.wallet_id,

@@ -4,6 +4,7 @@ import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { WalletWithBalance } from '@/types'
 import { Landmark, Banknote, Smartphone, CreditCard, WalletIcon } from 'lucide-react'
+import { dailyYield, consolidatedDailyYield, consolidatedMonthlyYield } from '@/lib/walletYield'
 
 function walletIconFor(type: WalletWithBalance['type']) {
   switch (type) {
@@ -33,14 +34,32 @@ export default function WalletCarousel() {
 
   if (loading || wallets.length === 0) return null
 
+  const totalDaily = consolidatedDailyYield(wallets)
+  const totalMonthly = consolidatedMonthlyYield(wallets)
+
   return (
     <div className="space-y-2">
       <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1">
         Mis Billeteras
       </h3>
+
+      {totalDaily > 0 && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 text-emerald-700 dark:text-emerald-400">
+          <span className="text-xs font-bold">📈 Rendimiento estimado</span>
+          {isPrivate ? (
+            <span className="text-xs font-extrabold">••••••</span>
+          ) : (
+            <span className="text-xs font-extrabold">
+              +{formatAmount(totalDaily)}/día · +{formatAmount(totalMonthly)}/mes
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
         {wallets.map((w) => {
           const Icon = walletIconFor(w.type)
+          const yieldDaily = dailyYield(w.balance, w.tna_percentage ?? 0)
           return (
             <div
               key={w.id}
@@ -60,6 +79,11 @@ export default function WalletCarousel() {
               >
                 {isPrivate ? '••••••' : formatAmount(w.balance)}
               </p>
+              {!isPrivate && yieldDaily > 0 && (
+                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 mt-1">
+                  📈 +{formatAmount(yieldDaily)}/día
+                </p>
+              )}
             </div>
           )
         })}

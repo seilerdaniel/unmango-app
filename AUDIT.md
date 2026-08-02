@@ -2975,3 +2975,64 @@ para que el `/safetospend` del bot use el mismo criterio con impuestos.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**69 archivos, 638 tests**, todos pasando
 — 631 previos + 7 nuevos de redondeo/impuestos), `npm run build` (OK).
+
+## ✅ Tanda 11a — Rendimientos de Billeteras Virtuales & FCI (TNA)
+
+**Motivo**: las billeteras pueden rendir (cuenta remunerada de Mercado
+Pago/Ualá, FCI, plazo fijo cargado como "banco") y no había forma de que
+la app lo contemplara. Ahora cada billetera puede tener una TNA (tasa
+nominal anual, en %) y se estima cuánto rinde por día y por mes, tanto en
+la web como en el bot de Telegram.
+
+### `supabase/wallet_tna.sql` (nuevo, idempotente)
+- `alter table public.wallets add column if not exists tna_percentage numeric default 0;`
+  (mismo patrón que `wallet_cards.sql`). Tipos sincronizados en
+  `src/types/database.ts` (`wallets` Row/Insert/Update con
+  `tna_percentage: number | null`).
+
+### `src/lib/walletYield.ts` (nuevo, motor de cálculo puro)
+- `dailyYield(balance, tna)` = `(balance * (tna/100)) / 365` y
+  `monthlyYield(balance, tna)` = `(balance * (tna/100)) / 12`, ambos con
+  `round2` de `src/lib/money.ts`; devuelven 0 con saldo ≤ 0 o TNA ≤ 0.
+- `consolidatedDailyYield` / `consolidatedMonthlyYield`: renta total
+  sumando solo las billeteras que rinden (TNA > 0).
+
+### UI
+- **`WalletManager.tsx`**: campo opcional "TNA % (opcional)" en el alta y
+  la edición; se guarda como `tna_percentage` (null si queda vacío) y se
+  precarga al editar. La lista de billeteras muestra la TNA en el detalle
+  (ej. `· TNA 38%`).
+- **`WalletCarousel.tsx`**: tarjeta de resumen "📈 Rendimiento estimado"
+  con el total diario y mensual (solo si hay algo que rinda, y respetando
+  el modo ojo), y badge por tarjeta "📈 +$X/día" cuando la billetera rinde.
+
+### Bot de Telegram (replica Deno en `reply-builder.ts`)
+- `walletDailyYield` / `walletMonthlyYield`: réplicas de `src/lib/walletYield.ts`
+  (misma nota de duplicación que el resto: Deno no importa `src/`).
+- `WalletBalanceRow` gana `tnaPercentage` y `computeWalletBalances`
+  acepta `tna` por billetera.
+- `/billeteras` ahora muestra el rendimiento por billetera
+  (`Mercado Pago — $150.000 (TNA 38% → +$156,16/día) [Billetera Virtual]`)
+  y la línea `Renta diaria total estimada: $X/día` cuando hay rendimiento.
+- `index.ts` `fetchWalletBalances`: selecciona y propaga `tna_percentage`.
+
+**⚠️ Acción tuya**: como el S1, esto toca `supabase/functions/telegram-webhook/`
+(Deno) — hay que **re-desplegar la función** (`supabase functions deploy
+telegram-webhook`) para que `/billeteras` muestre los rendimientos. Y
+correr `wallet_tna.sql` en la base (Supabase Dashboard → SQL Editor, igual
+que el resto de `supabase/*.sql`).
+
+### Tests (11 nuevos, 649 totales)
+- `src/lib/__tests__/walletYield.test.ts` (nuevo, 6): daily, monthly,
+  saldo 0 / TNA 0 / TNA negativa, consolidados diario y mensual, y array
+  vacío.
+- `WalletManager.test.tsx` (2 nuevos): el alta guarda `tna_percentage`,
+  y el botón Editar precarga la TNA y la guarda con `update()`.
+- `reply-builder.test.ts` (3 nuevos): `computeWalletBalances` propaga la
+  TNA, `buildBilleterasReply` muestra el rendimiento por billetera + la
+  renta diaria total, y `walletDailyYield`/`walletMonthlyYield` replican
+  el frontend.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**70 archivos, 649 tests**, todos pasando
+— 638 previos + 11 nuevos), `npm run build` (OK).

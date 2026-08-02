@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   applyTax,
   round2,
+  walletDailyYield,
+  walletMonthlyYield,
   buildBilleterasReply,
   buildConsejosReply,
   buildCuotasPayload,
@@ -635,6 +637,32 @@ describe('buildBilleterasReply', () => {
       ]
     )
     expect(rows[0].balance).toBe(4000)
+  })
+
+  it('computeWalletBalances propaga la TNA de cada billetera', () => {
+    const rows = computeWalletBalances(
+      [{ id: 'w1', name: 'Ualá', type: 'virtual_wallet', initialBalance: 1000, tna: 40 }],
+      []
+    )
+    expect(rows[0].tnaPercentage).toBe(40)
+  })
+
+  it('muestra el rendimiento diario por billetera y la renta total estimada', () => {
+    const reply = buildBilleterasReply([
+      { name: 'MercadoPago', type: 'virtual_wallet', balance: 150000, usdHeld: 0, tnaPercentage: 38 },
+      { name: 'Efectivo', type: 'cash', balance: 10000, usdHeld: 0, tnaPercentage: null },
+    ])
+    expect(reply).toContain('MercadoPago — $150.000 (TNA 38% → +$156,16/día) [Billetera Virtual]')
+    expect(reply).toContain('Efectivo — $10.000 [Efectivo]')
+    expect(reply).toContain('Renta diaria total estimada: $156,16/día')
+  })
+
+  it('walletDailyYield y walletMonthlyYield replican src/lib/walletYield.ts', () => {
+    expect(walletDailyYield(100000, 36.5)).toBe(100)
+    expect(walletDailyYield(150000, 38)).toBe(156.16)
+    expect(walletDailyYield(50000, 0)).toBe(0)
+    expect(walletMonthlyYield(100000, 12)).toBe(1000)
+    expect(walletMonthlyYield(0, 40)).toBe(0)
   })
 })
 

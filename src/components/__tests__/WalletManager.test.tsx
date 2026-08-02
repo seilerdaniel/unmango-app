@@ -94,6 +94,72 @@ describe('WalletManager', () => {
     expect(insertedRow).toHaveProperty('initial_balance')
   })
 
+  it('guarda tna_percentage cuando se carga una TNA', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: { wallets: { data: [], error: null } },
+        rpcResults: { get_wallet_balances: { data: [], error: null } },
+      })
+    )
+
+    renderWithProviders()
+
+    await screen.findByText(/Todavía no creaste ninguna billetera/i)
+
+    await userEvent.type(screen.getByPlaceholderText('Nombre'), 'Ualá')
+    await userEvent.type(screen.getByPlaceholderText('TNA % (opcional)'), '38')
+    await userEvent.click(screen.getByRole('button', { name: /agregar/i }))
+
+    await waitFor(() => {
+      const walletBuilders = supabaseMock.from.mock.results
+        .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+        .map((r) => r.value)
+      expect(walletBuilders.find((b) => b.insert.mock.calls.length > 0)).toBeDefined()
+    })
+
+    const walletBuilders = supabaseMock.from.mock.results
+      .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+      .map((r) => r.value)
+    const insertedBuilder = walletBuilders.find((b) => b.insert.mock.calls.length > 0)!
+    const insertedRow = insertedBuilder.insert.mock.calls[0][0][0]
+
+    expect(insertedRow.tna_percentage).toBe(38)
+  })
+
+  it('el botón Editar precarga la TNA y la guarda con update()', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          wallets: { data: [{ ...WALLET_ROW, tna_percentage: 38 }], error: null },
+        },
+        rpcResults: {
+          get_wallet_balances: { data: [{ wallet_id: 'wallet-1', balance: 4500 }], error: null },
+        },
+      })
+    )
+
+    renderWithProviders()
+
+    const editButton = await screen.findByTitle('Editar billetera')
+    await userEvent.click(editButton)
+
+    expect(screen.getByDisplayValue('38')).toBeInTheDocument()
+
+    const submitButton = screen.getByRole('button', { name: /guardar cambios/i })
+    await userEvent.click(submitButton)
+
+    await waitFor(() => {
+      const walletBuilders = supabaseMock.from.mock.results
+        .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+        .map((r) => r.value)
+      const updatedBuilder = walletBuilders.find((b) => b.update.mock.calls.length > 0)
+      expect(updatedBuilder).toBeDefined()
+      expect(updatedBuilder!.update.mock.calls[0][0]).toMatchObject({ tna_percentage: 38 })
+    })
+  })
+
   it('el botón Editar precarga el formulario y guarda con update() en vez de insert()', async () => {
     Object.assign(
       supabaseMock,
