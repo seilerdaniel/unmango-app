@@ -6,6 +6,7 @@ import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { computeSafeToSpend, getDaysRemainingInMonth, type SafeToSpendStatus } from '@/lib/safeToSpend'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
+import { applyTax } from '@/lib/applyTax'
 import { ShieldCheck, ShieldAlert, ShieldX, Wallet as WalletIcon } from 'lucide-react'
 
 const STATUS_UI: Record<
@@ -46,10 +47,13 @@ export default function SafeToSpendWidget() {
     const daysRemaining = getDaysRemainingInMonth(new Date())
 
     // Mismo criterio que "Fijo Comprometido": solo ARS, prorrateando
-    // las anuales a su equivalente mensual.
+    // las anuales a su equivalente mensual e incluyendo impuestos.
     const monthlyFixedCommitments = data.recurring
       .filter((r) => r.currency === 'ARS')
-      .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
+      .reduce(
+        (acc, r) => acc + monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency),
+        0
+      )
 
     return computeSafeToSpend({
       totalBalance,
@@ -102,7 +106,15 @@ export default function SafeToSpendWidget() {
         </div>
 
         {[
-          { label: 'Gastos fijos del mes', value: data.recurring.reduce((acc, r) => acc + (r.currency === 'ARS' ? monthlyEquivalentAmount(Number(r.amount), r.billing_frequency) : 0), 0) },
+          {
+            label: 'Gastos fijos del mes',
+            value: data.recurring.reduce(
+              (acc, r) =>
+                acc +
+                (r.currency === 'ARS' ? monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency) : 0),
+              0
+            ),
+          },
           { label: 'Presupuestos asignados', value: data.budgetAllocation },
           { label: 'Metas de ahorro', value: data.savingsContribution },
           { label: 'Cuotas del mes', value: data.installmentCommitments },

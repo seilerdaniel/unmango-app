@@ -17,4 +17,14 @@ describe('applyTax', () => {
   it('funciona con impuestos combinados altos (ej. IVA + impuesto PAIS)', () => {
     expect(applyTax(100, 75)).toBeCloseTo(175)
   })
+
+  it('redondea a 2 decimales para evitar ruido de coma flotante', () => {
+    // 999.99 * 1.21 = 1209.987899999... — sin redondeo quedaría ese resto.
+    expect(applyTax(999.99, 21)).toBe(1209.99)
+    expect(applyTax(1200, 5)).toBe(1260)
+  })
+
+  it('redondea anuales prorrateadas sin perder centavos', () => {
+    expect(applyTax(1000, 33.33)).toBe(1333.3)
+  })
 })

@@ -5,6 +5,8 @@ export interface InstallmentsVsCashResult {
   recommendation: 'contado' | 'cuotas'
 }
 
+import { round2 } from './money'
+
 /**
  * Compara pagar al contado vs. financiar en cuotas fijas, considerando
  * la inflación mensual estimada.
@@ -30,9 +32,10 @@ export function compareInstallmentsVsCash(
   for (let i = 1; i <= installmentsCount; i++) {
     presentValueFinanced += installmentAmount / Math.pow(1 + rate, i)
   }
+  presentValueFinanced = round2(presentValueFinanced)
 
-  const totalFinanced = installmentAmount * installmentsCount
-  const savingsAmount = cashPrice - presentValueFinanced
+  const totalFinanced = round2(installmentAmount * installmentsCount)
+  const savingsAmount = round2(cashPrice - presentValueFinanced)
 
   return {
     presentValueFinanced,

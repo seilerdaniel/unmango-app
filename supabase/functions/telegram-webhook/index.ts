@@ -94,6 +94,7 @@ import {
   hasNoFinancialData,
   isGoalStalled,
   monthlyEquivalentAmount,
+  applyTax,
 } from './reply-builder.ts'
 import type { TelegramReplyMarkup } from './reply-builder.ts'
 
@@ -292,7 +293,7 @@ async function fetchSafeToSpendData(
   const [recurring, budgets, goals, installments] = await Promise.all([
     supabase
       .from('recurring_expenses')
-      .select('amount, currency, billing_frequency')
+      .select('amount, currency, billing_frequency, tax_percentage')
       .eq('user_id', userId)
       .eq('is_active', true),
     supabase.from('budgets').select('monthly_limit').eq('user_id', userId),
@@ -309,9 +310,10 @@ async function fetchSafeToSpendData(
 
   return {
     // Mismo criterio que "Fijo Comprometido": solo ARS, prorrateando las
-    // anuales a su equivalente mensual.
+    // anuales a su equivalente mensual e incluyendo impuestos.
     monthlyFixedCommitments: (recurring.data ?? []).reduce(
-      (acc, r) => acc + (r.currency === 'ARS' ? monthlyEquivalentAmount(Number(r.amount), r.billing_frequency) : 0),
+      (acc, r) =>
+        acc + (r.currency === 'ARS' ? monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency) : 0),
       0
     ),
     budgetedAllocations: (budgets.data ?? []).reduce((acc, b) => acc + (Number(b.monthly_limit) || 0), 0),

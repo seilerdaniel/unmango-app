@@ -1,5 +1,7 @@
 export type BillingFrequency = 'monthly' | 'annual'
 
+import { round2 } from './money'
+
 function clampToLastDayOfMonth(year: number, month: number, day: number) {
   const lastDay = new Date(year, month + 1, 0).getDate()
   return Math.min(day, lastDay)
@@ -49,5 +51,5 @@ export function daysUntilNextBilling(
  * en vez de aparecer como si fuera un gasto mensual completo.
  */
 export function monthlyEquivalentAmount(amount: number, frequency: BillingFrequency): number {
-  return frequency === 'annual' ? amount / 12 : amount
+  return frequency === 'annual' ? round2(amount / 12) : amount
 }

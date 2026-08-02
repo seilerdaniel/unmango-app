@@ -15,6 +15,8 @@ export interface DashboardRecurring {
   amount: number | null
   currency: string | null
   billing_frequency: 'monthly' | 'annual'
+  /** % de impuestos que el precio de lista NO incluye (recurring_extra_fields.sql). */
+  tax_percentage: number | null
 }
 
 export interface DashboardInstallment {
@@ -84,7 +86,7 @@ export function DashboardDataProvider({ children }: { children: React.ReactNode 
             .gte('created_at', monthStart),
           supabase
             .from('recurring_expenses')
-            .select('amount, currency, billing_frequency')
+            .select('amount, currency, billing_frequency, tax_percentage')
             .eq('user_id', user.id)
             .eq('is_active', true),
           supabase
@@ -124,6 +126,7 @@ export function DashboardDataProvider({ children }: { children: React.ReactNode 
           amount: r.amount,
           currency: r.currency,
           billing_frequency: r.billing_frequency,
+          tax_percentage: r.tax_percentage ?? null,
         })),
         installments,
         totalIncome: Number(totalsResult.data?.[0]?.total_income) || 0,

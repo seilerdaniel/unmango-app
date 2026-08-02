@@ -16,6 +16,10 @@
  * ESTIMADA por el usuario, no una predicción real.
  */
 
+import { round2 } from './money'
+
+export { round2 }
+
 export interface FinancingOptionInput {
   id: string
   /** Cantidad de cuotas (>= 1). */
@@ -47,11 +51,6 @@ export interface InstallmentPurchaseSimulationResult {
   breakEvenInflationPercent: number
   /** La opción con mayor ahorro en valor presente de la simulación. */
   isBestOption: boolean
-}
-
-/** Redondea a 2 decimales (centavos) evitando ruido de coma flotante. */
-export function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
 /**

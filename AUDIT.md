@@ -2900,3 +2900,78 @@ resumen visual de gastos.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**69 archivos, 631 tests**,
 todos pasando — 605 previos + 26 nuevos), `npm run build` (OK).
+
+## ✅ Auditoría general de calidad, seguridad, precisión y rendimiento
+
+Auditoría transversal con revisión manual + 3 subagentes (sync offline,
+precisión matemática, privacidad/UX). Resultados y correcciones:
+
+### Seguridad — RLS (verificado, sin cambios)
+Se mapearon las **15 tablas** creadas en `supabase/*.sql` contra las
+políticas de RLS. Las 15 tienen `enable row level security` y políticas
+que usan `auth.uid()` (excepciones intencionales: `household_links`/
+`household_expenses` usan `user_a_id`/`user_b_id` o membresía del hogar,
+`telegram_links` valida por `user_id`, y `functions.sql` es `security
+invoker`). Los archivos restantes de `supabase/` son `ALTER TABLE` sobre
+tablas ya protegidas. Sin gaps encontrados.
+
+### Precisión matemática — 1 hallazgo SEVERO corregido (S1) + redondeo unificado
+- [x] **S1 — Safe-to-Spend, Un Mango Score, Recomendaciones y Proyección
+  ignoraban el `tax_percentage` de los gastos fijos**: el botón "Fijo
+  Comprometido" de Suscripciones sí sumaba el impuesto (usaba
+  `applyTax`), pero los 4 widgets de Inicio que declaran usar el mismo
+  criterio no lo hacían — subestimaban lo comprometido del mes cuando una
+  suscripción tenía impuestos. Se agregó `tax_percentage` al select del
+  `DashboardDataContext` (y al tipo `DashboardRecurring`) y ahora los 4
+  widgets aplican `applyTax` antes de prorratear: `SafeToSpendWidget`,
+  `FinancialHealthScoreWidget`, `FinancialAdviceWidget` y
+  `MonthEndProjection`. El bot de Telegram replicaba el mismo criterio en
+  `fetchSafeToSpendData` — se le aplicó el mismo fix (ver nota abajo).
+- [x] **Redondeo unificado**: el patrón `Math.round(x*100)/100` estaba
+  repetido con variantes. Se creó **`src/lib/money.ts`** con `round2`
+  (con `Number.EPSILON`, como ya hacía `installmentSimulator.ts`, que
+  ahora re-exporta desde ahí) y se aplicó en `applyTax.ts` (evita ruido
+  de coma flotante: `999.99 * 1.21` daba `1209.987899999...`),
+  `recurringBilling.ts` (anuales prorrateados ÷12 no divisibles, ej.
+  `100000/12` → `8333.33`) e `installmentsVsCash.ts` (valor presente,
+  total y ahorro). Se documentan como intencionales: `Math.floor` de la
+  primera cuota en `installments.ts` (reparte el resto en la última, la
+  suma da exacto) y los 0 decimales en ARS de `formatAmount`.
+
+### Sync offline (subagente, verificado sin cambios)
+Diseño consistente en todas las pantallas: cola FIFO persistente en
+`localStorage` (key `unmango_pending_sync`), ids locales `temp_<ts>_<rand>`
+y el patrón `if (isOffline()) enqueue(...)` en DebtsManager,
+InstallmentTracker, RecurringManager y SavingsGoals. Sin hallazgos.
+
+### Privacidad / modo ojo (subagente, hallazgo documentado)
+El enmascarado NO es declarativo: depende de que cada componente use
+`formatAmount()`/`isPrivate` (viven en `PrivacyContext`). Se verificó que
+las superficies principales lo respetan (`page.tsx` header e historial,
+`RecentTransactions`, `WalletCarousel`, `WalletManager`,
+`SafeToSpendWidget`, `MonthEndProjection`, `RecurringManager`). Los usos
+de `toLocaleString()`/`Intl.NumberFormat`/`toFixed()` que lo esquivan son
+de datos no sensibles (cotizaciones públicas en `DollarRatesTable`,
+porcentajes en `ExchangeGapSimulator`/`SubscriptionPriceAlerts`,
+previews de importación/QR/calculadora que son datos que el usuario está
+ingresando en ese momento). Queda como mejora futura: un componente
+`<Amount>` único que centralice formato + privacidad para que el modo ojo
+no dependa de la memoria de cada desarrollador.
+
+### Resiliencia del bot de Telegram (verificado, sin cambios)
+El webhook ya maneja bien los bordes: valida el secreto del webhook
+(401), devuelve 200 en updates no-mensaje para que Telegram no reintente,
+usa `answerCallbackQuery` (respuesta < 3s exigida por Telegram) tanto en
+éxito como en error de callback, y envuelve cada handler en try/catch con
+mensajes amigables. Los nuevos pagos por botón inline (`pay_debt`/
+`pay_installment`) siguen ese mismo patrón.
+
+**⚠️ Acción tuya**: el fix del S1 toca `supabase/functions/telegram-webhook/`
+(agregamos `applyTax`/`round2` a `reply-builder.ts` y lo usamos en
+`fetchSafeToSpendData`). Eso es código Deno que corre en Supabase — hay
+que **re-desplegar la función** (`supabase functions deploy telegram-webhook`)
+para que el `/safetospend` del bot use el mismo criterio con impuestos.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**69 archivos, 638 tests**, todos pasando
+— 631 previos + 7 nuevos de redondeo/impuestos), `npm run build` (OK).

@@ -5,6 +5,7 @@ import { useDashboardData } from '@/context/DashboardDataContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { projectMonthEnd } from '@/lib/monthProjection'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
+import { applyTax } from '@/lib/applyTax'
 import { TrendingUp } from 'lucide-react'
 
 export default function MonthEndProjection() {
@@ -26,11 +27,14 @@ export default function MonthEndProjection() {
       .reduce((acc, t) => acc + Number(t.amount_ars), 0)
 
     // Mismo criterio que "Fijo Comprometido" en Suscripciones: solo
-    // ARS (para no depender de una cotización USD acá), y los anuales
-    // se prorratean a su equivalente mensual.
+    // ARS (para no depender de una cotización USD acá), los anuales
+    // se prorratean a su equivalente mensual e incluyen impuestos.
     const fixedMonthlyCosts = data.recurring
       .filter((r) => r.currency === 'ARS')
-      .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
+      .reduce(
+        (acc, r) => acc + monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency),
+        0
+      )
 
     return projectMonthEnd({ variableSpendSoFar, fixedMonthlyCosts, monthlyIncome: data.monthlyIncome, dayOfMonth, daysInMonth })
   }, [data])

@@ -25,7 +25,22 @@ export type SafeToSpendStatus = 'safe' | 'tight' | 'over'
 export type BillingFrequency = 'monthly' | 'annual'
 
 export function monthlyEquivalentAmount(amount: number, frequency: BillingFrequency): number {
-  return frequency === 'annual' ? amount / 12 : amount
+  return frequency === 'annual' ? round2(amount / 12) : amount
+}
+
+// Redondea a 2 decimales (centavos) evitando ruido de coma flotante.
+// Es la réplica del round2 de src/lib/money.ts — ver nota de duplicación
+// al inicio del archivo: este runtime corre en Deno, no puede importar
+// el código del frontend.
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100
+}
+
+// Calcula el monto final incluyendo impuestos (% que el precio de lista
+// NO incluye). Réplica de src/lib/applyTax.ts.
+export function applyTax(baseAmount: number, taxPercentage: number): number {
+  if (!(taxPercentage > 0)) return baseAmount
+  return round2(baseAmount * (1 + taxPercentage / 100))
 }
 
 export interface SafeToSpendInput {

@@ -50,4 +50,8 @@ describe('monthlyEquivalentAmount', () => {
   it('un gasto anual se prorratea dividiendo por 12', () => {
     expect(monthlyEquivalentAmount(120000, 'annual')).toBe(10000)
   })
+
+  it('un gasto anual no divisible redondea a 2 decimales', () => {
+    expect(monthlyEquivalentAmount(100000, 'annual')).toBe(8333.33)
+  })
 })

@@ -11,6 +11,7 @@ import { generateFinancialAdvice, AdviceItem } from '@/lib/financialAdvice'
 import { detectAntExpenses } from '@/lib/antExpenses'
 import { detectPriceIncreases } from '@/lib/priceIncreases'
 import { monthlyEquivalentAmount } from '@/lib/recurringBilling'
+import { applyTax } from '@/lib/applyTax'
 import { computeSafeToSpend } from '@/lib/safeToSpend'
 import { computeStreakBreak } from '@/lib/zeroSpendStats'
 import { isGoalStalled } from '@/lib/savingsGoalStall'
@@ -99,7 +100,10 @@ export default function FinancialAdviceWidget({
 
       const fixedCommitments = dashboard.recurring
         .filter((r) => r.currency === 'ARS')
-        .reduce((acc, r) => acc + monthlyEquivalentAmount(Number(r.amount), r.billing_frequency), 0)
+        .reduce(
+          (acc, r) => acc + monthlyEquivalentAmount(applyTax(Number(r.amount), r.tax_percentage ?? 0), r.billing_frequency),
+          0
+        )
 
       const installmentsMonthlyObligation = dashboard.installments.reduce(
         (acc, p) => acc + Number(p.total_amount) / p.installments_count,

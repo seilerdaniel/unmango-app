@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  applyTax,
+  round2,
   buildBilleterasReply,
   buildConsejosReply,
   buildCuotasPayload,
@@ -82,8 +84,30 @@ describe('monthlyEquivalentAmount', () => {
     expect(monthlyEquivalentAmount(120000, 'annual')).toBe(10000)
   })
 
+  it('redondea a 2 decimales los anuales no divisibles', () => {
+    expect(monthlyEquivalentAmount(100000, 'annual')).toBe(8333.33)
+  })
+
   it('deja los mensuales igual', () => {
     expect(monthlyEquivalentAmount(10000, 'monthly')).toBe(10000)
+  })
+})
+
+describe('applyTax / round2', () => {
+  it('aplica el impuesto y redondea a 2 decimales', () => {
+    expect(applyTax(999.99, 21)).toBe(1209.99)
+    expect(applyTax(1200, 5)).toBe(1260)
+  })
+
+  it('devuelve el monto base si el impuesto es 0 o negativo', () => {
+    expect(applyTax(1000, 0)).toBe(1000)
+    expect(applyTax(1000, -5)).toBe(1000)
+  })
+
+  it('round2 elimina el ruido de coma flotante', () => {
+    expect(round2(1.005)).toBe(1.01)
+    expect(round2(3.3333)).toBe(3.33)
+    expect(round2(0)).toBe(0)
   })
 })
 
