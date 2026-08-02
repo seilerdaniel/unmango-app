@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/context/UserContext'
 import { useCategories } from '@/context/CategoriesContext'
@@ -9,6 +9,9 @@ import { useToast } from '@/context/ToastContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
 import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
+import InstallmentSimulator, {
+  type ConvertToInstallmentPlan,
+} from '@/components/tools/InstallmentSimulator'
 import { sortInstallmentPurchases, InstallmentSortField } from '@/lib/installmentsSort'
 import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 import { CreditCard, Plus, Trash2, CheckCircle2 } from 'lucide-react'
@@ -37,6 +40,8 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const [payingId, setPayingId] = useState<string | null>(null)
   const [sortField, setSortField] = useState<InstallmentSortField>('name')
   const [sortAscending, setSortAscending] = useState(true)
+  const formRef = useRef<HTMLFormElement>(null)
+  const descriptionRef = useRef<HTMLInputElement>(null)
 
   const loadPurchases = useCallback(async () => {
     try {
@@ -139,6 +144,14 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
       }
     }
     setSubmitting(false)
+  }
+
+  function handleConvertToInstallmentPurchase(plan: ConvertToInstallmentPlan) {
+    setDescription(plan.description)
+    setTotalAmount(String(plan.totalAmount))
+    setInstallmentsCount(String(plan.installmentsCount))
+    formRef.current?.scrollIntoView({ block: 'start' })
+    descriptionRef.current?.focus()
   }
 
   async function handleDeletePurchase(id: string) {
@@ -244,9 +257,11 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
       </h2>
 
       <InstallmentsVsCashSimulator />
+      <InstallmentSimulator onConvertToInstallmentPurchase={handleConvertToInstallmentPurchase} />
 
-      <form onSubmit={handleAddPurchase} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+      <form onSubmit={handleAddPurchase} ref={formRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
+          ref={descriptionRef}
           type="text"
           placeholder="Descripción"
           title="Ej: Notebook"

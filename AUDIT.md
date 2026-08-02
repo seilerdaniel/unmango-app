@@ -2749,3 +2749,76 @@ en vez de valor por cuota, y en la web no habia forma de editar una deuda.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
 (**0 errores, 0 warnings**), `npx vitest run` (**67 archivos, 577 tests**,
 todos pasando - 552 previos + 25 nuevos), `npm run build` (OK).
+
+## ✅ Tanda 9 (nueva) — Simulador Anti-inflación para Compras en Cuotas
+
+Feature nueva (la ejecución anterior quedó interrumpida antes de escribir
+nada: el árbol estaba limpio). A diferencia del simulador simple
+`InstallmentsVsCashSimulator` (un solo escenario, sí/no), este compara
+**varias opciones de financiación a la vez**, marca la mejor, muestra el
+punto de equilibrio con la inflación y puede **convertir el plan elegido
+en una compra en cuotas real** con el alta precargada.
+
+### `src/lib/installmentSimulator.ts` (nuevo, motor de cálculo puro)
+
+- `computePresentValue(amount, count, inflation%)` — descuenta cada cuota
+  futura al valor presente según la inflación mensual estimada (con 0% es
+  el nominal exacto; soporta deflación).
+- `computeBreakEvenInflationPercent(cashPrice, amount, count)` — la
+  inflación mensual a partir de la cual financiar pasa a convenir (donde
+  el valor presente de las cuotas empata al contado). Resuelto por
+  bisección (el valor presente decrece monótono con la tasa). Si el
+  nominal ni siquiera supera al contado (cuotas sin interés), devuelve 0.
+- `buildInterestFreeOption(count, cashPrice)` — arma una opción sin
+  interés con el redondeo repartido como el resto de la app.
+- `simulateInstallmentPurchase(input)` — simula todas las opciones y
+  marca `isBestOption` la de mayor ahorro en valor presente.
+- `round2()` — centavos sin ruido de coma flotante.
+
+La idea central (igual que `installmentsVsCash.ts`, con la que convive):
+cada cuota futura vale menos en poder de compra de hoy; si el costo real
+de financiar es menor al contado, conviene financiar.
+
+### `src/components/tools/InstallmentSimulator.tsx` (nuevo, UI)
+
+Modal accesible (`role="dialog"`) con: nombre del producto (opcional),
+precio de contado e inflación mensual %, más una lista de opciones de
+financiación que se pueden agregar/quitar, cada una con "sin interés"
+(checkbox que calcula el monto solo) o monto por cuota manual. Resultado
+ordenado por ahorro: total nominal, costo real (hoy), veredicto
+(conviene financiar/contado), break-even ("te conviene si la inflación
+supera el X% mensual") y badge "Mejor opción". Cada opción lleva el CTA
+**"Convertir en Compra en Cuotas"** que cierra el modal y dispara el
+alta precargada. Aclara explícitamente que no es asesoramiento
+financiero.
+
+### Integración — `src/components/InstallmentTracker.tsx`
+
+- El simulador se montó dentro de la sección Compras en Cuotas (Planes),
+  junto al simulador simple ya existente.
+- `handleConvertToInstallmentPurchase(plan)` **precarga el alta real**:
+  setea descripción, monto total (el nominal financiado) y cantidad de
+  cuotas en el formulario de alta de `installment_purchases`, hace
+  `scrollIntoView` al formulario y enfoca el campo de descripción — el
+  usuario solo confirma con "Agregar" (nunca se guarda directo, mismo
+  patrón de confirmación del resto de la app).
+
+### Tests (28 nuevos, 605 totales)
+
+- `src/lib/__tests__/installmentSimulator.test.ts` (nuevo, 23): valor
+  presente (0%, positiva, una cuota, deflación, 0 cuotas), break-even
+  (sin interés → 0, nominal menor al contado → 0, 12×10000 contra 100000
+  → ~2.92% con el PV empatando al contado), opción sin interés con
+  redondeo, simulación multi-opción (total nominal, PV, mejor opción,
+  contado sin inflación, inflación extrema sin infinitos, lista vacía).
+- `src/components/__tests__/InstallmentSimulator.test.tsx` (nuevo, 5):
+  apertura/cierre del modal, sin datos no calcula, la mejor opción
+  convierte con `{ description, totalAmount: 120000, installmentsCount: 6 }`,
+  precarga la descripción escrita, y agregar/quitar opciones.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .`
+(**0 errores, 0 warnings**), `npx vitest run` (**69 archivos, 605 tests**,
+todos pasando — 577 previos + 28 nuevos), `npm run build` (OK — el build
+en este sandbox requiere `.env.local` con las dos env vars de Supabase,
+es el hardening pre-existente de `supabaseClient.ts`, no algo de esta
+tanda; el archivo está gitignoreado y no se commitea).
