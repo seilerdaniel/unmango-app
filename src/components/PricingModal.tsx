@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect } from 'react'
-import { X, Crown, Home, Sparkles, Check, Star } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X, Crown, Home, Sparkles, Check, Star, Loader2 } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
+import { useUser } from '@/context/UserContext'
+import { useSubscription } from '@/context/SubscriptionContext'
 import { Plan } from '@/lib/subscription'
+import { supabase } from '@/lib/supabaseClient'
+import { redirectToCheckout } from '@/lib/checkout'
 
 interface PricingModalProps {
   isOpen: boolean
@@ -54,29 +58,57 @@ const PLANS: Array<{
 const PLAN_LABEL: Record<Plan, string> = { free: 'FREE', pro: 'PRO', hogar: 'HOGAR' }
 
 /**
- * Modal de precios / paywall (Tanda 11d): las tres tarjetas comparativas
- * (FREE / PRO / HOGAR) con la actual marcada. El pago online en línea no
- * está integrado todavía — al elegir un plan distinto se avisa que llega
- * en una próxima tanda.
+ * Modal de precios / paywall. Tanda 11d trajo las tarjetas comparativas
+ * (FREE / PRO / HOGAR) y el paywall simulado; la Tanda 12a suma el flujo
+ * real de pago: "Suscribirme con Mercado Pago" llama a la Edge Function
+ * mercadopago-checkout y redirige al checkout seguro (init_point) de
+ * Mercado Pago en ARS. Al abrir el modal se refresca la suscripción del
+ * usuario para reflejar un pago recién aprobado al volver.
  */
 export default function PricingModal({ isOpen, onClose, currentPlan }: PricingModalProps) {
   const { toast } = useToast()
+  const { user } = useUser()
+  const { refresh } = useSubscription()
+  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null)
 
   useEffect(() => {
     if (isOpen) {
+      refresh()
       const previousOverflow = document.body.style.overflow
       document.body.style.overflow = 'hidden'
       return () => {
         document.body.style.overflow = previousOverflow
       }
     }
-  }, [isOpen])
+  }, [isOpen, refresh])
 
   if (!isOpen) return null
 
-  function handleChoose(plan: Plan) {
+  async function handleSubscribe(plan: Plan) {
     if (plan === currentPlan) return
-    toast.info('El pago online se habilita en una próxima tanda — por ahora tu plan sigue activo.')
+    if (!user) {
+      toast.error('Iniciá sesión para suscribirte.')
+      return
+    }
+
+    setCheckoutPlan(plan)
+    try {
+      const { data, error } = await supabase.functions.invoke('mercadopago-checkout', {
+        body: { plan, userId: user.id },
+      })
+      if (error) throw error
+
+      const initPoint = data?.init_point as string | undefined
+      if (!initPoint) throw new Error('La pasarela no devolvió un link de pago.')
+
+      toast.success('Te estamos llevando al checkout seguro de Mercado Pago...')
+      redirectToCheckout(initPoint)
+    } catch (err) {
+      console.error('Error iniciando el checkout de Mercado Pago:', err)
+      toast.error('No se pudo iniciar el pago. Probá de nuevo en un rato.')
+    } finally {
+      setCheckoutPlan(null)
+    }
   }
 
   return (
@@ -104,6 +136,7 @@ export default function PricingModal({ isOpen, onClose, currentPlan }: PricingMo
             {PLANS.map((plan) => {
               const Icon = plan.icon
               const isCurrent = plan.id === currentPlan
+              const isProcessing = checkoutPlan === plan.id
               return (
                 <div
                   key={plan.id}
@@ -147,11 +180,19 @@ export default function PricingModal({ isOpen, onClose, currentPlan }: PricingMo
 
                   <button
                     type="button"
-                    onClick={() => handleChoose(plan.id)}
-                    disabled={isCurrent}
-                    className={`w-full text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-default ${plan.buttonClass}`}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={isCurrent || (checkoutPlan !== null && !isProcessing)}
+                    className={`w-full text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center justify-center gap-1.5 ${plan.buttonClass}`}
                   >
-                    {isCurrent ? 'Tu plan actual' : `Elegir ${plan.name}`}
+                    {isCurrent ? (
+                      'Tu plan actual'
+                    ) : isProcessing ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" /> Procesando...
+                      </>
+                    ) : (
+                      'Suscribirme con Mercado Pago'
+                    )}
                   </button>
                 </div>
               )

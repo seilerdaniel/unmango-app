@@ -1,16 +1,44 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import PricingModal from '../PricingModal'
-import { ToastProvider } from '@/context/ToastContext'
+import { AppProviders } from '@/test-utils/AppProviders'
+import { createSupabaseMock } from '@/test-utils/supabaseMock'
+import type { createSupabaseMock as CreateSupabaseMock } from '@/test-utils/supabaseMock'
+
+const { supabaseMock } = vi.hoisted(() => ({
+  supabaseMock: {} as ReturnType<typeof CreateSupabaseMock>,
+}))
+
+const { redirectToCheckout } = vi.hoisted(() => ({ redirectToCheckout: vi.fn() }))
+
+vi.mock('@/lib/supabaseClient', () => ({ supabase: supabaseMock }))
+vi.mock('@/lib/checkout', () => ({ redirectToCheckout }))
+
+const INIT_POINT = 'https://checkout.mercadopago.com.ar/PAY_ABC'
 
 function renderModal(overrides: Partial<React.ComponentProps<typeof PricingModal>> = {}) {
   return render(
-    <ToastProvider>
+    <AppProviders>
       <PricingModal isOpen currentPlan="free" onClose={() => {}} {...overrides} />
-    </ToastProvider>
+    </AppProviders>
   )
 }
+
+/** Espera a que UserProvider resuelva la sesión (el mock devuelve user-1). */
+async function waitForSession() {
+  await waitFor(() => expect(supabaseMock._fromCalls).toContain('subscriptions'))
+}
+
+beforeEach(() => {
+  // Todos los tests renderizan con AppProviders (UserProvider + ...), que
+  // llaman al mock de supabase apenas monta — sin asignar un mock válido
+  // `supabase.auth` queda undefined y explota. Por defecto, invoke() no
+  // devuelve nada; cada test que lo necesite lo sobrescribe con
+  // Object.assign.
+  Object.assign(supabaseMock, createSupabaseMock())
+  redirectToCheckout.mockClear()
+})
 
 describe('PricingModal', () => {
   it('no renderiza nada cuando está cerrado', () => {
@@ -38,12 +66,6 @@ describe('PricingModal', () => {
     expect(screen.getAllByText('Actual')).toHaveLength(1)
   })
 
-  it('elegir otro plan avisa que el pago online llega en una próxima tanda', async () => {
-    renderModal({ currentPlan: 'free' })
-    await userEvent.click(screen.getByRole('button', { name: /elegir pro/i }))
-    expect(await screen.findByText(/próxima tanda/i)).toBeInTheDocument()
-  })
-
   it('el botón del plan actual está deshabilitado', () => {
     renderModal({ currentPlan: 'free' })
     expect(screen.getByRole('button', { name: /tu plan actual/i })).toBeDisabled()
@@ -54,5 +76,82 @@ describe('PricingModal', () => {
     renderModal({ onClose })
     await userEvent.click(screen.getByTitle('Cerrar'))
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('suscribirse a PRO invoca mercadopago-checkout y redirige al init_point', async () => {
+    const invokeMock = vi.fn(async () => ({ data: { init_point: INIT_POINT }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /suscribirme con mercado pago/i })[0])
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('mercadopago-checkout', {
+        body: { plan: 'pro', userId: 'user-1' },
+      })
+    )
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(INIT_POINT))
+  })
+
+  it('suscribirse a HOGAR invoca con el plan hogar', async () => {
+    const invokeMock = vi.fn(async () => ({ data: { init_point: INIT_POINT }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /suscribirme con mercado pago/i })[1])
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('mercadopago-checkout', {
+        body: { plan: 'hogar', userId: 'user-1' },
+      })
+    )
+  })
+
+  it('muestra estado de carga mientras se procesa el checkout', async () => {
+    let resolveInvoke!: (value: { data: unknown; error: unknown }) => void
+    const invokeMock = vi.fn(
+      () => new Promise<{ data: unknown; error: unknown }>((resolve) => (resolveInvoke = resolve))
+    )
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /suscribirme con mercado pago/i })[0])
+
+    expect(await screen.findByText(/procesando/i)).toBeInTheDocument()
+
+    resolveInvoke({ data: { init_point: INIT_POINT }, error: null })
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(INIT_POINT))
+  })
+
+  it('muestra un error sin redirigir si la Edge Function falla', async () => {
+    const invokeMock = vi.fn(async () => ({ data: null, error: new Error('Network') }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /suscribirme con mercado pago/i })[0])
+
+    expect(await screen.findByText(/no se pudo iniciar el pago/i)).toBeInTheDocument()
+    expect(redirectToCheckout).not.toHaveBeenCalled()
+  })
+
+  it('muestra un error si la pasarela no devuelve init_point', async () => {
+    const invokeMock = vi.fn(async () => ({ data: { preapproval_id: 'PRE_1' }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /suscribirme con mercado pago/i })[0])
+
+    expect(await screen.findByText(/no se pudo iniciar el pago/i)).toBeInTheDocument()
+    expect(redirectToCheckout).not.toHaveBeenCalled()
   })
 })

@@ -3298,3 +3298,115 @@ Recordá que siguen pendientes de 11a/11b/11c: `wallet_tna.sql`,
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**75 archivos, 708 tests**, todos pasando
 — 684 previos + 24 nuevos), `npm run build` (OK).
+
+---
+
+# Tanda 12a — Suscripciones con Mercado Pago (ARS)
+
+**Fecha**: 2 de agosto de 2026. **Estado**: implementado y verificado
+localmente; falta setear el secret y desplegar las dos Edge Functions
+(ver "Acción tuya" abajo). Cierra el circuito de la Tanda 11d: el modal
+de precios deja de ser un paywall simulado y pasa a redirigir al
+checkout seguro de Mercado Pago.
+
+## Qué se construyó
+
+### Edge Function `mercadopago-checkout` (nuevo)
+- `supabase/functions/mercadopago-checkout/` (`index.ts` Deno +
+  `core.ts` puro).
+- POST con `{ plan: 'pro' | 'hogar', userId }`: identifica al usuario por
+  JWT (y rechaza si el `userId` del body no coincide con la sesión),
+  valida el plan, calcula el precio en ARS y crea un **Preapproval**
+  (suscripción mensual recurrente) en Mercado Pago.
+- Body del preapproval (en `core.ts`, `buildPreapprovalPayload`):
+  `auto_recurring { frequency: 1, frequency_type: 'months',
+  transaction_amount, currency_id: 'ARS' }`, `payer_email` (del JWT),
+  `external_reference: "unmango_<userId>_<plan>"`, `back_url` a la app y
+  `notification_url` → `mercadopago-webhook`.
+- Devuelve `{ init_point, preapproval_id }` para redirigir al checkout.
+- `verify_jwt = true` (config.toml): la llama el usuario logueado vía
+  `supabase.functions.invoke` (patrón de sync-google-calendar).
+
+### Edge Function `mercadopago-webhook` (nuevo)
+- `supabase/functions/mercadopago-webhook/` (`index.ts` Deno +
+  `core.ts` puro). `verify_jwt = false` (la llama Mercado Pago).
+- Parsea la notificación IPN (`type` en query o body + `data.id`),
+  descarta eventos no manejados (`test`, `merchant_order`, …) y, para
+  `preapproval` / `authorized_payment` / `payment`, consulta el recurso
+  en la API de MP y lee `status` + `external_reference`.
+- Si el status activa (`authorized` / `approved`) y la ref es
+  `unmango_<userId>_<plan>`, hace **upsert** en `subscriptions`
+  (`plan`, `status: 'active'`, `current_period_end = ahora + 30 días`,
+  con `onConflict: 'user_id'` → idempotente ante reintentos de MP).
+- Responde **HTTP 200 de inmediato** y termina el procesamiento en
+  background (Mercado Pago espera un ack rápido).
+- Seguridad: el webhook escribe con la service role, no confía en el
+  payload entrante. La verificación de firma `X-Signature` queda
+  documentada como mejora futura (la lógica vive en `core.ts`, testeable).
+
+### UI Web App — `src/components/PricingModal.tsx` (Tanda 11d → 12a)
+- El botón de los planes pasa de "Elegir X" (paywall simulado) a
+  **"Suscribirme con Mercado Pago"** para PRO/HOGAR.
+- Flujo: `supabase.functions.invoke('mercadopago-checkout', { body:
+  { plan, userId } })` → `redirectToCheckout(init_point)` (misma pestaña).
+- Estados: spinner "Procesando..." en el botón del plan elegido, toasts
+  de éxito/error, y deshabilitar los demás botones mientras hay un
+  checkout en curso.
+- Al abrir el modal se refresca la suscripción (`useSubscription`) para
+  reflejar un pago recién aprobado al volver de Mercado Pago.
+- `src/lib/checkout.ts` (nuevo): `redirectToCheckout(url)` separado para
+  poder mockearlo en tests (jsdom no deja espiar `window.location.assign`).
+
+### Infra y configuración
+- `supabase/config.toml`: `verify_jwt` de las dos funciones nuevas.
+- `.env.example`: documenta el secret `MERCADOPAGO_ACCESS_TOKEN` y los
+  opcionales `MERCADOPAGO_PRO_PRICE_ARS` / `MERCADOPAGO_HOGAR_PRICE_ARS` /
+  `APP_URL` (ver `.env.example` y los README de cada función).
+- READMEs: `mercadopago-checkout/README.md` y
+  `mercadopago-webhook/README.md` (credenciales + deploy + webhook).
+
+## Endpoints y variables requeridas
+
+| Función | Endpoint | verify_jwt | Secret requerido |
+| --- | --- | --- | --- |
+| mercadopago-checkout | `/functions/v1/mercadopago-checkout` | true | `MERCADOPAGO_ACCESS_TOKEN` |
+| mercadopago-webhook | `/functions/v1/mercadopago-webhook` | false | `MERCADOPAGO_ACCESS_TOKEN` |
+
+Precios ARS por defecto (sobreescribibles por env): PRO = **12.000 ARS**,
+HOGAR = **35.000 ARS** (equivalentes aproximados de US$9.99 / US$29.99).
+
+**⚠️ Acción tuya**: (1) `supabase secrets set
+MERCADOPAGO_ACCESS_TOKEN=<tu access token de MP>`, (2) desplegar las dos
+funciones (`supabase functions deploy mercadopago-checkout` y
+`supabase functions deploy mercadopago-webhook`), (3) en Mercado Pago
+Developers → tu app → Webhooks, apuntar a
+`https://<PROJECT_REF>.supabase.co/functions/v1/mercadopago-webhook` con
+los eventos `payment`, `authorized_payment` y `preapproval`, y (4) seguir
+pendiente de tandas anteriores: correr `wallet_tna.sql`,
+`wallet_currency.sql`, `roundup_savings.sql` y `subscriptions.sql`, y
+re-desplegar `telegram-webhook`.
+
+### Tests (30 nuevos, 738 totales)
+- `mercadopago-checkout/core.test.ts` (nuevo, 11): `isSupportedPlan`,
+  precios ARS por defecto y overrides (válidos/descartando NaN y 0),
+  `buildExternalReference`/`parseExternalReference` (round-trip y refs
+  inválidas), y el payload del preapproval (mensual, ARS, back_url,
+  notification_url, metadata) para PRO y HOGAR.
+- `mercadopago-webhook/core.test.ts` (nuevo, 15): parseo de la
+  notificación IPN (type en query/body, id en data.id o tope), tipos
+  manejados, external_reference duplicada, `computePeriodEndIso` (mes
+  normal, cruce de año, 31-ene → 28-feb sin desborde), status que
+  activa, y el orquestador `processMercadoPagoNotification` con mocks de
+  la API de MP y de `upsertSubscription`: evento no manejado, status no
+  aprobado, ref inválida, error de red, upsert que falla y activación
+  exitosa (preapproval autorizado + payment aprobado).
+- `PricingModal.test.tsx` (4 nuevos, 11 totales): invoca
+  `mercadopago-checkout` con `{ plan: 'pro'|'hogar', userId: 'user-1' }`,
+  redirige al `init_point`, spinner "Procesando...", y errores (función
+  que falla / sin init_point) sin redirigir. El helper `redirectToCheckout`
+  se mockea y `beforeEach` reasigna el mock de supabase.
+- `test-utils/supabaseMock.ts`: gana `functions.invoke` configurable.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**77 archivos, 738 tests**, todos pasando
+— 708 previos + 30 nuevos), `npm run build` (OK).

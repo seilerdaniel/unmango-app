@@ -69,6 +69,13 @@ export interface SupabaseMockConfig {
   tableResults?: Record<string, { data: unknown; error: unknown }>
   /** Resultado por defecto que devuelve `.rpc(fnName, args)` */
   rpcResults?: Record<string, { data: unknown; error: unknown }>
+  /** Implementación de `.functions.invoke(name, options)` (Edge Functions). */
+  functions?: {
+    invoke: (name: string, options?: { body?: unknown; method?: string }) => Promise<{
+      data: unknown
+      error: unknown
+    }>
+  }
 }
 
 const DEFAULT_USER = { id: 'user-1', email: 'test@example.com' }
@@ -101,6 +108,11 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}) {
       return makeQueryBuilder(tableResults[table] ?? { data: [], error: null })
     }),
     rpc: vi.fn(async (fnName: string) => rpcResults[fnName] ?? { data: [], error: null }),
+    functions: {
+      invoke:
+        config.functions?.invoke ??
+        vi.fn(async () => ({ data: null, error: null })),
+    },
     _fromCalls: fromCalls,
     /** Emula un evento de onAuthStateChange (p.ej. SIGNED_OUT, SIGNED_IN). */
     _emitAuthStateChange: (event: string, session: unknown) => {
