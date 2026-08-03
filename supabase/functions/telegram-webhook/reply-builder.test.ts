@@ -32,6 +32,7 @@ import {
   buildMainReplyKeyboard,
   buildMetasReply,
   buildNotLinkedReply,
+  buildPlanReply,
   buildQuickChartPieUrl,
   buildRecurringConfirmedReply,
   buildRecurringPaymentConfirmedReply,
@@ -290,6 +291,42 @@ describe('mensajes de texto', () => {
     expect(help).toContain('Heladera 200000 12 cuotas')
     expect(help).toContain('Pagué cuota Galicia 150000')
     expect(help).toContain('Pago 1 cuota Heladera')
+    expect(help).toContain('/plan')
+  })
+
+  describe('buildPlanReply', () => {
+    it('free: sin fila en subscriptions muestra el plan FREE y beneficios de PRO', () => {
+      const reply = buildPlanReply('free')
+      expect(reply).toContain('FREE')
+      expect(reply).toContain('$9.99')
+      expect(reply).toContain('Bolsillo de Cambio')
+      expect(reply).toContain('Billeteras ilimitadas')
+      expect(reply).toContain('hasta 2 billeteras')
+    })
+
+    it('free: plan desconocido se trata como free', () => {
+      expect(buildPlanReply('otro')).toContain('FREE')
+    })
+
+    it('pro: muestra el plan, la suscripción y la fecha de fin de período', () => {
+      const reply = buildPlanReply('pro', 'active', '2026-09-03T00:00:00.000Z')
+      expect(reply).toContain('PRO')
+      expect(reply).toContain('activa')
+      expect(reply).toContain('03/09/2026')
+      expect(reply).not.toContain('Finanzas colaborativas')
+    })
+
+    it('hogar: hereda PRO y suma finanzas colaborativas', () => {
+      const reply = buildPlanReply('hogar', 'trialing', null)
+      expect(reply).toContain('HOGAR')
+      expect(reply).toContain('en prueba')
+      expect(reply).toContain('Finanzas colaborativas')
+    })
+
+    it('formatPeriodEnd maneja fechas inválidas o null', () => {
+      expect(buildPlanReply('pro', 'active', 'fecha-invalida')).toContain('sin fecha de fin')
+      expect(buildPlanReply('pro', 'active', null)).toContain('sin fecha de fin')
+    })
   })
 })
 

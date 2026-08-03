@@ -23,6 +23,8 @@ export type TelegramCommand =
   | 'fijos'
   | 'consejos'
   | 'hogar'
+  | 'plan'
+  | 'pro'
   | 'billeteras'
   | 'vencimientos'
   | 'resumen'
@@ -83,6 +85,8 @@ const KNOWN_COMMANDS: Record<string, TelegramCommand> = {
   fijos: 'fijos',
   consejos: 'consejos',
   hogar: 'hogar',
+  plan: 'plan',
+  pro: 'pro',
   billeteras: 'billeteras',
   vencimientos: 'vencimientos',
   resumen: 'resumen',
@@ -609,8 +613,8 @@ function parseSavingsGoal(text: string): ParsedTelegramMessage | null {
 /**
  * Interpreta un mensaje entrante del bot: puede ser un comando
  * (/saldo, /gastado, /safetospend, /score, /deudas, /cuotas, /metas,
- * /fijos, /consejos, /hogar, /billeteras, /vencimientos, /resumen,
- * /gastos, /ayuda), el texto de un botón del teclado principal
+ * /fijos, /consejos, /hogar, /plan, /pro, /billeteras, /vencimientos,
+ * /resumen, /gastos, /ayuda), el texto de un botón del teclado principal
  * ("💳 Billeteras", "📅 Vencimientos", ...), un código de vinculación
  * (6 dígitos, con o sin "/start" adelante) o una intención en texto
  * libre: gasto ("Gasto 4500 café"), deuda ("Debo 5000 a Juan"), pago de

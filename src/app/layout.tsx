@@ -7,6 +7,7 @@ import { PrivacyProvider } from "@/context/PrivacyContext";
 import { CategoriesProvider } from "@/context/CategoriesContext";
 import { WalletsProvider } from "@/context/WalletsContext";
 import { DashboardDataProvider } from "@/context/DashboardDataContext";
+import { SubscriptionProvider } from "@/context/SubscriptionContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ToastProvider } from "@/context/ToastContext";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
@@ -91,7 +92,9 @@ export default function RootLayout({
                   <CategoriesProvider>
                     <WalletsProvider>
                       <DashboardDataProvider>
-                        <ToastProvider>{children}</ToastProvider>
+                        <SubscriptionProvider>
+                          <ToastProvider>{children}</ToastProvider>
+                        </SubscriptionProvider>
                       </DashboardDataProvider>
                     </WalletsProvider>
                   </CategoriesProvider>

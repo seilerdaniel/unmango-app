@@ -291,6 +291,33 @@ export interface Database {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          plan: 'free' | 'pro' | 'hogar'
+          status: 'active' | 'trialing' | 'canceled' | 'past_due'
+          current_period_end: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          plan?: 'free' | 'pro' | 'hogar'
+          status?: 'active' | 'trialing' | 'canceled' | 'past_due'
+          current_period_end?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          plan?: 'free' | 'pro' | 'hogar'
+          status?: 'active' | 'trialing' | 'canceled' | 'past_due'
+          current_period_end?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       installment_purchases: {
         Row: {
           id: string

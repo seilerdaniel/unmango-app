@@ -19,7 +19,9 @@
 // replica get_wallet_balances() (wallets.sql) y para /vencimientos las
 // fórmulas de nextBillingDate (src/lib/recurringBilling.ts),
 // computeInstallmentScheduleItems (src/lib/installments.ts) y la regla
-// de deudas pendientes (src/lib/debts.ts).
+// de deudas pendientes (src/lib/debts.ts). El concepto de plan/PRO de
+// /plan se replica de src/lib/subscription.ts (getUserPlan / hasProAccess).
+// El runtime de Deno no puede importar el código del frontend.
 
 export type SafeToSpendStatus = 'safe' | 'tight' | 'over'
 
@@ -165,6 +167,7 @@ export const HELP_TEXT = `Estos son los comandos que entiendo:
 /fijos — tus suscripciones y gastos fijos
 /consejos — recomendaciones según tus números
 /hogar — balance de gastos de hogar con tu pareja
+/plan o /pro — tu plan y beneficios de PRO
 /billeteras — saldo individual de cada billetera
 /vencimientos — lo que vence en los próximos 30 días
 /ayuda — este mensaje
@@ -183,6 +186,65 @@ mandarme texto libre, por ejemplo:
 
 export function buildHelpReply(): string {
   return HELP_TEXT
+}
+
+export type TelegramPlan = 'free' | 'pro' | 'hogar'
+
+/**
+ * Formatea la fecha de fin del período en español (ej. "03/09/2026").
+ * Se arma con los componentes UTC de la fecha (current_period_end se
+ * guarda como timestamptz en UTC) para que no dependa de la zona horaria
+ * del runtime.
+ */
+export function formatPeriodEnd(iso: string | null): string {
+  if (!iso) return 'sin fecha de fin'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return 'sin fecha de fin'
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${day}/${month}/${date.getUTCFullYear()}`
+}
+
+/**
+ * Respuesta de /plan y /pro (Tanda 11d): muestra el plan efectivo del
+ * usuario. Sin fila en `subscriptions` se asume 'free' (igual que
+ * getUserPlan en src/lib/subscription.ts). Para free, lista los
+ * beneficios de PRO y cómo activarlo.
+ */
+export function buildPlanReply(plan: string, status?: string, periodEnd?: string | null): string {
+  const effectivePlan: TelegramPlan = plan === 'pro' || plan === 'hogar' ? plan : 'free'
+
+  if (effectivePlan === 'free') {
+    return `🌱 Tu plan actual es FREE ($0).
+
+En FREE tenés el control esencial: hasta 2 billeteras activas, presupuestos y movimientos ilimitados.
+
+Beneficios de ⭐ PRO ($9.99/mes):
+• Bot IA 360° (todas las respuestas del bot)
+• TNA Billeteras (rendimiento de tus cuentas)
+• Multi-divisa (ARS + USD)
+• Bolsillo de Cambio
+• Reportes PDF
+• Billeteras ilimitadas
+
+Activá PRO desde el backoffice (próximamente: pago online).`
+  }
+
+  const statusLabel =
+    status === 'trialing' ? 'en prueba' : status === 'past_due' ? 'pago pendiente' : status === 'canceled' ? 'cancelada' : 'activa'
+
+  return `⭐ Tu plan es ${effectivePlan.toUpperCase()} — suscripción ${statusLabel} (hasta ${formatPeriodEnd(periodEnd ?? null)}).
+
+Beneficios:
+• Bot IA 360° (todas las respuestas del bot)
+• TNA Billeteras (rendimiento de tus cuentas)
+• Multi-divisa (ARS + USD)
+• Bolsillo de Cambio
+• Reportes PDF
+• Billeteras ilimitadas${effectivePlan === 'hogar' ? `
+• Finanzas colaborativas (hasta 4 integrantes)` : ''}
+
+Mandame /plan cuando quieras volver a ver esta info.`
 }
 
 export function buildLinkSuccessReply(): string {

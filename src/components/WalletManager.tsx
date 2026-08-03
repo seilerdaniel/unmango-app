@@ -6,11 +6,13 @@ import { useUser } from '@/context/UserContext'
 import { useWallets } from '@/context/WalletsContext'
 import { usePrivacy } from '@/context/PrivacyContext'
 import { useToast } from '@/context/ToastContext'
+import { useSubscription } from '@/context/SubscriptionContext'
 import { Wallet, WalletWithBalance } from '@/types'
 import { sortWallets, filterWalletsByType, WalletSortField } from '@/lib/walletSort'
+import { FREE_WALLET_LIMIT, hasProAccess } from '@/lib/subscription'
 import { convertArsToUsd } from '@/lib/exchangeRates'
 import ColorPicker from '@/components/ColorPicker'
-import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard, Pencil, X } from 'lucide-react'
+import { WalletIcon, Plus, Trash2, Landmark, Banknote, Smartphone, CreditCard, Pencil, X, Star } from 'lucide-react'
 
 const WALLET_TYPES: { value: Wallet['type']; label: string }[] = [
   { value: 'virtual_wallet', label: 'Billetera Virtual' },
@@ -39,9 +41,10 @@ function walletIconFor(type: Wallet['type']) {
   }
 }
 
-export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?: () => void }) {
+export default function WalletManager({ onWalletsUpdated, onOpenPricing }: { onWalletsUpdated?: () => void; onOpenPricing?: () => void }) {
   const { user } = useUser()
   const { wallets, totalBalance, loading, error } = useWallets()
+  const { plan } = useSubscription()
   const [name, setName] = useState('')
   const [type, setType] = useState<Wallet['type']>('virtual_wallet')
   const [color, setColor] = useState('#6366f1')
@@ -58,6 +61,9 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   const { isPrivate, formatAmount, blueRate } = usePrivacy()
   const { toast, confirmDialog } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const isPro = hasProAccess(plan)
+  const atFreeWalletLimit = !isPro && wallets.length >= FREE_WALLET_LIMIT
 
   function resetForm() {
     setName('')
@@ -85,6 +91,12 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
+
+    if (!editingId && atFreeWalletLimit) {
+      toast.warning(`Plan FREE: podés tener hasta ${FREE_WALLET_LIMIT} billeteras activas. Subí a PRO para ilimitadas.`)
+      if (onOpenPricing) onOpenPricing()
+      return
+    }
 
     setSubmitting(true)
 
@@ -173,6 +185,23 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
         </div>
       )}
 
+      {!isPro && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-300 text-xs font-bold px-3.5 py-2 rounded-xl border border-amber-200 dark:border-amber-900">
+          <span>
+            Plan FREE: {wallets.length}/{FREE_WALLET_LIMIT} billeteras usadas.
+          </span>
+          {atFreeWalletLimit && onOpenPricing && (
+            <button
+              type="button"
+              onClick={onOpenPricing}
+              className="flex items-center gap-1 text-[11px] bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition cursor-pointer shrink-0"
+            >
+              <Star size={12} /> Subir a PRO (ilimitadas)
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Formulario de alta / edición */}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
@@ -217,16 +246,28 @@ export default function WalletManager({ onWalletsUpdated }: { onWalletsUpdated?:
           <option value="USD">USD (dólares)</option>
         </select>
 
-        <input
-          type="number"
-          placeholder="TNA % (opcional)"
-          title="Si esta cuenta rinde plata (billetera virtual con cuenta remunerada, FCI, plazo fijo), poné la tasa nominal anual en %. Con eso te mostramos cuánto te rinde por día y por mes."
-          value={tnaPercentage}
-          onChange={(e) => setTnaPercentage(e.target.value)}
-          min="0"
-          step="any"
-          className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        <div className="relative">
+          <input
+            type="number"
+            placeholder="TNA % (opcional)"
+            title="Si esta cuenta rinde plata (billetera virtual con cuenta remunerada, FCI, plazo fijo), poné la tasa nominal anual en %. Con eso te mostramos cuánto te rinde por día y por mes."
+            value={tnaPercentage}
+            onChange={(e) => setTnaPercentage(e.target.value)}
+            min="0"
+            step="any"
+            className="w-full text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {!isPro && (
+            <button
+              type="button"
+              onClick={onOpenPricing}
+              title="La TNA es una función PRO"
+              className="absolute -top-2 right-2 flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wide bg-amber-500 text-white px-1.5 py-0.5 rounded-full shadow cursor-pointer"
+            >
+              <Star size={9} className="fill-current" /> PRO
+            </button>
+          )}
+        </div>
 
         {(type === 'credit_card' || type === 'debit_card') && (
           <select

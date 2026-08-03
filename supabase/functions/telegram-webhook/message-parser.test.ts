@@ -454,6 +454,11 @@ describe('parseTelegramMessage: comandos nuevos', () => {
     expect(parseTelegramMessage('/resumen')).toEqual({ kind: 'command', command: 'resumen' })
     expect(parseTelegramMessage('/gastos')).toEqual({ kind: 'command', command: 'gastos' })
   })
+
+  it('reconoce /plan y /pro', () => {
+    expect(parseTelegramMessage('/plan')).toEqual({ kind: 'command', command: 'plan' })
+    expect(parseTelegramMessage('/pro')).toEqual({ kind: 'command', command: 'pro' })
+  })
 })
 
 describe('parseTelegramMessage: botones del teclado principal', () => {

@@ -25,6 +25,8 @@ import { useUser } from "@/context/UserContext";
 import { useDashboardData } from "@/context/DashboardDataContext";
 import { useWallets } from "@/context/WalletsContext";
 import { useToast } from "@/context/ToastContext";
+import { useSubscription } from "@/context/SubscriptionContext";
+import PricingModal from "@/components/PricingModal";
 import RecurringManager from "@/components/RecurringManager";
 import WalletManager from "@/components/WalletManager";
 import SavingsGoals from "@/components/SavingsGoals";
@@ -62,6 +64,7 @@ import {
   Moon,
   Circle,
   Info,
+  Star,
   Settings as SettingsIcon,
 } from "lucide-react";
 
@@ -87,6 +90,9 @@ export default function Home() {
   // fetchTransactions() (cubre Carga Manual y "Pagar" en los managers) y
   // al cerrar Configuración (cubre billeteras y cualquier otro cambio ahí).
   const [dataVersion, setDataVersion] = useState(0);
+  // Modal de precios / paywall (Tanda 11d): lo abren el badge del header,
+  // el banner de billeteras de WalletManager y el badge [ ⭐ PRO ] de TNA.
+  const [pricingOpen, setPricingOpen] = useState(false);
   const router = useRouter();
 
   // Sesión cacheada a nivel global (ver AUDIT.md, Fase 1f): UserContext
@@ -104,6 +110,7 @@ export default function Home() {
   // mes, gastos, recurrentes, cuotas) y las billeteras con su saldo.
   const { data: dashboardData, refresh: refreshDashboard } = useDashboardData();
   const { wallets, totalBalance: walletsTotalBalance, refresh: refreshWallets } = useWallets();
+  const { plan: subscriptionPlan } = useSubscription();
 
   // Atajos de teclado: N nueva transacción, P modo privado, / buscar.
   useKeyboardShortcuts({
@@ -288,6 +295,16 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* Badge de plan — abre el modal de precios (Tanda 11d) */}
+            <button
+              onClick={() => setPricingOpen(true)}
+              title="Ver planes y precios"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition shadow-sm cursor-pointer bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/60"
+            >
+              <Star size={14} className={subscriptionPlan !== "free" ? "fill-current" : ""} />
+              {subscriptionPlan === "free" ? "FREE" : subscriptionPlan === "pro" ? "PRO" : "HOGAR"}
+            </button>
+
             {/* Ayuda de atajos de teclado (solo desktop, no compite por espacio en mobile) */}
             <div
               className="hidden lg:flex items-center gap-2.5 text-[10px] text-gray-400 dark:text-gray-500 font-medium mr-1"
@@ -588,7 +605,7 @@ export default function Home() {
         }}
       >
         <ImportTransactions onImported={fetchTransactions} />
-        <WalletManager onWalletsUpdated={() => setDataVersion((v) => v + 1)} />
+        <WalletManager onWalletsUpdated={() => setDataVersion((v) => v + 1)} onOpenPricing={() => setPricingOpen(true)} />
         <CategoryManager onCategoriesUpdated={fetchTransactions} />
         <BackupRestore />
         <TelegramLink />
@@ -603,6 +620,12 @@ export default function Home() {
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
 
       <SpeedDialFab onTransactionAdded={fetchTransactions} onManualEntry={handleManualEntry} />
+
+      <PricingModal
+        isOpen={pricingOpen}
+        onClose={() => setPricingOpen(false)}
+        currentPlan={subscriptionPlan}
+      />
     </main>
   );
 }

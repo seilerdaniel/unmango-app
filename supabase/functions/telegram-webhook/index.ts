@@ -67,6 +67,7 @@ import {
   buildMainReplyKeyboard,
   buildMetasReply,
   buildNotLinkedReply,
+  buildPlanReply,
   buildQuickChartPieUrl,
   buildRecurringConfirmedReply,
   buildRecurringPaymentConfirmedReply,
@@ -1230,6 +1231,20 @@ Deno.serve(async (req: Request) => {
         const dueItems = await fetchUpcomingDueItems(supabaseAdmin, link.user_id)
         const payload = buildVencimientosPayload(dueItems)
         await replyWithMarkup(payload.text, payload.replyMarkup)
+      } else if (parsed.command === 'plan' || parsed.command === 'pro') {
+        const { data: subscription, error: subError } = await supabaseAdmin
+          .from('subscriptions')
+          .select('plan, status, current_period_end')
+          .eq('user_id', link.user_id)
+          .maybeSingle()
+        if (subError) throw subError
+        await reply(
+          buildPlanReply(
+            subscription?.plan ?? 'free',
+            subscription?.status,
+            subscription?.current_period_end
+          )
+        )
       } else if (parsed.command === 'resumen' || parsed.command === 'gastos') {
         // Gráfico de torta (QuickChart) con la distribución de gastos del
         // mes por categoría, enviado como imagen con el desglose.

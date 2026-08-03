@@ -36,6 +36,18 @@ function renderWithProviders() {
   )
 }
 
+function renderWithProvidersAndPricing({ onOpenPricing }: { onOpenPricing: () => void }) {
+  return render(
+    <AppProviders>
+      <PrivacyProvider>
+        <WalletsProvider>
+          <WalletManager onOpenPricing={onOpenPricing} />
+        </WalletsProvider>
+      </PrivacyProvider>
+    </AppProviders>
+  )
+}
+
 describe('WalletManager', () => {
   it('muestra el saldo calculado por get_wallet_balances(), no el saldo inicial solo', async () => {
     Object.assign(
@@ -245,5 +257,74 @@ describe('WalletManager', () => {
       expect(updatedBuilder).toBeDefined()
       expect(updatedBuilder!.insert).not.toHaveBeenCalled()
     })
+  })
+
+  it('muestra el banner de plan FREE con el contador de billeteras', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: { wallets: { data: [WALLET_ROW], error: null } },
+        rpcResults: {
+          get_wallet_balances: { data: [{ wallet_id: 'wallet-1', balance: 4500 }], error: null },
+        },
+      })
+    )
+
+    renderWithProviders()
+
+    expect(await screen.findByText(/Plan FREE: 1\/2 billeteras usadas/i)).toBeInTheDocument()
+  })
+
+  it('muestra el badge [ ⭐ PRO ] en el campo TNA para el plan FREE', async () => {
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: { wallets: { data: [], error: null } },
+        rpcResults: { get_wallet_balances: { data: [], error: null } },
+      })
+    )
+
+    renderWithProviders()
+
+    await screen.findByText(/Todavía no creaste ninguna billetera/i)
+    const badge = screen.getByTitle('La TNA es una función PRO')
+    expect(badge).toHaveTextContent('PRO')
+  })
+
+  it('bloquea la creación en plan FREE al llegar al límite de 2 billeteras y abre el pricing', async () => {
+    const onOpenPricing = vi.fn()
+    Object.assign(
+      supabaseMock,
+      createSupabaseMock({
+        tableResults: {
+          wallets: {
+            data: [WALLET_ROW, { ...WALLET_ROW, id: 'wallet-2', name: 'Ualá' }],
+            error: null,
+          },
+        },
+        rpcResults: {
+          get_wallet_balances: {
+            data: [
+              { wallet_id: 'wallet-1', balance: 1000 },
+              { wallet_id: 'wallet-2', balance: 2000 },
+            ],
+            error: null,
+          },
+        },
+      })
+    )
+
+    renderWithProvidersAndPricing({ onOpenPricing })
+
+    expect(await screen.findByText(/Plan FREE: 2\/2 billeteras usadas/i)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByPlaceholderText('Nombre'), 'Banco')
+    await userEvent.click(screen.getByRole('button', { name: /agregar/i }))
+
+    expect(onOpenPricing).toHaveBeenCalled()
+    const walletBuilders = supabaseMock.from.mock.results
+      .filter((_, idx) => supabaseMock._fromCalls[idx] === 'wallets')
+      .map((r) => r.value)
+    expect(walletBuilders.some((b) => b.insert.mock.calls.length > 0)).toBe(false)
   })
 })

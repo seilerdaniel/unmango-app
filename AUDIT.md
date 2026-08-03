@@ -3206,3 +3206,95 @@ confirmación de gastos. Y correr `roundup_savings.sql` en la base
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**73 archivos, 684 tests**, todos pasando
 — 666 previos + 18 nuevos), `npm run build` (OK).
+
+---
+
+# Tanda 11d — Sistema de Suscripciones & Paywall PRO
+
+**Fecha**: 2 de agosto de 2026. **Estado**: implementado y verificado
+localmente; falta correr el SQL y re-desplegar la Edge Function (ver
+"Acción tuya" abajo).
+
+## Qué se construyó
+
+### Base de datos — `supabase/subscriptions.sql` (nuevo)
+- Tabla `subscriptions`: una fila por usuario (`user_id` UNIQUE FK a
+  `auth.users` con `on delete cascade`), `plan` con check
+  `'free'|'pro'|'hogar'` (default `'free'`), `status` con check
+  `'active'|'trialing'|'canceled'|'past_due'` (default `'active'`),
+  `current_period_end timestamptz` (null), `updated_at`.
+- RLS con políticas select/insert/update propias (`auth.uid() = user_id`),
+  patrón idempotente de `savings_goals.sql` / `roundup_savings.sql`.
+- **Sin fila en la tabla = plan `free`** (default de la base y del motor).
+
+### Motor puro — `src/lib/subscription.ts` (nuevo)
+- `getUserPlan(subscription | null)` → plan efectivo (`null`/desconocido
+  → `free`).
+- `hasProAccess(plan)` = `pro`|`hogar`; `hasHogarAccess(plan)` = `hogar`.
+- `canUseFeature(feature, plan)` matriz por feature (`quickchart`,
+  `tna`, `roundup`, `unlimited_wallets`, `export_pdf`): FREE → nada,
+  PRO → todo, HOGAR → todo (hereda PRO); feature desconocido → false.
+- Constantes `FREE_WALLET_LIMIT = 2` (billeteras del FREE) y
+  `HOUSEHOLD_PRO_LIMIT = 4` (integrantes del HOGAR).
+
+### Estado y UI Web App
+- `SubscriptionContext.tsx` (nuevo): carga `subscriptions` del usuario
+  con `maybeSingle()`; sin fila → plan `free`. Expone `subscription`,
+  `plan`, `loading` y `refresh`. Registrado en `layout.tsx` y en el
+  `AppProviders.tsx` de tests.
+- `PricingModal.tsx` (nuevo): tres tarjetas FREE ($0) / PRO ($9.99, la
+  "Popular") / HOGAR ($29.99) con features, badge "Actual" en el plan
+  vigente y CTA "Elegir X". El pago online **no está integrado**: al
+  elegir un plan distinto avisa con un toast que llega en una próxima
+  tanda (paywall simulado por ahora).
+- `page.tsx`: badge de plan en el header (`FREE`/`PRO`/`HOGAR` con ⭐) que
+  abre el modal, más el montaje de `<PricingModal />`.
+- `WalletManager.tsx`: banner del plan FREE ("Plan FREE: N/2 billeteras
+  usadas") y **bloqueo de alta** cuando el usuario free llegó al límite
+  (snackbar + abre el pricing); badge `[ ⭐ PRO ]` sobre el campo "TNA %"
+  para el plan FREE que abre el modal. El límite se calcula con
+  `wallets.length` (todas las billeteras son activas; no hay archivadas).
+- `src/types/database.ts` / `src/types/index.ts`: tipos de
+  `subscriptions` (Row/Insert/Update con `plan` y `status` tipados) y
+  `export type Subscription`.
+
+### Bot de Telegram
+- `message-parser.ts`: comandos `plan` y `pro` en la unión, en
+  `KNOWN_COMMANDS` y en el docstring.
+- `reply-builder.ts`: `buildPlanReply(plan, status?, periodEnd?)` — para
+  free lista el plan y los beneficios de PRO (y cómo activarlo); para
+  pro/hogar muestra plan, estado de la suscripción y fin de período con
+  `formatPeriodEnd` (estable en UTC). Agrega `/plan o /pro` al
+  `HELP_TEXT`. Concepto replicado de `src/lib/subscription.ts` (nota en
+  el encabezado del archivo).
+- `index.ts`: handler de `/plan`/`/pro` que lee `subscriptions` del
+  usuario vinculado (`plan, status, current_period_end`) y responde con
+  `buildPlanReply` (sin fila → free).
+
+**⚠️ Acción tuya**: toca `supabase/functions/telegram-webhook/` (Deno) →
+hay que **re-desplegar la función** (`supabase functions deploy
+telegram-webhook`) para que `/plan` y `/pro` funcionen, y correr
+`subscriptions.sql` en la base (Supabase Dashboard → SQL Editor).
+Recordá que siguen pendientes de 11a/11b/11c: `wallet_tna.sql`,
+`wallet_currency.sql`, `roundup_savings.sql` y el mismo redeploy.
+
+### Tests (24 nuevos, 708 totales)
+- `src/lib/__tests__/subscription.test.ts` (nuevo, 8): plan efectivo
+  (con fila, sin fila, plan desconocido), acceso PRO/HOGAR y la matriz
+  completa de `canUseFeature` por plan (FREE nada, PRO todo, HOGAR todo),
+  feature desconocido → false, y `FREE_WALLET_LIMIT = 2`.
+- `PricingModal.test.tsx` (nuevo, 7): cerrado → no renderiza, tres
+  tarjetas + precios, "Popular" en PRO, badge "Actual", elegir otro plan
+  avisa del paywall, botón del plan actual deshabilitado, cierre con X.
+- `WalletManager.test.tsx` (3 nuevos): banner del plan FREE con
+  contador, badge `[ ⭐ PRO ]` en el campo TNA, y bloqueo de alta al
+  llegar al límite de 2 billeteras (abre el pricing, no hay insert).
+- `message-parser.test.ts` (1 nuevo): `/plan` y `/pro` →
+  `{ kind: 'command', command: 'plan' | 'pro' }`.
+- `reply-builder.test.ts` (5 nuevos): `buildPlanReply` para free, plan
+  desconocido → free, pro con fecha (y sin finanzas colaborativas),
+  hogar con prueba, y `formatPeriodEnd` con fechas inválidas/null.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**75 archivos, 708 tests**, todos pasando
+— 684 previos + 24 nuevos), `npm run build` (OK).
