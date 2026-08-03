@@ -3536,3 +3536,95 @@ on-the-fly), y (6) seguir pendiente de tandas anteriores: correr
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**79 archivos, 780 tests**, todos pasando
 — 738 previos + 42 nuevos), `npm run build` (OK).
+
+# Tanda 12c — Login & Auth: FIX Google Calendar, rediseño de login, OAuth social
+
+**Fecha**: 2 de agosto de 2026. **Estado**: implementado y verificado
+localmente. Son tres tareas de robustez/UX sobre autenticación y la
+integración de Google Calendar (la Tanda 6b la trajo; acá se la
+blindó contra fallos).
+
+## 1) FIX Google Calendar — manejo de errores preventivo
+
+El objetivo era que la app nunca explote ni devuelva un error genérico
+cuando el usuario todavía no conectó su token de Calendar o cuando la API
+de Google falla.
+
+### `src/components/GoogleCalendarLink.tsx`
+- `handleConnect`: `signInWithOAuth` ahora va envuelto en `try/catch` —
+  si la llamada tira (red, proveedor no configurado) se muestra un toast
+  claro y el botón vuelve a habilitarse en vez de quedar colgado.
+- `handleSyncNow`: mensajes **graceful según el tipo de fallo**:
+  - Función responde 400 / "no está conectado" → guía al usuario a tocar
+    "Conectar Google Calendar" (antes mostraba un mensaje genérico).
+  - Sin sesión → "Necesitás iniciar sesión para sincronizar".
+  - Cualquier otro error (función no desplegada, red, Google API caída) →
+    mensaje transitorio "verificá la conexión a internet", sin crashear.
+- `handleDisconnect`: `try/catch` con toast de error en vez de fallo mudo.
+- Listener de `onAuthStateChange` (guardado del `provider_refresh_token`):
+  el upsert va en `try/catch`; si falla (red/RLS/tabla sin correr) solo se
+  loguea y el botón "Conectar" queda disponible para reintentar.
+
+### `supabase/functions/sync-google-calendar/index.ts`
+- Guarda superior en `Deno.serve`: cualquier error inesperado (red, Google
+  API caída, query que falla) devuelve un **JSON 500** en vez de crashear
+  la función y dejar al llamador con un error genérico.
+- Se chequea el `error` de la query de `google_calendar_events`
+  (`existingMappings`), que antes se ignoraba en silencio.
+- Se mantienen las respuestas distinguibles: 400 si no hay token
+  conectado, 401 si no se pudo renovar el access token de Google.
+
+## 2) Rediseño de la UI/UX de Login (`src/app/login/page.tsx`)
+
+Rediseño completo del login, moderno y responsive, alineado a la identidad
+de la app (ámbar, tonos gray, dark mode):
+
+- **Layout responsive**: en desktop, panel de marca a la izquierda con
+  gradiente ámbar (logo 🥭, tagline y 3 value props con íconos) + tarjeta
+  de autenticación a la derecha; en mobile, solo la tarjeta centrada.
+- **Formulario**: email + contraseña con toggle de visibilidad, estados de
+  carga/disabled, y manejo de errores también envuelto en `try/catch`
+  (fallback "ocurrió un error inesperado").
+- **Login social**: botones con íconos de marca oficiales (SVG inline de
+  Google y Microsoft), `aria-label` accesible.
+- Textos alineados al español argentino y compatibles con los tests e2e
+  (`heading UnMango`, labels "Correo Electrónico"/"Contraseña", toggle
+  "¿No tenés cuenta? Registrate gratis").
+
+## 3) Autenticación / OAuth Social Logins
+
+- **Google Sign-In**: verificado y finalizado — `signInWithOAuth` con
+  provider `google` y `redirectTo` al origen. Requiere el provider activo
+  en Supabase (Authentication → Providers → Google), que ya figura
+  habilitado en `config.toml`.
+- **Microsoft Sign-In**: completado — el login ya usaba `provider: 'azure'`;
+  se habilitó el bloque `[auth.external.azure]` en `supabase/config.toml`
+  (plantilla con `env(AZURE_CLIENT_ID)`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_URL`
+  para emular en local; en producción se carga en el dashboard).
+- **Apple Sign-In**: **oculto temporalmente** de la UI de login (sale del
+  listado de proveedores) porque no hay membresía activa de Apple
+  Developer. Se documenta en un comentario y en el texto del login; el
+  bloque de `config.toml` de Apple queda comentado como plantilla para
+  cuando existan las credenciales.
+
+## Infra y configuración
+
+- `supabase/config.toml`: `[auth.external.azure]` habilitado (Apple sigue
+  comentado).
+- `src/test-utils/supabaseMock.ts`: `auth` gana `signInWithPassword`,
+  `signUp` y `signInWithOAuth` (vi.fn) para poder testear el flujo de login.
+
+## Tests (9 nuevos, 789 totales)
+
+- `src/app/login/__tests__/page.test.tsx` (nuevo, 5): render del formulario
+  por defecto, Google y Microsoft visibles con **Apple ausente**, toggle a
+  registro, `signInWithPassword` con email/contraseña, y `signInWithOAuth`
+  con `provider: 'google'` y `'azure'`.
+- `src/components/__tests__/GoogleCalendarLink.test.tsx` (nuevo, 4):
+  estado "Conectar" sin token, mensaje de guía cuando el sync falla con 400
+  "no está conectado", mensaje transitorio ante error de red, y conteo
+  sincronizado cuando responde OK.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**81 archivos, 789 tests**, todos pasando
+— 780 previos + 9 nuevos), `npm run build` (OK).

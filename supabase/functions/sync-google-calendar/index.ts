@@ -99,7 +99,22 @@ async function deleteCalendarEvent(accessToken: string, calendarId: string, even
   }
 }
 
+// Guardas preventivos: cualquier error inesperado (red, Google API caída,
+// query que falla) se convierte en una respuesta JSON 500 en vez de crashear
+// la Edge Function y dejar el llamador con un error genérico.
 Deno.serve(async (req: Request) => {
+  try {
+    return await handleRequest(req)
+  } catch (err) {
+    console.error('sync-google-calendar: error inesperado:', err)
+    return new Response(
+      JSON.stringify({ error: 'Error inesperado sincronizando con Google Calendar. Probá de nuevo en un rato.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+})
+
+async function handleRequest(req: Request): Promise<Response> {
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID')
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
@@ -189,10 +204,17 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const { data: existingMappings } = await supabaseAdmin
+  const { data: existingMappings, error: mappingsError } = await supabaseAdmin
     .from('google_calendar_events')
     .select('source_table, source_id, google_event_id')
     .eq('user_id', user.id)
+
+  if (mappingsError) {
+    return new Response(JSON.stringify({ error: mappingsError.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
   const mappingKey = (sourceTable: string, sourceId: string) => `${sourceTable}:${sourceId}`
   const mappingBySource = new Map((existingMappings ?? []).map((m) => [mappingKey(m.source_table, m.source_id), m.google_event_id]))
@@ -269,4 +291,4 @@ Deno.serve(async (req: Request) => {
   return new Response(JSON.stringify({ synced, total: entries.length, errors }), {
     headers: { 'Content-Type': 'application/json' },
   })
-})
+}

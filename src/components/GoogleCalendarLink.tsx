@@ -56,17 +56,24 @@ export default function GoogleCalendarLink() {
     // persiste en ningún lado por su cuenta.
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.provider_refresh_token && session.provider_token) {
-        const { error } = await supabase.from('google_calendar_tokens').upsert(
-          {
-            user_id: session.user.id,
-            refresh_token: session.provider_refresh_token,
-          },
-          { onConflict: 'user_id' }
-        )
-        if (!error) {
-          setConnected(true)
-        } else {
-          console.error('Error guardando el refresh_token de Google:', error)
+        try {
+          const { error } = await supabase.from('google_calendar_tokens').upsert(
+            {
+              user_id: session.user.id,
+              refresh_token: session.provider_refresh_token,
+            },
+            { onConflict: 'user_id' }
+          )
+          if (!error) {
+            setConnected(true)
+          } else {
+            console.error('Error guardando el refresh_token de Google:', error)
+          }
+        } catch (err) {
+          // Fallback graceful: si el upsert falla (red, RLS, tabla sin
+          // correr) no tiramos la app — solo se loguea y el botón
+          // "Conectar" sigue disponible para reintentar.
+          console.error('Error inesperado guardando el refresh_token de Google:', err)
         }
       }
     })
@@ -78,20 +85,26 @@ export default function GoogleCalendarLink() {
 
   async function handleConnect() {
     setConnecting(true)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        scopes: CALENDAR_SCOPE,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
-        redirectTo: `${window.location.origin}/`,
-      },
-    })
-    if (error) {
-      toast.error('Error conectando con Google: ' + error.message)
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: CALENDAR_SCOPE,
+          queryParams: { access_type: 'offline', prompt: 'consent' },
+          redirectTo: `${window.location.origin}/`,
+        },
+      })
+      if (error) {
+        toast.error('No se pudo iniciar la conexión con Google: ' + error.message)
+        setConnecting(false)
+      }
+      // Si no hay error, el navegador redirige a Google — no hace falta
+      // hacer nada más acá.
+    } catch (err) {
+      console.error('Error inesperado conectando con Google Calendar:', err)
+      toast.error('No se pudo conectar con Google. Probá de nuevo en un rato.')
       setConnecting(false)
     }
-    // Si no hay error, el navegador redirige a Google — no hace falta
-    // hacer nada más acá.
   }
 
   async function handleDisconnect() {
@@ -105,11 +118,16 @@ export default function GoogleCalendarLink() {
 
     if (!user) return
 
-    const { error } = await supabase.from('google_calendar_tokens').delete().eq('user_id', user.id)
-    if (!error) {
-      setConnected(false)
-    } else {
-      toast.error('Error al desconectar: ' + error.message)
+    try {
+      const { error } = await supabase.from('google_calendar_tokens').delete().eq('user_id', user.id)
+      if (!error) {
+        setConnected(false)
+      } else {
+        toast.error('Error al desconectar: ' + error.message)
+      }
+    } catch (err) {
+      console.error('Error inesperado desconectando Google Calendar:', err)
+      toast.error('No se pudo desconectar. Probá de nuevo en un rato.')
     }
   }
 
@@ -118,17 +136,34 @@ export default function GoogleCalendarLink() {
     setLastSyncMessage(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      if (!session) {
+        setLastSyncMessage('Necesitás iniciar sesión para sincronizar tu calendario.')
+        return
+      }
 
       const { data, error } = await supabase.functions.invoke('sync-google-calendar', {
         method: 'POST',
       })
 
-      if (error) throw error
+      if (error) {
+        const message = String((error as { message?: unknown })?.message ?? error)
+        // Fallback graceful según el tipo de fallo: si el usuario todavía
+        // no conectó el token (400 de la función), lo guiamos a conectar;
+        // cualquier otra cosa (función no desplegada, red, Google API caída)
+        // se muestra como error transitorio sin romper la UI.
+        if (/no est[áa] conectado|400/i.test(message)) {
+          setLastSyncMessage('Google Calendar no está conectado. Tocá "Conectar Google Calendar" y volvé a intentar.')
+        } else {
+          setLastSyncMessage('No se pudo sincronizar con Google Calendar. Verificá la conexión a internet y volvé a intentar.')
+        }
+        console.error('Error sincronizando con Google Calendar:', error)
+        return
+      }
+
       setLastSyncMessage(`Sincronizado: ${data?.synced ?? 0} evento(s) actualizados.`)
     } catch (err) {
-      setLastSyncMessage('Error al sincronizar — revisá que la Edge Function esté desplegada.')
-      console.error('Error sincronizando con Google Calendar:', err)
+      setLastSyncMessage('No se pudo sincronizar con Google Calendar. Verificá la conexión a internet y volvé a intentar.')
+      console.error('Error inesperado sincronizando con Google Calendar:', err)
     } finally {
       setSyncing(false)
     }

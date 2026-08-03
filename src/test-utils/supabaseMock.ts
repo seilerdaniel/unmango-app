@@ -98,6 +98,12 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}) {
       getUser: vi.fn(async () => ({ data: { user }, error: null })),
       getSession: vi.fn(async () => ({ data: { session: user ? { user } : null }, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
+      signInWithPassword: vi.fn(async () => ({
+        data: user ? { user, session: { user } } : { user: null, session: null },
+        error: null,
+      })),
+      signUp: vi.fn(async () => ({ data: { user }, error: null })),
+      signInWithOAuth: vi.fn(async () => ({ data: { provider: 'google', url: null }, error: null })),
       onAuthStateChange: vi.fn((callback: (event: string, session: unknown) => void) => {
         authListeners.push(callback)
         return { data: { subscription: { unsubscribe: vi.fn() } } }

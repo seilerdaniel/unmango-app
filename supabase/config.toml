@@ -39,12 +39,17 @@ enabled = true
 client_id = "env(GOOGLE_CLIENT_ID)"
 client_secret = "env(GOOGLE_CLIENT_SECRET)"
 
-# [auth.external.azure]
-# enabled = true
-# client_id = "env(AZURE_CLIENT_ID)"
-# client_secret = "env(AZURE_CLIENT_SECRET)"
-# url = "env(AZURE_TENANT_URL)"
+# Microsoft (Azure AD): activo como plantilla para el login social con
+# Microsoft — cargá las credenciales en env() o en el dashboard de
+# producción (Authentication → Providers → Azure).
+[auth.external.azure]
+enabled = true
+client_id = "env(AZURE_CLIENT_ID)"
+client_secret = "env(AZURE_CLIENT_SECRET)"
+url = "env(AZURE_TENANT_URL)"
 
+# Apple: queda comentado (deshabilitado) hasta que haya una membresía
+# activa de Apple Developer con las credenciales OAuth correspondientes.
 # [auth.external.apple]
 # enabled = true
 # client_id = "env(APPLE_CLIENT_ID)"
