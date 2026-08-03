@@ -76,3 +76,13 @@ verify_jwt = true
 # Supabase) → verify_jwt = false.
 [functions.mercadopago-webhook]
 verify_jwt = false
+
+# stripe-checkout: la invoca el usuario logueado desde PricingModal
+# (supabase.functions.invoke, manda el JWT de la sesión) → exige JWT.
+[functions.stripe-checkout]
+verify_jwt = true
+
+# stripe-webhook: la invoca Stripe (no trae JWT de Supabase; la seguridad
+# la da la firma Stripe-Signature) → verify_jwt = false.
+[functions.stripe-webhook]
+verify_jwt = false

@@ -154,4 +154,88 @@ describe('PricingModal', () => {
     expect(await screen.findByText(/no se pudo iniciar el pago/i)).toBeInTheDocument()
     expect(redirectToCheckout).not.toHaveBeenCalled()
   })
+
+  it('muestra el botón de Stripe (USD) en los planes pagos', () => {
+    renderModal()
+    const stripeButtons = screen.getAllByRole('button', { name: /stripe/i })
+    expect(stripeButtons).toHaveLength(2)
+  })
+
+  it('suscribirse con Stripe a PRO invoca stripe-checkout y redirige al url', async () => {
+    const STRIPE_URL = 'https://checkout.stripe.com/c/pay/cs_ABC'
+    const invokeMock = vi.fn(async () => ({ data: { url: STRIPE_URL }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /stripe/i })[0])
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('stripe-checkout', {
+        body: { plan: 'pro', userId: 'user-1' },
+      })
+    )
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalledWith(STRIPE_URL))
+  })
+
+  it('suscribirse con Stripe a HOGAR invoca con el plan hogar', async () => {
+    const invokeMock = vi.fn(async () => ({ data: { url: 'https://checkout.stripe.com/c/pay/cs_ABC' }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /stripe/i })[1])
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('stripe-checkout', {
+        body: { plan: 'hogar', userId: 'user-1' },
+      })
+    )
+  })
+
+  it('muestra estado de carga mientras se procesa el checkout de Stripe', async () => {
+    let resolveInvoke!: (value: { data: unknown; error: unknown }) => void
+    const invokeMock = vi.fn(
+      () => new Promise<{ data: unknown; error: unknown }>((resolve) => (resolveInvoke = resolve))
+    )
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /stripe/i })[0])
+
+    expect(await screen.findByText(/procesando/i)).toBeInTheDocument()
+
+    resolveInvoke({ data: { url: 'https://checkout.stripe.com/c/pay/cs_ABC' }, error: null })
+    await waitFor(() => expect(redirectToCheckout).toHaveBeenCalled())
+  })
+
+  it('muestra un error sin redirigir si la Edge Function de Stripe falla', async () => {
+    const invokeMock = vi.fn(async () => ({ data: null, error: new Error('Network') }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /stripe/i })[0])
+
+    expect(await screen.findByText(/no se pudo iniciar el pago/i)).toBeInTheDocument()
+    expect(redirectToCheckout).not.toHaveBeenCalled()
+  })
+
+  it('muestra un error si Stripe no devuelve url', async () => {
+    const invokeMock = vi.fn(async () => ({ data: { session_id: 'cs_1' }, error: null }))
+    Object.assign(supabaseMock, createSupabaseMock({ functions: { invoke: invokeMock } }))
+
+    renderModal()
+    await waitForSession()
+
+    await userEvent.click(screen.getAllByRole('button', { name: /stripe/i })[0])
+
+    expect(await screen.findByText(/no se pudo iniciar el pago/i)).toBeInTheDocument()
+    expect(redirectToCheckout).not.toHaveBeenCalled()
+  })
 })

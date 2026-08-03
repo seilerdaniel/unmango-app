@@ -60,16 +60,20 @@ const PLAN_LABEL: Record<Plan, string> = { free: 'FREE', pro: 'PRO', hogar: 'HOG
 /**
  * Modal de precios / paywall. Tanda 11d trajo las tarjetas comparativas
  * (FREE / PRO / HOGAR) y el paywall simulado; la Tanda 12a suma el flujo
- * real de pago: "Suscribirme con Mercado Pago" llama a la Edge Function
- * mercadopago-checkout y redirige al checkout seguro (init_point) de
- * Mercado Pago en ARS. Al abrir el modal se refresca la suscripción del
- * usuario para reflejar un pago recién aprobado al volver.
+ * real de pago con Mercado Pago (ARS); la Tanda 12b suma la opción con
+ * Stripe (USD, tarjeta internacional). Ambas llaman a su Edge Function
+ * (mercadopago-checkout / stripe-checkout) y redirigen al checkout seguro
+ * del proveedor. Al abrir el modal se refresca la suscripción del usuario
+ * para reflejar un pago recién aprobado al volver.
  */
 export default function PricingModal({ isOpen, onClose, currentPlan }: PricingModalProps) {
   const { toast } = useToast()
   const { user } = useUser()
   const { refresh } = useSubscription()
-  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null)
+  const [checkout, setCheckout] = useState<{
+    plan: Plan
+    gateway: 'mercadopago' | 'stripe'
+  } | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -84,30 +88,38 @@ export default function PricingModal({ isOpen, onClose, currentPlan }: PricingMo
 
   if (!isOpen) return null
 
-  async function handleSubscribe(plan: Plan) {
+  async function handleSubscribe(plan: Plan, gateway: 'mercadopago' | 'stripe') {
     if (plan === currentPlan) return
     if (!user) {
       toast.error('Iniciá sesión para suscribirte.')
       return
     }
 
-    setCheckoutPlan(plan)
+    setCheckout({ plan, gateway })
     try {
-      const { data, error } = await supabase.functions.invoke('mercadopago-checkout', {
+      const functionName = gateway === 'stripe' ? 'stripe-checkout' : 'mercadopago-checkout'
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { plan, userId: user.id },
       })
       if (error) throw error
 
-      const initPoint = data?.init_point as string | undefined
-      if (!initPoint) throw new Error('La pasarela no devolvió un link de pago.')
+      const checkoutUrl =
+        gateway === 'stripe'
+          ? (data?.url as string | undefined)
+          : (data?.init_point as string | undefined)
+      if (!checkoutUrl) throw new Error('La pasarela no devolvió un link de pago.')
 
-      toast.success('Te estamos llevando al checkout seguro de Mercado Pago...')
-      redirectToCheckout(initPoint)
+      toast.success(
+        gateway === 'stripe'
+          ? 'Te estamos llevando al checkout seguro de Stripe...'
+          : 'Te estamos llevando al checkout seguro de Mercado Pago...'
+      )
+      redirectToCheckout(checkoutUrl)
     } catch (err) {
-      console.error('Error iniciando el checkout de Mercado Pago:', err)
+      console.error(`Error iniciando el checkout (${gateway}):`, err)
       toast.error('No se pudo iniciar el pago. Probá de nuevo en un rato.')
     } finally {
-      setCheckoutPlan(null)
+      setCheckout(null)
     }
   }
 
@@ -136,7 +148,8 @@ export default function PricingModal({ isOpen, onClose, currentPlan }: PricingMo
             {PLANS.map((plan) => {
               const Icon = plan.icon
               const isCurrent = plan.id === currentPlan
-              const isProcessing = checkoutPlan === plan.id
+              const isMpProcessing = checkout?.plan === plan.id && checkout?.gateway === 'mercadopago'
+              const isStripeProcessing = checkout?.plan === plan.id && checkout?.gateway === 'stripe'
               return (
                 <div
                   key={plan.id}
@@ -178,22 +191,55 @@ export default function PricingModal({ isOpen, onClose, currentPlan }: PricingMo
                     ))}
                   </ul>
 
-                  <button
-                    type="button"
-                    onClick={() => handleSubscribe(plan.id)}
-                    disabled={isCurrent || (checkoutPlan !== null && !isProcessing)}
-                    className={`w-full text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center justify-center gap-1.5 ${plan.buttonClass}`}
-                  >
-                    {isCurrent ? (
-                      'Tu plan actual'
-                    ) : isProcessing ? (
-                      <>
-                        <Loader2 size={13} className="animate-spin" /> Procesando...
-                      </>
-                    ) : (
-                      'Suscribirme con Mercado Pago'
-                    )}
-                  </button>
+                  {plan.id === 'free' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSubscribe(plan.id, 'mercadopago')}
+                      disabled={isCurrent || (checkout !== null && !isMpProcessing)}
+                      className={`w-full text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center justify-center gap-1.5 ${plan.buttonClass}`}
+                    >
+                      {isCurrent ? (
+                        'Tu plan actual'
+                      ) : isMpProcessing ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" /> Procesando...
+                        </>
+                      ) : (
+                        'Suscribirme con Mercado Pago'
+                      )}
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSubscribe(plan.id, 'mercadopago')}
+                        disabled={isCurrent || (checkout !== null && !isMpProcessing)}
+                        className={`w-full text-xs font-bold py-2.5 px-3 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center justify-center gap-1.5 ${plan.buttonClass}`}
+                      >
+                        {isMpProcessing ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Procesando...
+                          </>
+                        ) : (
+                          'Suscribirme con Mercado Pago'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSubscribe(plan.id, 'stripe')}
+                        disabled={isCurrent || (checkout !== null && !isStripeProcessing)}
+                        className="w-full text-xs font-bold py-2.5 px-3 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer disabled:opacity-60 disabled:cursor-default flex items-center justify-center gap-1.5"
+                      >
+                        {isStripeProcessing ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Procesando...
+                          </>
+                        ) : (
+                          'Suscribirme con Tarjeta / Stripe (USD)'
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}

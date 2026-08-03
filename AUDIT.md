@@ -3410,3 +3410,129 @@ re-desplegar `telegram-webhook`.
 Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
 0 warnings), `npx vitest run` (**77 archivos, 738 tests**, todos pasando
 — 708 previos + 30 nuevos), `npm run build` (OK).
+
+# Tanda 12b — Suscripciones con Stripe (USD, tarjeta internacional)
+
+**Fecha**: 2 de agosto de 2026. **Estado**: implementado y verificado
+localmente; falta setear los secrets y desplegar las dos Edge Functions
+(ver "Acción tuya" abajo). Complementa a la Tanda 12a: además del checkout
+en pesos con Mercado Pago, ahora se puede pagar la suscripción con
+**tarjeta internacional en dólares** a través de Stripe Checkout.
+
+## Qué se construyó
+
+### Edge Function `stripe-checkout` (nuevo)
+- `supabase/functions/stripe-checkout/` (`index.ts` Deno + `core.ts` puro).
+- POST con `{ plan: 'pro' | 'hogar', userId }`: identifica al usuario por
+  JWT (y rechaza si el `userId` del body no coincide con la sesión),
+  valida el plan y crea una **Checkout Session** de Stripe en modo
+  `subscription`.
+- Precios en **centavos USD** (en `core.ts`, `PLAN_PRICES_USD_CENTS`):
+  PRO = 999 (US$9.99), HOGAR = 2999 (US$29.99).
+- El Price se resuelve así: si están configurados `STRIPE_PRICE_PRO_ID` /
+  `STRIPE_PRICE_HOGAR_ID` se usan esos Prices (recomendado en producción);
+  si no, la función crea el Price on-the-fly (`prices.create` con
+  `currency: usd`, `recurring[interval]=month`, producto "UnMango PRO/HOGAR").
+- La sesión lleva `client_reference_id = userId` y `metadata: { plan,
+  userId }`, copiados también en `subscription_data.metadata` para que los
+  eventos de webhook (`invoice.payment_succeeded`, `customer.subscription.*`)
+  traigan siempre la referencia sin consultar la sesión original.
+- Devuelve `{ url, session_id }` para redirigir al checkout seguro de Stripe.
+- `verify_jwt = true` (config.toml): la llama el usuario logueado vía
+  `supabase.functions.invoke` (mismo patrón que `mercadopago-checkout`).
+- La `STRIPE_SECRET_KEY` solo vive en la Edge Function (servidor); nunca se
+  expone al cliente.
+
+### Edge Function `stripe-webhook` (nuevo)
+- `supabase/functions/stripe-webhook/` (`index.ts` Deno + `core.ts` puro).
+  `verify_jwt = false` (la llama Stripe).
+- **Verificación de firma real**: valida el header `Stripe-Signature`
+  (HMAC-SHA256 de `"t.<body>"` con `STRIPE_WEBHOOK_SECRET` vía WebCrypto,
+  timestamp dentro de 5 minutos, comparación en tiempo constante). Sin
+  firma válida → 400. Implementado en `core.ts` sin SDK, 100% testeable.
+- Eventos manejados y acción en `subscriptions`:
+  - `checkout.session.completed` (payment_status `paid`) → `status: 'active'`.
+  - `invoice.payment_succeeded` → renueva `status: 'active'`.
+  - `customer.subscription.updated` → solo actualiza si `status === 'active'`
+    (un `past_due`/`unpaid` no toca la fila).
+  - `customer.subscription.deleted` → `status: 'canceled'`.
+- Parser resiliente de `{ userId, plan }`: `client_reference_id` (sesiones)
+  o `metadata` / `subscription_data.metadata` / `subscription_details.metadata`
+  (suscripciones y facturas). Si `invoice.payment_succeeded` no trae la
+  metadata, consulta la Subscription en Stripe por id (deps
+  `fetchSubscription`, opcional) — que es donde `stripe-checkout` copió la
+  referencia.
+- `current_period_end` sale del evento (suscripción o `lines.data[0].period.end`
+  de la factura); si no viene, cae a **ahora + 30 días**.
+- **Upsert idempotente** (`onConflict: 'user_id'`) y responde **HTTP 200 de
+  inmediato** procesando en background (Stripe espera un ack rápido).
+- El webhook escribe con la service role, no confía en el payload entrante.
+
+### UI Web App — `src/components/PricingModal.tsx` (Tanda 12a → 12b)
+- Los planes pagos ahora tienen **dos botones**: "Suscribirme con Mercado
+  Pago" (ARS, Tanda 12a) y **"Suscribirme con Tarjeta / Stripe (USD)"**.
+- Flujo Stripe: `supabase.functions.invoke('stripe-checkout', { body:
+  { plan, userId } })` → `redirectToCheckout(data.url)` (misma pestaña).
+- El estado de checkout ahora es `{ plan, gateway: 'mercadopago' | 'stripe' }`
+  para spinner individual por botón y deshabilitar el resto mientras hay
+  uno en curso. Toasts de éxito/error por pasarela.
+- `src/lib/checkout.ts` sigue siendo el punto único de redirección.
+
+### Infra y configuración
+- `supabase/config.toml`: `verify_jwt` de las dos funciones nuevas
+  (`stripe-checkout` true, `stripe-webhook` false).
+- `.env.example`: documenta `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` y
+  los opcionales `STRIPE_PRICE_PRO_ID` / `STRIPE_PRICE_HOGAR_ID`.
+- READMEs: `stripe-checkout/README.md` y `stripe-webhook/README.md`
+  (credenciales + cómo crear el Price en el Dashboard + configurar el
+  endpoint de webhook con los 4 eventos).
+
+## Endpoints y variables requeridas
+
+| Función | Endpoint | verify_jwt | Secret requerido |
+| --- | --- | --- | --- |
+| stripe-checkout | `/functions/v1/stripe-checkout` | true | `STRIPE_SECRET_KEY` |
+| stripe-webhook | `/functions/v1/stripe-webhook` | false | `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_SECRET_KEY`) |
+
+Precios USD por defecto (sobreescribibles creando Prices en Stripe y
+seteando `STRIPE_PRICE_PRO_ID` / `STRIPE_PRICE_HOGAR_ID`): PRO = **US$9.99**,
+HOGAR = **US$29.99** (mensuales).
+
+**⚠️ Acción tuya**: (1) `supabase secrets set STRIPE_SECRET_KEY=<sk_test_...
+o sk_live_...>`, (2) `supabase secrets set STRIPE_WEBHOOK_SECRET=<whsec_...>`,
+(3) desplegar las dos funciones (`supabase functions deploy stripe-checkout`
+y `supabase functions deploy stripe-webhook`), (4) en Stripe Dashboard →
+Developers → Webhooks, crear un endpoint apuntando a
+`https://<PROJECT_REF>.supabase.co/functions/v1/stripe-webhook` con los
+eventos `checkout.session.completed`, `invoice.payment_succeeded`,
+`customer.subscription.updated` y `customer.subscription.deleted`, (5)
+opcional: crear los Prices en Stripe Dashboard y setear
+`STRIPE_PRICE_PRO_ID` / `STRIPE_PRICE_HOGAR_ID` (si no, la función los crea
+on-the-fly), y (6) seguir pendiente de tandas anteriores: correr
+`wallet_tna.sql`, `wallet_currency.sql`, `roundup_savings.sql` y
+`subscriptions.sql`, y re-desplegar `telegram-webhook`.
+
+### Tests (42 nuevos, 780 totales)
+- `stripe-checkout/core.test.ts` (nuevo, 10): `isSupportedPlan`, precios
+  USD en centavos, `buildPriceCreateParams` (producto, mensual, usd) y
+  `buildCheckoutSessionParams` (mode subscription, client_reference_id,
+  metadata + subscription_data.metadata, line_items, success/cancel) para
+  PRO y HOGAR.
+- `stripe-webhook/core.test.ts` (nuevo, 29): verificación de firma
+  (parseo del header descartando v0, HMAC contra `node:crypto`, timestamp
+  fuera de ventana, firma incorrecta, header ausente), helpers de mapeo
+  (`unixSecondsToIso`, `computePeriodEndIso`, `extractSubscriptionData`
+  con client_reference_id / metadata / subscription_details / período de
+  la factura), y el orquestador `processStripeEvent` para los 4 eventos:
+  checkout pagado activa, checkout no pagado no, invoice renueva (payload
+  y fallback por `fetchSubscription`), updated activo actualiza, updated
+  no activo no toca, deleted cancela, evento no manejado, sin identidad y
+  upsert que falla.
+- `PricingModal.test.tsx` (6 nuevos, 17 totales): botones Stripe en planes
+  pagos, invoca `stripe-checkout` con `{ plan: 'pro'|'hogar', userId }`,
+  redirige al `url` de la sesión, spinner de carga y errores (función que
+  falla / sin url) sin redirigir.
+
+Verificado: `npx tsc --noEmit` (0 errores), `npx eslint .` (0 errores,
+0 warnings), `npx vitest run` (**79 archivos, 780 tests**, todos pasando
+— 738 previos + 42 nuevos), `npm run build` (OK).
