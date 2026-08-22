@@ -8,10 +8,7 @@ import { usePrivacy } from '@/context/PrivacyContext'
 import { useToast } from '@/context/ToastContext'
 import { computeInstallmentSchedule } from '@/lib/installments'
 import { InstallmentPurchase } from '@/types'
-import InstallmentsVsCashSimulator from '@/components/InstallmentsVsCashSimulator'
-import InstallmentSimulator, {
-  type ConvertToInstallmentPlan,
-} from '@/components/tools/InstallmentSimulator'
+import InstallmentSimulator from '@/components/tools/InstallmentSimulator'
 import { sortInstallmentPurchases, InstallmentSortField } from '@/lib/installmentsSort'
 import { enqueueOfflineMutation, isOffline } from '@/lib/offlineQueue'
 import { CreditCard, Plus, Trash2, CheckCircle2 } from 'lucide-react'
@@ -41,7 +38,17 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
   const [sortField, setSortField] = useState<InstallmentSortField>('name')
   const [sortAscending, setSortAscending] = useState(true)
   const formRef = useRef<HTMLFormElement>(null)
-  const descriptionRef = useRef<HTMLInputElement>(null)
+
+  const handleConvertToPurchase = useCallback(
+    (data: { description: string; totalAmount: number; installmentsCount: number }) => {
+      setDescription(data.description)
+      setTotalAmount(String(data.totalAmount))
+      setInstallmentsCount(String(data.installmentsCount))
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setTimeout(() => formRef.current?.querySelector('input')?.focus(), 400)
+    },
+    []
+  )
 
   const loadPurchases = useCallback(async () => {
     try {
@@ -146,14 +153,6 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
     setSubmitting(false)
   }
 
-  function handleConvertToInstallmentPurchase(plan: ConvertToInstallmentPlan) {
-    setDescription(plan.description)
-    setTotalAmount(String(plan.totalAmount))
-    setInstallmentsCount(String(plan.installmentsCount))
-    formRef.current?.scrollIntoView({ block: 'start' })
-    descriptionRef.current?.focus()
-  }
-
   async function handleDeletePurchase(id: string) {
     const ok = await confirmDialog({
       title: 'Eliminar compra en cuotas',
@@ -256,12 +255,10 @@ export default function InstallmentTracker({ onTransactionAdded }: { onTransacti
         <CreditCard className="text-violet-600" size={20} /> Compras en Cuotas
       </h2>
 
-      <InstallmentsVsCashSimulator />
-      <InstallmentSimulator onConvertToInstallmentPurchase={handleConvertToInstallmentPurchase} />
+      <InstallmentSimulator onConvertToPurchase={handleConvertToPurchase} />
 
-      <form onSubmit={handleAddPurchase} ref={formRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
+      <form ref={formRef} onSubmit={handleAddPurchase} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5">
         <input
-          ref={descriptionRef}
           type="text"
           placeholder="Descripción"
           title="Ej: Notebook"

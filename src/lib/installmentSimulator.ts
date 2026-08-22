@@ -1,173 +1,130 @@
-/**
- * Motor de cálculo del "Simulador Anti-inflación para Compras en Cuotas".
- *
- * La idea central (igual que installmentsVsCash.ts, pero multi-opción y con
- * punto de equilibrio): cada cuota futura, medida en poder de compra de HOY,
- * vale menos que su valor nominal por la inflación. Se descuenta cada cuota
- * al valor presente y se suman. Si esa suma (el costo REAL de financiar) es
- * menor que el precio de contado, conviene financiar; si es mayor, conviene
- * pagar de una.
- *
- * Además se calcula el "break-even": la inflación mensual a partir de la
- * cual financiar pasa a convenir. Si tu expectativa de inflación es MÁS alta
- * que ese punto, las cuotas te convienen; si es más baja, el contado.
- *
- * No es asesoramiento financiero — es una cuenta simple con la inflación
- * ESTIMADA por el usuario, no una predicción real.
- */
+export type InstallmentVerdict = 'BUY_INSTALLMENTS' | 'BUY_CASH' | 'EQUIVALENT'
 
-import { round2 } from './money'
-
-export { round2 }
-
-export interface FinancingOptionInput {
-  id: string
-  /** Cantidad de cuotas (>= 1). */
-  installmentsCount: number
-  /** Monto nominal fijo de cada cuota (en pesos). */
-  installmentAmount: number
-}
-
-export interface InstallmentPurchaseSimulationInput {
-  /** Precio de contado (lo que se paga hoy si no se financia). */
+export interface InstallmentSimulatorParams {
   cashPrice: number
-  /** Inflación mensual estimada en % (ej. 6 → 6%). */
-  monthlyInflationPercent: number
-  options: FinancingOptionInput[]
+  installmentCount: number
+  /** Monto nominal de cada cuota. Si no se pasa, se deriva de totalInstallmentPrice. */
+  installmentAmount?: number
+  /** Precio total financiado (suma de todas las cuotas). Si no se pasa, se deriva de installmentAmount. */
+  totalInstallmentPrice?: number
+  /** Inflación mensual estimada en % (0-100). */
+  monthlyInflationRate: number
+  /** TNA (en %) que rendiría el efectivo si no se gasta hoy. Opcional. */
+  investmentTna?: number
 }
 
-export interface InstallmentPurchaseSimulationResult {
-  id: string
-  installmentsCount: number
-  installmentAmount: number
-  /** Suma nominal de las cuotas (lo que se paga en total). */
-  totalNominal: number
-  /** Costo real: valor presente de las cuotas descontadas por inflación. */
+export interface MonthlyBreakdownRow {
+  installmentNumber: number
+  /** Cuota nominal (sin descuento). */
+  nominalAmount: number
+  /** Factor de descuento compuesto aplicado a la cuota. */
+  discountFactor: number
+  /** Costo real de la cuota en poder de compra de hoy. */
   presentValue: number
-  /** cashPrice - presentValue (positivo = financiar conviene). */
-  savingsVsCash: number
-  recommendation: 'cuotas' | 'contado'
-  /** Inflación mensual (%) a partir de la cual financiar conviene. */
-  breakEvenInflationPercent: number
-  /** La opción con mayor ahorro en valor presente de la simulación. */
-  isBestOption: boolean
+  /** Suma acumulada de valores presentes hasta esta cuota. */
+  cumulativePresentValue: number
 }
 
-/**
- * Valor presente de una serie de N cuotas fijas, descontadas mes a mes con
- * la inflación mensual indicada. Con inflación 0% es el nominal exacto.
- */
-export function computePresentValue(
-  installmentAmount: number,
-  installmentsCount: number,
-  monthlyInflationPercent: number
-): number {
-  if (installmentsCount <= 0) return 0
-
-  const rate = monthlyInflationPercent / 100
-  let sum = 0
-  for (let i = 1; i <= installmentsCount; i++) {
-    sum += installmentAmount / Math.pow(1 + rate, i)
-  }
-  return round2(sum)
-}
-
-/**
- * Inflación mensual (%) a la que financiar y pagar contado dan lo mismo
- * (el valor presente de las cuotas iguala al precio de contado).
- *
- * - Si el nominal total ni siquiera supera al contado (cuotas sin interés
- *   o más baratas), financiar ya conviene desde 0% → devuelve 0.
- * - Si no se encuentra raíz (financiación tan cara que ni con inflación
- *   extrema empata), devuelve el límite superior usado, que la UI muestra
- *   como "nunca conviene financiar".
- */
-export function computeBreakEvenInflationPercent(
-  cashPrice: number,
-  installmentAmount: number,
-  installmentsCount: number
-): number {
-  if (installmentsCount <= 0 || cashPrice <= 0 || installmentAmount <= 0) return 0
-
-  const totalNominal = installmentAmount * installmentsCount
-  if (totalNominal <= cashPrice) return 0
-
-  const presentValueAt = (rate: number) =>
-    computePresentValue(installmentAmount, installmentsCount, rate) - cashPrice
-
-  // presentValue(0) = totalNominal > cashPrice, y el valor presente decrece
-  // de forma estrictamente monótona con la tasa → hay una única raíz.
-  let lo = 0
-  let hi = 1
-  while (presentValueAt(hi) > 0 && hi < 100000) hi *= 2
-  if (presentValueAt(hi) > 0) return hi
-
-  for (let k = 0; k < 200; k++) {
-    const mid = (lo + hi) / 2
-    if (presentValueAt(mid) > 0) lo = mid
-    else hi = mid
-  }
-  return round2((lo + hi) / 2)
-}
-
-/**
- * Arma una opción de financiación "sin interés": N cuotas iguales que suman
- * exactamente el precio de contado (reparte el redondeo de centavos en la
- * última cuota, como el resto de la app).
- */
-export function buildInterestFreeOption(
-  installmentsCount: number,
+export interface InstallmentSimulatorResult {
   cashPrice: number
-): FinancingOptionInput {
-  return {
-    id: `sin-interes-${installmentsCount}`,
-    installmentsCount,
-    installmentAmount: installmentsCount > 0 ? round2(cashPrice / installmentsCount) : 0,
-  }
+  installmentCount: number
+  installmentAmount: number
+  totalInstallmentPrice: number
+  /** Tasa de descuento mensual compuesta (inflación × retorno de inversión). */
+  monthlyDiscountRate: number
+  presentValueFinanced: number
+  /** Recargo nominal: total financiado − contado. */
+  nominalSurcharge: number
+  nominalSurchargePercent: number
+  /** Recargo real a valor de hoy: valor presente financiado − contado. */
+  realSurcharge: number
+  realSurchargePercent: number
+  verdict: InstallmentVerdict
+  monthlyBreakdown: MonthlyBreakdownRow[]
 }
 
+const round2 = (value: number) => Math.round(value * 100) / 100
+const round4 = (value: number) => Math.round(value * 10000) / 10000
+
 /**
- * Simula todas las opciones de financiación contra el precio de contado.
- * Marca como mejor opción la de mayor ahorro en valor presente.
+ * Simula una compra en cuotas frente al pago de contado, midiendo el costo
+ * REAL en poder de compra de HOY: cada cuota futura se descuenta por la
+ * inflación mensual estimada (compuesta) y, si se pasa una TNA de inversión,
+ * también por el retorno que habría dado ese efectivo (costo de oportunidad).
+ *
+ * - Si el valor presente financiado es menor al contado → conviene en cuotas.
+ * - Si es mayor → conviene pagar de contado.
+ * - Si es igual (dentro de 1 centavo) → es equivalente.
+ *
+ * No es asesoramiento financiero — es una cuenta simple con una inflación y
+ * una TNA ESTIMADAS por el usuario, no una predicción real.
  */
-export function simulateInstallmentPurchase(
-  input: InstallmentPurchaseSimulationInput
-): InstallmentPurchaseSimulationResult[] {
-  const { cashPrice, monthlyInflationPercent, options } = input
+export function simulateInstallmentPurchase(params: InstallmentSimulatorParams): InstallmentSimulatorResult {
+  const {
+    cashPrice,
+    installmentCount,
+    installmentAmount: rawInstallmentAmount,
+    totalInstallmentPrice: rawTotalInstallmentPrice,
+    monthlyInflationRate,
+    investmentTna,
+  } = params
 
-  const results = options.map((option) => {
-    const presentValue = computePresentValue(
-      option.installmentAmount,
-      option.installmentsCount,
-      monthlyInflationPercent
-    )
-    const totalNominal = option.installmentAmount * option.installmentsCount
-    const savingsVsCash = round2(cashPrice - presentValue)
+  const inflationRate = monthlyInflationRate / 100
+  const investmentMonthlyRate = investmentTna ? investmentTna / 100 / 12 : 0
+  const monthlyDiscountRate = (1 + inflationRate) * (1 + investmentMonthlyRate) - 1
 
-    return {
-      id: option.id,
-      installmentsCount: option.installmentsCount,
-      installmentAmount: option.installmentAmount,
-      totalNominal,
+  const totalInstallmentPrice =
+    rawTotalInstallmentPrice !== undefined
+      ? rawTotalInstallmentPrice
+      : rawInstallmentAmount !== undefined
+        ? rawInstallmentAmount * installmentCount
+        : cashPrice
+
+  const installmentAmount = rawInstallmentAmount ?? totalInstallmentPrice / Math.max(installmentCount, 1)
+
+  let presentValueFinanced = 0
+  const monthlyBreakdown: MonthlyBreakdownRow[] = []
+
+  for (let i = 1; i <= installmentCount; i++) {
+    const nominalAmount = round2(installmentAmount)
+    const discountFactor = Math.pow(1 + monthlyDiscountRate, -i)
+    const presentValue = round2(nominalAmount * discountFactor)
+    presentValueFinanced = round2(presentValueFinanced + presentValue)
+
+    monthlyBreakdown.push({
+      installmentNumber: i,
+      nominalAmount,
+      discountFactor: round4(discountFactor),
       presentValue,
-      savingsVsCash,
-      recommendation: (savingsVsCash > 1e-6 ? 'cuotas' : 'contado') as 'cuotas' | 'contado',
-      breakEvenInflationPercent: computeBreakEvenInflationPercent(
-        cashPrice,
-        option.installmentAmount,
-        option.installmentsCount
-      ),
-      isBestOption: false,
-    }
-  })
-
-  if (results.length > 0) {
-    let bestIndex = 0
-    for (let i = 1; i < results.length; i++) {
-      if (results[i].savingsVsCash > results[bestIndex].savingsVsCash) bestIndex = i
-    }
-    results[bestIndex].isBestOption = true
+      cumulativePresentValue: presentValueFinanced,
+    })
   }
 
-  return results
+  const nominalSurcharge = round2(totalInstallmentPrice - cashPrice)
+  const nominalSurchargePercent = cashPrice > 0 ? round2((nominalSurcharge / cashPrice) * 100) : 0
+  const realSurcharge = round2(presentValueFinanced - cashPrice)
+  const realSurchargePercent = cashPrice > 0 ? round2((realSurcharge / cashPrice) * 100) : 0
+
+  const tolerance = 0.01
+  const verdict: InstallmentVerdict =
+    presentValueFinanced < cashPrice - tolerance
+      ? 'BUY_INSTALLMENTS'
+      : presentValueFinanced > cashPrice + tolerance
+        ? 'BUY_CASH'
+        : 'EQUIVALENT'
+
+  return {
+    cashPrice,
+    installmentCount,
+    installmentAmount: round2(installmentAmount),
+    totalInstallmentPrice: round2(totalInstallmentPrice),
+    monthlyDiscountRate: round4(monthlyDiscountRate),
+    presentValueFinanced,
+    nominalSurcharge,
+    nominalSurchargePercent,
+    realSurcharge,
+    realSurchargePercent,
+    verdict,
+    monthlyBreakdown,
+  }
 }
